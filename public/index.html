@@ -630,6 +630,10 @@
         .sd-avatar { width: 26px; height: 26px; border-radius: 50%; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 900; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5); background: radial-gradient(circle at 32% 26%, hsl(var(--av,210),72%,64%), hsl(var(--av,210),62%,36%) 75%); border: 1.5px solid rgba(255,255,255,0.3); box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
         .sd-nick { font-size: 13.5px; color: var(--txt); font-weight: 900; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .sd-won { font-family: var(--font-num); font-size: 13px; color: #7bedaa; font-weight: 600; margin-left: auto; white-space: nowrap; }
+        .sd-board-wrap { text-align: center; margin-bottom: 11px; }
+        .sd-board-label { font-size: 10px; letter-spacing: 2px; color: var(--txt-dim); font-weight: 700; margin-bottom: 5px; }
+        .sd-board { display: inline-flex; gap: 4px; justify-content: center; }
+        .sd-board .mini-card { min-width: 30px; height: 40px; font-size: 15px; }
         .sd-cards { display: inline-flex; gap: 3px; }
         .mini-card { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 34px; padding: 0 3px; border-radius: 4px; background: linear-gradient(155deg, #ffffff, #ececea); border: 1px solid #c8c8c0; color: #1b2233; font-family: var(--font-num); font-weight: 700; font-size: 13px; line-height: 1; box-shadow: 0 2px 5px rgba(0,0,0,0.45); }
         .mini-card.red { color: #d32f2f; }
@@ -2609,6 +2613,12 @@
         const multiPot = (data.pots || []).length > 1;
 
         let html = `<div class="sd-title">♠ ${title} ♠</div>`;
+        // 🃏 [개선] 결과창에 공유 보드(커뮤니티 카드)를 함께 표시 — 모달이 테이블 보드를 가려도
+        //    "어떤 보드로 이 족보가 나왔는지"를 한눈에 볼 수 있게 (기권승은 보드 의미 없어 제외)
+        if (!data.foldWin && data.community && data.community.length) {
+            html += `<div class="sd-board-wrap"><div class="sd-board-label">보드</div>` +
+                    `<div class="sd-board">${data.community.map(miniCard).join('')}</div></div>`;
+        }
         html += `<div class="sd-winners">`;
         winners.forEach(w => {
             const cardsHtml = (w.cards && w.cards.length)
