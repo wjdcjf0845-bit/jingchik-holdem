@@ -530,8 +530,8 @@ function seededShuffle(seed, clientEntropy) {
     let counter = 0;
     const nextRand = () => {
         const h = crypto.createHash('sha256').update(baseSeed + ':' + (counter++)).digest();
-        // 상위 6바이트로 0~1 실수
-        const v = h.readUIntBE(0, 6) / 0xffffffffffff;
+        // 상위 6바이트(48비트)로 [0,1) 실수 — 2^48로 나눠 결과가 1.0이 되지 않게(Fisher-Yates 인덱스 초과 방지)
+        const v = h.readUIntBE(0, 6) / 0x1000000000000;
         return v;
     };
     // Fisher-Yates (결정적)
