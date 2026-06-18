@@ -14,6 +14,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const Hand = require('pokersolver').Hand;
+const Pots = require('./lib/pots'); // 💰 팟/사이드팟 분배 순수 로직 (테스트로 보존성 검증)
 
 const app = express();
 const server = http.createServer(app);
@@ -1372,36 +1373,11 @@ class GameRoom {
     }
 
     calculateSidePots() {
-        const contributors = this.playerOrder
+        // 💰 순수 로직은 lib/pots.js로 분리 (단위 테스트로 칩 보존성 검증). 여기선 입력만 구성해 위임.
+        const contributions = this.playerOrder
             .filter(nick => this.players[nick] && this.players[nick].totalInvested > 0)
-            .map(nick => ({ nick, invested: this.players[nick].totalInvested }))
-            .sort((a, b) => a.invested - b.invested);
-
-        const sidePots = [];
-        let processed = 0;
-        let remaining = [...contributors];
-
-        while (remaining.length > 0) {
-            const level = remaining[0].invested;
-            const potSlice = (level - processed) * remaining.length;
-            if (potSlice > 0) {
-                sidePots.push({ amount: potSlice, eligible: remaining.map(c => c.nick) });
-            }
-            processed = level;
-            remaining = remaining.filter(c => c.invested > level);
-        }
-
-        // 🔐 [무결성] 사이드팟 합계 검증 — 총 투자액과 반드시 일치
-        const totalInvested = contributors.reduce((s, c) => s + c.invested, 0);
-        const sidePotSum = sidePots.reduce((s, sp) => s + sp.amount, 0);
-        if (sidePotSum !== totalInvested) {
-            console.error(`[사이드팟 불일치] 합계 ${sidePotSum} ≠ 투자총액 ${totalInvested} (방 ${this.roomId})`);
-            // 오차를 마지막(메인) 팟에 보정해 칩 누수 방지
-            const diff = totalInvested - sidePotSum;
-            if (sidePots.length > 0) sidePots[0].amount += diff;
-            else sidePots.push({ amount: totalInvested, eligible: contributors.map(c => c.nick) });
-        }
-        return sidePots;
+            .map(nick => ({ nick, invested: this.players[nick].totalInvested }));
+        return Pots.calculateSidePots(contributions);
     }
 
     startNextHand() {
@@ -1949,13 +1925,8 @@ class GameRoom {
             sidePots[sidePots.length - 1].amount += diff;
         }
 
-        for (let i = sidePots.length - 1; i >= 0; i--) {
-            const eligibleActive = sidePots[i].eligible.filter(n => !this.players[n].isFolded);
-            if (eligibleActive.length === 0 && i > 0) {
-                sidePots[i - 1].amount += sidePots[i].amount;
-                sidePots[i].amount = 0;
-            }
-        }
+        // 폴드한 적격자만 남은 상위 사이드팟 → 하위 팟으로 롤다운 (lib/pots.js)
+        Pots.rollDownFoldedPots(sidePots, n => this.players[n].isFolded);
 
         const messages = [];
         const allWinnerIds = new Set();
@@ -1986,8 +1957,7 @@ class GameRoom {
             });
 
             const winners = Hand.winners(hands);
-            const perWinner = Math.floor(sp.amount / winners.length);
-            const remainder = sp.amount - perWinner * winners.length;
+            const { perWinner, remainder } = Pots.splitAmount(sp.amount, winners.length); // 홀수 칩은 winners[0]에게
 
             winners.forEach((w, i) => {
                 this.players[w.playerId].chips += perWinner + (i === 0 ? remainder : 0);
