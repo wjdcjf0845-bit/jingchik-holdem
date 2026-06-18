@@ -15,6 +15,8 @@ const fs = require('fs');
 const crypto = require('crypto');
 const Hand = require('pokersolver').Hand;
 const Pots = require('./lib/pots'); // 💰 팟/사이드팟 분배 순수 로직 (테스트로 보존성 검증)
+// 🔐 검증 가능한 결정적 셔플 (commit-reveal) 순수 로직 — 테스트로 결정성·공정성 검증
+const { makeServerSeed, commitHash, seededShuffle } = require('./lib/shuffle');
 
 const app = express();
 const server = http.createServer(app);
@@ -513,34 +515,7 @@ const BOT_LINES = {
     }
 };
 
-function makeServerSeed() {
-    return crypto.randomBytes(32).toString('hex');
-}
-function commitHash(seed) {
-    return crypto.createHash('sha256').update(seed).digest('hex');
-}
-// 시드 문자열로부터 결정적 난수 스트림 (SHA256 카운터 모드)
-function seededShuffle(seed, clientEntropy) {
-    const suits = ['s', 'h', 'd', 'c'];
-    const values = ['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
-    let deck = [];
-    for (let s of suits) for (let v of values) deck.push(v + s);
-    const baseSeed = seed + '|' + (clientEntropy || '');
-    // 결정적 난수: SHA256(baseSeed:counter)를 정수로 변환
-    let counter = 0;
-    const nextRand = () => {
-        const h = crypto.createHash('sha256').update(baseSeed + ':' + (counter++)).digest();
-        // 상위 6바이트(48비트)로 [0,1) 실수 — 2^48로 나눠 결과가 1.0이 되지 않게(Fisher-Yates 인덱스 초과 방지)
-        const v = h.readUIntBE(0, 6) / 0x1000000000000;
-        return v;
-    };
-    // Fisher-Yates (결정적)
-    for (let i = deck.length - 1; i > 0; i--) {
-        const j = Math.floor(nextRand() * (i + 1));
-        [deck[i], deck[j]] = [deck[j], deck[i]];
-    }
-    return deck;
-}
+// 🔐 makeServerSeed / commitHash / seededShuffle 는 lib/shuffle.js 로 추출 (상단 require)
 
 // 💡 [신규] 올인 런아웃 실시간 승률 계산용 전체 덱
 const FULL_DECK = (() => {
