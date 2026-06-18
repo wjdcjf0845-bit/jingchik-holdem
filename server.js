@@ -1443,6 +1443,39 @@ class GameRoom {
             if (this.players[nick].chips > 0 && !this.playerOrder.includes(nick)) this.playerOrder.push(nick);
         });
 
+        // 🪑 [버그픽스] 풀방 대기 관전자 좌석 배정 — 자리가 났으면 바이인 후 이번 핸드부터 합류.
+        //    예전엔 _fullRoomSpectator 플래그를 세팅만 하고 한 번도 읽지 않아,
+        //    "자리가 나면 다음 핸드부터 참여" 안내가 실제로는 지켜지지 않았다.
+        //    진행 중 토너먼트는 중간에 풀스택으로 합류하면 공정성이 깨지므로 제외(캐시/미시작 방만).
+        if (!this._mtt && !(this.mode === 'tournament' && this.tournamentStarted)) {
+            const TABLE_SIZE = 6;
+            let openSeats = TABLE_SIZE - this.playerOrder.length;
+            if (openSeats > 0) {
+                const waiting = Object.keys(this.players).filter(n => {
+                    const p = this.players[n];
+                    return p && p._fullRoomSpectator && p.isSpectator && !p.isDisconnected;
+                });
+                for (const nick of waiting) {
+                    if (openSeats <= 0) break;
+                    const p = this.players[nick];
+                    p.chips = this.startingChips;
+                    p.isSpectator = false;
+                    p._fullRoomSpectator = false;
+                    // 💵 캐시: 첫 실착석 = 첫 바이인 → 뱅크롤 차감(토너먼트는 아래 바이인 루프가 처리하므로 제외)
+                    if (this.mode === 'cash' && !p.isBot) {
+                        MockDB.recordCashNet(nick, -this.startingChips);
+                        MockDB.adjustBankroll(nick, -this.startingChips).then(nb => {
+                            if (p.socketId) io.to(p.socketId).emit('bankrollUpdate', { bankroll: nb || 0 });
+                        });
+                    }
+                    if (!this.playerOrder.includes(nick)) this.playerOrder.push(nick);
+                    if (p.socketId) io.to(p.socketId).emit('gameMessage', '🪑 자리가 나서 합류했습니데이! 이번 핸드부터 플레이합니데이.');
+                    io.to(this.roomId).emit('gameMessage', `🪑 ${nick} 님이 관전석에서 테이블로 합류했습니다.`);
+                    openSeats--;
+                }
+            }
+        }
+
         // 💡 [수정 #5] 직전 딜러가 파산했어도 버튼이 정확히 한 칸씩 전진하도록 개선
         if (this.playerOrder.length > 0 && prevDealerSeat !== -1) {
             let newDealerNick = null;
