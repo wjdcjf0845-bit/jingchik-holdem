@@ -5,6 +5,7 @@ node_modules/
 poker_stats.json
 poker_stats.json.bak
 poker_stats.json.tmp
+ranking.json
 
 # 백업/임시
 public/*.bak-*
