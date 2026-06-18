@@ -2730,7 +2730,12 @@
             list.innerHTML = '<div class="hist-empty">아직 진행된 핸드가 없습니데이!</div>';
         } else {
             list.innerHTML = hist.map(h => {
-                const wins = h.winners.map(w =>
+                // 🐛 [버그픽스] 한 명이 메인팟+사이드팟을 동시 우승하면 winners 배열에 같은 닉이
+                //    여러 번 들어와 "정레이즈 스트레이트 · 정레이즈 스트레이트"처럼 중복 표기됐다.
+                //    닉 기준으로 합쳐 1회만 표시 (쇼다운 결과창과 동일 처리).
+                const seenW = new Map();
+                (h.winners || []).forEach(w => { if (!seenW.has(w.nick)) seenW.set(w.nick, w); });
+                const wins = [...seenW.values()].map(w =>
                     `<span class="hist-winner">${esc(w.nick)}</span><span class="hist-rank">${esc(w.rank)}</span>`
                 ).join(' · ');
                 const boardHtml = (h.board && h.board.length)
