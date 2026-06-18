@@ -1,0 +1,16 @@
+# deps
+node_modules/
+
+# 런타임 데이터 (영구 디스크에 저장 — 저장소엔 커밋 안 함)
+poker_stats.json
+poker_stats.json.bak
+poker_stats.json.tmp
+
+# 백업/임시
+public/*.bak-*
+*.bak-*
+*.log
+.DS_Store
+
+# Claude Code 로컬 툴링 (배포와 무관)
+.claude/

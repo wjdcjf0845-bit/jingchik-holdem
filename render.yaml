@@ -1,0 +1,21 @@
+# Render Blueprint — 이 저장소를 Render에 연결하면 자동으로 서비스가 구성됩니다.
+# 대시보드: New + → Blueprint → 이 저장소 선택
+services:
+  - type: web
+    name: jingchik-holdem
+    runtime: node
+    plan: starter                # 💰 상시 가동(슬립 없음). free로 바꾸면 15분 무접속 시 잠들고 콜드스타트 발생
+    region: singapore            # 한국에서 가장 가까운 리전 (다른 옵션: oregon, ohio, virginia, frankfurt)
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /
+    autoDeploy: true             # 연결된 브랜치에 push하면 자동 재배포
+    envVars:
+      - key: DATA_DIR
+        value: /var/data         # 영구 디스크 마운트 경로 — 계정/뱅크롤이 재배포에도 유지됨
+      - key: NODE_VERSION
+        value: "20"
+    disk:
+      name: poker-data           # 영구 디스크 (재배포·재시작에도 데이터 보존)
+      mountPath: /var/data
+      sizeGB: 1                  # 1GB면 충분 (계정 JSON은 수십 KB 수준)

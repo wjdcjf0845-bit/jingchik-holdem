@@ -1,0 +1,23 @@
+{
+  "name": "pokegame",
+  "version": "1.0.0",
+  "description": "징칡홀덤 - Texas Hold'em (Express + Socket.io)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1",
+    "gtts": "^0.2.1",
+    "pokersolver": "^2.1.4",
+    "socket.io": "^4.8.3"
+  }
+}
