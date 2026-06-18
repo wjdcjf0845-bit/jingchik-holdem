@@ -19,6 +19,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// 🩺 헬스체크 / 킵얼라이브 — UptimeRobot가 5분마다 가볍게 노크해 무료 인스턴스가 잠들지 않게 (271KB HTML 대신 "ok"만 응답)
+app.get('/healthz', (req, res) => res.status(200).send('ok'));
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─────────────────────────────────────────────
