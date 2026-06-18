@@ -3807,12 +3807,12 @@ io.on('connection', (socket) => {
                     }
                 }, 60000);
 
-                if (wasMyTurn && room.gameStage > 0 && room.gameStage < 5) {
-                    room.players[socket.nickname].isFolded = true;
-                    room.players[socket.nickname].hasActed = true;
-                    io.to(roomId).emit('actionSound', { nick: socket.nickname, type: 'fold' });
-                    room.nextTurn();
-                } else {
+                // 💡 [버그픽스] 내 차례였던 경우는 위 블록에서 이미 자동 체크/폴드 + nextTurn() 으로 처리됨.
+                //    예전엔 여기서 한 번 더 강제 폴드 + nextTurn() 을 호출해서:
+                //      (1) 자동 체크한 플레이어가 곧바로 폴드로 뒤집히고,
+                //      (2) turnIndex 가 두 번 전진해 바로 다음 플레이어의 턴이 통째로 건너뛰어졌다.
+                //    그 외(내 차례가 아니었던 경우)에만 연결 끊김 상태를 반영해 화면을 갱신한다.
+                if (!(wasMyTurn && room.gameStage >= 1 && room.gameStage < 5)) {
                     room.sendState();
                 }
             }
