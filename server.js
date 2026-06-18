@@ -2248,7 +2248,12 @@ class GameRoom {
         if (street === 'preflop') {
             // 🎯 프리플랍 — 포지션별 레인지 기반 (승률이 아닌 핸드 레인지로 판단)
             const code = handToCode(p.hand);
-            const facingRaise = toCall > 0 && this.currentHighestBet > this.bigBlind;
+            // 🐛 [버그픽스] this.bigBlind 는 어디에도 정의된 적 없는 값(undefined)이라
+            //    `currentHighestBet > undefined` 가 항상 false → 프리플랍 레이즈에 직면해도
+            //    "미오픈"으로 오판해 3벳/콜/폴드 대신 "오픈 레이즈"를 권하던 버그.
+            //    봇(botDecide)은 동일 로직을 올바른 bb로 계산해 영향 없었고, 사람 GTO 조언/채점만 틀렸다.
+            const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+            const facingRaise = toCall > 0 && this.currentHighestBet > bb;
             const isBB = p.role && p.role.includes('BB');
             const rt = preflopRangeTier(code, p.position || '', facingRaise);
             posInfo = { position: p.position || '-', code, rangeScore: rt.score, rangeLabel: rt.label, threshold: openThreshold(p.position || '') };
