@@ -124,6 +124,63 @@ test('preflopRangeTier 레이즈 직면이 미오픈보다 타이트하다 (디�
     }
 });
 
+// ───────────── 레이즈 디펜스 — 인원수/리레이즈 깊이 반응 (전략 튜닝) ─────────────
+const defendsCount = (pos, ctx) => {
+    const ranks = '23456789TJQKA';
+    let n = 0;
+    for (let i = 0; i < 13; i++) for (let j = 0; j < 13; j++) {
+        const c = i === j ? ranks[i] + ranks[i] : ranks[Math.max(i,j)] + ranks[Math.min(i,j)] + (i < j ? 's' : 'o');
+        if (P.preflopRangeTier(c, pos, true, ctx).tier !== 'fold') n++;
+    }
+    return n;
+};
+
+test('디펜스 — 인원 적을수록 더 넓게 방어 (HU > 3way > 6max)', () => {
+    const hu = defendsCount('BTN', { numActive: 2, threeBetPlus: false });
+    const w3 = defendsCount('BTN', { numActive: 3, threeBetPlus: false });
+    const m6 = defendsCount('BTN', { numActive: 6, threeBetPlus: false });
+    assert.ok(hu > w3, `HU(${hu}) > 3way(${w3})`);
+    assert.ok(w3 > m6, `3way(${w3}) > 6max(${m6})`);
+});
+
+test('디펜스 — 리레이즈(3벳+)엔 단일 레이즈보다 타이트하게 방어', () => {
+    for (const na of [2, 3, 6]) {
+        const single = defendsCount('BTN', { numActive: na, threeBetPlus: false });
+        const reraise = defendsCount('BTN', { numActive: na, threeBetPlus: true });
+        assert.ok(reraise <= single, `${na}인: 리레이즈디펜스(${reraise}) <= 단일디펜스(${single})`);
+    }
+});
+
+test('디펜스 — HU/3way에선 중간 핸드도 콜, 6max에선 폴드', () => {
+    // 44, KJo, 98s, Q9s 는 6max 단일레이즈엔 폴드, HU/3way엔 콜이어야(폴드 과다 방지)
+    ['44', 'KJo', '98s', 'Q9s'].forEach(c => {
+        assert.strictEqual(P.preflopRangeTier(c, 'BTN', true, { numActive: 6 }).tier, 'fold', `${c} 6max 폴드`);
+        assert.notStrictEqual(P.preflopRangeTier(c, 'BTN', true, { numActive: 2 }).tier, 'fold', `${c} HU 디펜스`);
+    });
+});
+
+test('디펜스 — 프리미엄/트래시는 인원·리레이즈와 무관하게 불변', () => {
+    [{ numActive: 2 }, { numActive: 6 }, { numActive: 2, threeBetPlus: true }].forEach(ctx => {
+        ['AA','KK','QQ','JJ','AKs','AKo'].forEach(c =>
+            assert.strictEqual(P.preflopRangeTier(c, 'UTG', true, ctx).tier, 'raise', `${c} 항상 3벳`));
+        ['72o','32o','82o'].forEach(c =>
+            assert.strictEqual(P.preflopRangeTier(c, 'BTN', true, ctx).tier, 'fold', `${c} 항상 폴드`));
+    });
+});
+
+test('디펜스 — ctx 미지정 시 기존 6맥스 동작 보존(하위호환)', () => {
+    const ranks = '23456789TJQKA';
+    for (let i = 0; i < 13; i++) for (let j = 0; j < 13; j++) {
+        const c = i === j ? ranks[i] + ranks[i] : ranks[Math.max(i,j)] + ranks[Math.min(i,j)] + (i < j ? 's' : 'o');
+        for (const pos of ['UTG','HJ','CO','BTN']) {
+            assert.strictEqual(
+                P.preflopRangeTier(c, pos, true).tier,
+                P.preflopRangeTier(c, pos, true, { numActive: 6, threeBetPlus: false }).tier,
+                `${c}@${pos}: ctx없음 == 6max단일`);
+        }
+    }
+});
+
 // ───────────────────────── 단일 출처 계약 ─────────────────────────
 test('단일 출처 — 봇/학습조언이 동일 모듈을 공유 (export 시그니처 보존)', () => {
     // server.js 의 botDecide / getGtoAdvice 가 import 하는 심볼이 모두 존재해야 한다

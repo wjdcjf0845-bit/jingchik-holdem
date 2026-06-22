@@ -815,7 +815,11 @@ class GameRoom {
             try {
                 const code = handToCode(p.hand);
                 const facingRaise = toCall > 0 && this.currentHighestBet > bb;
-                const rt = preflopRangeTier(code, p.position || '', facingRaise);
+                // 🎯 디펜스 폭 조정 컨텍스트: 살아있는 인원 수 + 리레이즈(3벳+) 여부
+                //    인원 적을수록(HU/3way) 넓게, 단일 오픈보다 리레이즈엔 타이트하게 방어
+                const _numActive = this.playerOrder.filter(n => !this.players[n].isFolded).length;
+                const _threeBetPlus = (this.raiseCountThisStreet || 0) >= 2;
+                const rt = preflopRangeTier(code, p.position || '', facingRaise, { numActive: _numActive, threeBetPlus: _threeBetPlus });
                 const isBB = p.role && p.role.includes('BB');
 
                 // 표준 오픈 사이즈로 "raise to" 금액 계산 (2.4~3.1bb, 최소레이즈·스택 보정)
@@ -2164,7 +2168,9 @@ class GameRoom {
             const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
             const facingRaise = toCall > 0 && this.currentHighestBet > bb;
             const isBB = p.role && p.role.includes('BB');
-            const rt = preflopRangeTier(code, p.position || '', facingRaise);
+            // 🎯 디펜스 폭: 살아있는 인원(나 포함) + 리레이즈 여부 — 봇 botDecide와 동일 컨텍스트
+            const _ctx = { numActive: opponents + 1, threeBetPlus: (this.raiseCountThisStreet || 0) >= 2 };
+            const rt = preflopRangeTier(code, p.position || '', facingRaise, _ctx);
             posInfo = { position: p.position || '-', code, rangeScore: rt.score, rangeLabel: rt.label, threshold: openThreshold(p.position || '') };
 
             const canCheck = (toCall === 0); // BB 무료 체크 또는 림프 팟
