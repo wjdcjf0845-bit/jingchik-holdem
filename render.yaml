@@ -13,6 +13,12 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
+      # 💾 Turso 원격 전적 DB (무료) — 값은 Render 대시보드 Environment 탭에서 직접 입력
+      #    미입력 시 로컬 파일 저장(재배포마다 초기화)으로 동작
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
 # ⚠️ 무료 플랜은 영구 디스크를 붙일 수 없어 계정/뱅크롤이 재배포·재시작 시 초기화됩니다.
 #    데이터를 영구 보존하려면 plan을 starter(유료, ~$7/월)로 바꾸고 아래 disk 블록을 추가하세요:
 #    plan: starter

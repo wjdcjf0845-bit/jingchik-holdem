@@ -17,6 +17,8 @@ const Hand = require('pokersolver').Hand;
 const Pots = require('./lib/pots'); // 💰 팟/사이드팟 분배 순수 로직 (테스트로 보존성 검증)
 // 🔐 검증 가능한 결정적 셔플 (commit-reveal) 순수 로직 — 테스트로 결정성·공정성 검증
 const { makeServerSeed, commitHash, seededShuffle } = require('./lib/shuffle');
+// 💾 원격 영속화 (Turso) — TURSO_DATABASE_URL 설정 시에만 활성화, 미설정이면 로컬 파일만 사용
+const { createRemoteStorage } = require('./lib/storage');
 
 const app = express();
 const server = http.createServer(app);
@@ -81,6 +83,68 @@ const MockDB = {
     users: new Map(),
     deviceOwners: new Map(), // 🔒 [#5] deviceId → 소유 닉네임
     _saveTimer: null,
+    // 💾 원격 영속화 (Turso) — env 미설정이면 null (로컬 파일만)
+    _remote: createRemoteStorage(),
+    _remoteLoadOk: false,   // ⚠️ 원격 로드 성공 전엔 절대 원격에 쓰지 않음 (빈 데이터 덮어쓰기 방지)
+    _remotePushing: false,  // 푸시 직렬화 (동시 upsert 방지)
+    _remoteDirty: false,    // 푸시 중 새 변경 발생 시 재푸시 예약
+
+    // 🌐 원격 로드 — 부팅 시 1회 호출. 원격에 데이터가 있으면 그것이 진실(로컬 덮어씀).
+    //    원격이 비어있으면(최초 연결) 현재 로컬 데이터를 원격에 올려 시드한다.
+    //    로드 실패 시 30초 간격 재시도 — 성공할 때까지 원격 쓰기는 잠긴 상태 유지.
+    async initRemote() {
+        if (!this._remote) return;
+        try {
+            const json = await this._remote.load();
+            if (json) {
+                const raw = JSON.parse(json);
+                this.users.clear();
+                this.deviceOwners.clear();
+                Object.values(raw).forEach(u => { if (u && u.nickname) this.users.set(u.nickname, u); });
+                this.users.forEach(u => { if (u.deviceId) this.deviceOwners.set(u.deviceId, u.nickname); });
+                console.log(`🌐 원격 전적 DB 로드(Turso): ${this.users.size}명 — 원격이 기준으로 적용됨`);
+                // 원격 기준 데이터를 로컬 파일에도 반영 (아래 flush가 다시 원격 푸시하지만 내용 동일 — 무해)
+                this._remoteLoadOk = true;
+                this.flush();
+            } else {
+                // 최초 연결: 원격이 빔 → 로컬 데이터로 시드
+                this._remoteLoadOk = true;
+                console.log(`🌐 원격 전적 DB 최초 연결 — 로컬 ${this.users.size}명 데이터를 원격에 시드합니다`);
+                this._pushRemote();
+            }
+        } catch (e) {
+            console.error(`🌐 원격 전적 DB 로드 실패(${e.message}) — 30초 후 재시도. 성공 전까지 원격 저장은 비활성.`);
+            setTimeout(() => this.initRemote(), 30000);
+        }
+    },
+
+    // 🌐 원격 푸시 (fire-and-forget, 직렬화) — flush()에서 호출됨
+    _pushRemote() {
+        if (!this._remote || !this._remoteLoadOk) return; // ⚠️ 로드 성공 전 쓰기 금지
+        if (this._remotePushing) { this._remoteDirty = true; return; }
+        this._remotePushing = true;
+        const obj = {};
+        this.users.forEach((u, k) => { obj[k] = u; });
+        const json = JSON.stringify(obj);
+        this._remote.save(json)
+            .catch(e => console.error('🌐 원격 저장 실패(다음 flush에서 재시도):', e.message))
+            .finally(() => {
+                this._remotePushing = false;
+                if (this._remoteDirty) { this._remoteDirty = false; this._pushRemote(); }
+            });
+    },
+
+    // 🌐 종료 시 원격 저장 완료 대기 (타임아웃 포함) — gracefulShutdown 에서 사용
+    async flushRemoteNow(timeoutMs = 3000) {
+        if (!this._remote || !this._remoteLoadOk) return;
+        const obj = {};
+        this.users.forEach((u, k) => { obj[k] = u; });
+        const json = JSON.stringify(obj);
+        await Promise.race([
+            this._remote.save(json),
+            new Promise(res => setTimeout(res, timeoutMs))
+        ]).catch(e => console.error('🌐 종료 원격 저장 실패:', e.message));
+    },
     load() {
         // 손상 대비: 메인 → 실패 시 백업(.bak) 순으로 시도
         const tryLoad = (file) => {
@@ -133,6 +197,8 @@ const MockDB = {
             }
             fs.renameSync(tmp, DATA_FILE); // 원자적 교체
         } catch (e) { console.error('전적 DB 저장 실패:', e.message); }
+        // 🌐 로컬 저장 후 원격(Turso)에도 푸시 (비동기, 로드 성공 전엔 자동 무시)
+        try { this._pushRemote(); } catch (e) {}
     },
     async getUser(nickname) {
         if (!this.users.has(nickname)) {
@@ -3749,8 +3815,13 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`✅ [Master Server] 치명 버그 수정 + 보안 패치 + 방 정리 시스템 적용 완료! (포트 ${PORT})`);
+// 🌐 원격 DB(Turso)가 설정된 경우 부팅 시 원격 데이터를 먼저 로드한 뒤 리슨
+//    (재배포 직후 빈 로컬 상태로 로그인 받다가 원격 데이터로 뒤늦게 덮어쓰는 레이스 방지)
+//    원격 미설정이면 initRemote()는 즉시 반환 — 기존 동작 그대로.
+MockDB.initRemote().catch(e => console.error('🌐 원격 초기화 오류:', e && e.message)).finally(() => {
+    server.listen(PORT, () => {
+        console.log(`✅ [Master Server] 치명 버그 수정 + 보안 패치 + 방 정리 시스템 적용 완료! (포트 ${PORT})`);
+    });
 });
 
 // 🛡️ [안정성] 주기적 자동저장 (디바운스가 놓친 변경분까지 60초마다 안전 저장)
@@ -3781,8 +3852,10 @@ function gracefulShutdown(signal) {
     _shuttingDown = true;
     console.log(`\n🛑 ${signal} 수신 — 전적 저장 후 종료합니다...`);
     try { MockDB.flush(); } catch (e) { console.error('종료 저장 실패:', e.message); }
-    // 새 연결 차단 후 정리
-    try { server.close(() => { console.log('✅ 안전하게 종료되었습니다.'); process.exit(0); }); } catch (e) { process.exit(0); }
+    // 🌐 원격(Turso) 저장까지 완료 대기(최대 3초) 후 종료 — Render 재배포 시 마지막 변경 보존
+    MockDB.flushRemoteNow(3000).catch(() => {}).finally(() => {
+        try { server.close(() => { console.log('✅ 안전하게 종료되었습니다.'); process.exit(0); }); } catch (e) { process.exit(0); }
+    });
     // 소켓이 안 닫혀 hang되는 경우 대비 강제 종료 타임아웃
     setTimeout(() => process.exit(0), 3000);
 }
