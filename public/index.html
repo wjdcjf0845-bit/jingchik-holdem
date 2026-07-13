@@ -2451,7 +2451,13 @@
                 btnAllin.innerText = '🔥 올인';
                 btnAllin.disabled = false;
 
-                if (maxRaise < minRaise && maxRaise < p.currentBet + p.chips) {
+                if (data.turnRaiseLocked) {
+                    // 🚫 [언더레이즈 규칙] 내 액션 후 언더레이즈 올인만 있었음 — 콜/폴드만 가능 (TDA 표준)
+                    btnR.disabled = true;
+                    btnR.innerText = '콜/폴드만';
+                    btnAllin.disabled = true;
+                    raiseGroup.classList.add('disabled');
+                } else if (maxRaise < minRaise && maxRaise < p.currentBet + p.chips) {
                     btnR.disabled = true;
                     btnR.innerText = '레이즈 불가';
                     raiseGroup.classList.add('disabled');
