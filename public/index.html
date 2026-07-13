@@ -7,7 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;500;700;900&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;500;700;900&family=Oswald:wght@500;600;700&family=Playfair+Display:ital,wght@0,600;0,800;0,900;1,600;1,700&family=Nanum+Myeongjo:wght@700;800&display=swap" rel="stylesheet">
     <style>
         /* ════════════════════════════════════════════════
            JING-CHIK HOLD'EM — Premium Casino UI
@@ -1383,6 +1383,270 @@
             #mttcreate-modal .setting-row { margin-bottom: 8px; }
             .diff-easy, .diff-normal, .diff-hard { padding: 10px 0 !important; min-height: 40px; }
         }
+    </style>
+    <style id="vintage-print-theme">
+        /* ═══════════════════════════════════════════════════════════════
+           🗞️ VINTAGE PRINT THEME — 크림 종이 + 잉크 세리프 + 버밀리언/로열블루
+           레이아웃은 기존 규칙 그대로, 색·질감·타이포만 오버라이드 (카스케이드)
+           ═══════════════════════════════════════════════════════════════ */
+        :root {
+            --paper: #f0e7d2;            /* 크림 종이 */
+            --paper-hi: #f7f0e0;         /* 밝은 종이(패널) */
+            --paper-lo: #e5d9bd;         /* 눌린 종이 */
+            --ink: #221d15;              /* 웜 블랙 잉크 */
+            --ink-soft: rgba(34,29,21,0.72);
+            --verm: #c8501f;             /* 버밀리언(주황빨강) */
+            --verm-deep: #a23c12;
+            --royal: #2f4fc4;            /* 로열 블루 (의자 블루) */
+            --royal-deep: #20399a;
+            --mustard: #dfa11d;
+
+            /* 기존 토큰 재매핑 → 전체 카스케이드 */
+            --bg-0: var(--paper);
+            --bg-1: #eee3ca;
+            --panel: var(--paper-hi);
+            --panel-2: #efe6d0;
+            --line: rgba(34,29,21,0.22);
+            --gold: var(--verm);
+            --gold-hi: #e06a35;
+            --gold-deep: var(--verm-deep);
+            --gold-grad: linear-gradient(180deg, #e06a35 0%, var(--verm) 55%, var(--verm-deep) 100%);
+            --felt-1: #3a5cd8;           /* 블루 쿠션 펠트 */
+            --felt-2: var(--royal);
+            --felt-3: var(--royal-deep);
+            --red: #c0331b;
+            --blue: var(--royal);
+            --purple: #7a4bd6;
+            --green: #2c7a4b;
+            --txt: var(--ink);
+            --txt-dim: #7c7057;
+            --font-disp: 'Playfair Display', 'Nanum Myeongjo', 'Noto Sans KR', serif;
+        }
+        /* ── 종이 배경 + 그레인 + 하프톤 도트 ── */
+        body {
+            background:
+                radial-gradient(ellipse 120% 80% at 50% -20%, rgba(255,255,255,0.5) 0%, transparent 55%),
+                radial-gradient(circle, rgba(34,29,21,0.05) 1px, transparent 1.3px),
+                var(--paper);
+            background-size: auto, 9px 9px, auto;
+            color: var(--ink);
+        }
+        body::after {
+            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+            mix-blend-mode: multiply;
+        }
+        /* ── 로그인: 에디토리얼 포스터 카드 ── */
+        .login-box, #login-screen .login-box {
+            background: var(--paper-hi);
+            border: 2px solid var(--ink);
+            box-shadow: 6px 6px 0 rgba(34,29,21,0.85), inset 0 0 0 6px var(--paper-hi), inset 0 0 0 7px rgba(34,29,21,0.35);
+            border-radius: 6px;
+        }
+        .login-box h1, #login-screen h1 {
+            font-family: var(--font-disp); font-weight: 900; letter-spacing: -1px;
+            background: none; -webkit-background-clip: unset; background-clip: unset; color: var(--ink);
+            text-shadow: none;
+        }
+        .login-input {
+            background: transparent; border: none; border-bottom: 2px solid var(--ink);
+            border-radius: 0; color: var(--ink); font-family: var(--font-body);
+        }
+        .login-input::placeholder { color: var(--txt-dim); }
+        .login-input:focus { border-bottom-color: var(--verm); box-shadow: none; outline: none; }
+        .btn-join {
+            background: var(--ink); color: var(--paper-hi);
+            border: 2px solid var(--ink); border-radius: 4px;
+            box-shadow: 4px 4px 0 rgba(200,80,31,0.9);
+            font-family: var(--font-disp); font-weight: 800; letter-spacing: 2px;
+            text-shadow: none;
+        }
+        .btn-join:hover { background: var(--verm); border-color: var(--verm); color: #fff; box-shadow: 4px 4px 0 rgba(34,29,21,0.9); }
+        /* ── 로비 ── */
+        .mode-btn { background: transparent; border: 2px solid var(--ink); color: var(--ink); border-radius: 4px; font-weight: 800; }
+        .mode-btn.active { background: var(--verm); border-color: var(--verm); color: #fff; box-shadow: 3px 3px 0 rgba(34,29,21,0.85); }
+        .setting-input {
+            background: transparent; border: none; border-bottom: 2px solid var(--ink); border-radius: 0; color: var(--ink); font-weight: 700;
+        }
+        .rank-btn {
+            background: var(--paper-hi); border: 2px solid var(--ink); border-radius: 6px; color: var(--ink);
+            box-shadow: 3px 3px 0 rgba(34,29,21,0.28);
+        }
+        .rank-btn:hover { background: var(--paper-lo); }
+        #learn-btn { background: var(--royal); border: 2px solid var(--ink); color: #fdf8ec; box-shadow: 4px 4px 0 rgba(34,29,21,0.85); }
+        #daily-btn { background: var(--mustard); border: 2px solid var(--ink); color: var(--ink); box-shadow: 4px 4px 0 rgba(34,29,21,0.85); }
+        /* ── 포커 테이블: 블루 쿠션 + 잉크 프레임 ── */
+        .poker-table {
+            background:
+                radial-gradient(ellipse at 50% 28%, rgba(255,255,255,0.18) 0%, transparent 55%) padding-box,
+                radial-gradient(circle, rgba(20,26,74,0.28) 1.1px, transparent 1.4px) padding-box,
+                radial-gradient(ellipse at center, var(--felt-1) 0%, var(--felt-2) 55%, var(--felt-3) 100%) padding-box,
+                var(--paper-lo) border-box;
+            background-size: auto, 8px 8px, auto, auto;
+            border: 24px solid transparent;
+            box-shadow:
+                inset 0 0 0 3px rgba(240,231,210,0.85),
+                inset 0 0 0 5px rgba(34,29,21,0.8),
+                inset 0 14px 60px rgba(20,26,74,0.35),
+                0 0 0 2px var(--ink),
+                8px 10px 0 rgba(34,29,21,0.25);
+        }
+        .poker-table::after { border-color: rgba(240,231,210,0.4); box-shadow: inset 0 0 0 8px rgba(240,231,210,0.12); }
+        .poker-table::before { color: rgba(240,231,210,0.35); font-family: var(--font-disp); letter-spacing: 5px; }
+        /* ── 플레이어 좌석: 종이 카드 ── */
+        .player-spot {
+            background: var(--paper-hi);
+            border: 2px solid var(--ink); border-radius: 8px;
+            box-shadow: 4px 4px 0 rgba(34,29,21,0.55);
+            color: var(--ink);
+        }
+        .player-spot.active-turn, .player-spot.my-turn {
+            border-color: var(--verm);
+            box-shadow: 4px 4px 0 rgba(200,80,31,0.75), 0 0 0 2px rgba(200,80,31,0.35);
+        }
+        .player-spot .player-name, .player-spot .nick { color: var(--ink); font-family: var(--font-disp); font-weight: 800; }
+        .player-chips, .chip-count { color: var(--ink); }
+        /* ── 팟: 스탬프 배지 ── */
+        .pot-area {
+            background: var(--paper-hi); border: 2px solid var(--ink); border-radius: 999px;
+            box-shadow: 3px 3px 0 rgba(34,29,21,0.6);
+            color: var(--ink); font-family: var(--font-disp); font-weight: 800;
+        }
+        .pot-area * { color: var(--ink) !important; }
+        /* ── 커뮤니티/핸드 카드: 크림 면 + 세리프 인덱스 ── */
+        .card-front { background: linear-gradient(155deg, #fbf5e6, #efe6cf); border: 1.5px solid rgba(34,29,21,0.75); }
+        .cf-corner, .cf-corner-b, .cf-center { font-family: var(--font-disp); }
+        .card-back-side {
+            background:
+                radial-gradient(circle, rgba(240,231,210,0.4) 0.9px, transparent 1.15px),
+                linear-gradient(160deg, var(--royal) 0%, var(--royal-deep) 100%);
+            background-size: 6px 6px, auto;
+            border: 2px solid rgba(240,231,210,0.8);
+        }
+        .mini-card { background: linear-gradient(155deg, #fbf5e6, #efe6cf); border: 1px solid rgba(34,29,21,0.6); color: var(--ink); font-family: var(--font-disp); }
+        .mini-card.red { color: var(--verm); }
+        /* ── 액션 버튼: 레터프레스 블록 ── */
+        .action-bottom-row button, .btn-fold, .btn-call, .btn-raise, .btn-allin {
+            border: 2px solid var(--ink) !important; border-radius: 6px;
+            font-family: var(--font-disp); font-weight: 800; letter-spacing: 1px;
+            text-shadow: none; box-shadow: 3px 3px 0 rgba(34,29,21,0.8);
+        }
+        .btn-fold  { background: var(--paper-hi) !important; color: var(--verm) !important; }
+        .btn-call  { background: var(--royal) !important; color: #fdf8ec !important; }
+        .btn-raise { background: var(--verm) !important; color: #fdf8ec !important; }
+        .btn-allin { background: var(--ink) !important; color: var(--mustard) !important; }
+        .action-bottom-row button:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 rgba(34,29,21,0.8); }
+        .btn-qb-half, .btn-qb-full, .btn-qb-max {
+            background: var(--paper-hi); border: 2px solid var(--ink); color: var(--ink); border-radius: 4px;
+            box-shadow: 2px 2px 0 rgba(34,29,21,0.5); font-weight: 800;
+        }
+        .step-btn { background: var(--paper-hi); border: 2px solid var(--ink); color: var(--ink); box-shadow: 2px 2px 0 rgba(34,29,21,0.5); }
+        #raise-slider { accent-color: var(--verm); }
+        /* ── 모달/패널: 에디토리얼 페이퍼 ── */
+        .modal-content, .history-modal-content, #center-message, .center-message,
+        #history-modal > div, #help-modal > div, #daily-modal > div, #report-modal > div,
+        #replay-modal > div, #profile-modal > div, #hall-modal > div {
+            background: var(--paper-hi);
+            border: 2px solid var(--ink);
+            box-shadow: 8px 8px 0 rgba(34,29,21,0.35);
+            color: var(--ink);
+        }
+        .sd-title {
+            font-family: var(--font-disp); font-weight: 900;
+            background: none; -webkit-background-clip: unset; background-clip: unset; color: var(--ink);
+            border-bottom: 2px solid var(--ink); padding-bottom: 8px;
+        }
+        .sd-winners { background: rgba(34,29,21,0.05); border: 1px solid rgba(34,29,21,0.25); }
+        .sd-winner, .sd-nick { color: var(--ink); }
+        .sd-won { color: var(--verm); font-weight: 900; }
+        .sd-rank-chip { background: var(--royal); border-color: var(--royal-deep); color: #fdf8ec; }
+        .sd-potline { color: var(--verm); }
+        .sd-hint, .sd-board-label { color: var(--txt-dim); }
+        .hist-winner { color: var(--ink); font-weight: 800; }
+        .hist-rank { color: var(--royal); }
+        .hist-pot { color: var(--verm); }
+        /* ── 턴 안내/타이머 바 ── */
+        #turn-indicator { background: var(--paper-hi) !important; border-top: 2px solid var(--ink) !important; color: var(--ink) !important; box-shadow: none !important; }
+        #turn-indicator * { text-shadow: none !important; }
+        .timer-text { color: var(--verm); }
+        /* ── 채팅/이모트 ── */
+        .emote-btn { background: var(--paper-hi); border: 2px solid var(--ink); box-shadow: 2px 2px 0 rgba(34,29,21,0.4); }
+        /* ── 상단 아이콘 바 ── */
+        .top-bar button, .icon-btn { background: var(--paper-hi); border: 2px solid var(--ink); color: var(--ink); box-shadow: 2px 2px 0 rgba(34,29,21,0.4); }
+        /* ── 위너/이펙트 톤 조정 ── */
+        .winner-badge { background: var(--verm); color: #fdf8ec; border: 2px solid var(--ink); font-family: var(--font-disp); }
+        .equity-badge { background: var(--ink); color: var(--paper-hi); border: 1px solid var(--paper-lo); }
+        /* ── 오버레이: 로그인=풀 페이퍼, 모달 스크림=잉크 톤 ── */
+        .overlay { background: rgba(34,29,21,0.6) !important; }
+        #login-overlay {
+            background:
+                radial-gradient(circle, rgba(34,29,21,0.05) 1px, transparent 1.3px),
+                var(--paper) !important;
+            background-size: 9px 9px !important;
+        }
+        #login-overlay .bg-suit, #login-overlay .deco { color: rgba(34,29,21,0.06) !important; }
+        /* ── 로비: 풀 페이퍼 + 에디토리얼 ── */
+        #lobby-overlay {
+            background:
+                radial-gradient(circle, rgba(34,29,21,0.05) 1px, transparent 1.3px),
+                var(--paper) !important;
+            background-size: 9px 9px !important;
+        }
+        #lobby-overlay h1, #lobby-overlay h2, #lobby-overlay h3 {
+            color: var(--ink) !important; -webkit-text-fill-color: var(--ink);
+            font-family: var(--font-disp); font-weight: 900; text-shadow: none;
+            background: none; -webkit-background-clip: unset; background-clip: unset;
+        }
+        .settings-panel {
+            background: var(--paper-hi) !important;
+            border: 2px solid var(--ink) !important; border-radius: 8px;
+            box-shadow: 4px 4px 0 rgba(34,29,21,0.3) !important;
+        }
+        #learn-btn {
+            background: var(--royal) !important; color: #fdf8ec !important;
+            border: 2px solid var(--ink) !important;
+            box-shadow: 4px 4px 0 rgba(34,29,21,0.85) !important;
+        }
+        #learn-btn * { color: #fdf8ec !important; }
+        #daily-btn {
+            background: var(--mustard) !important; color: var(--ink) !important;
+            border: 2px solid var(--ink) !important;
+            box-shadow: 4px 4px 0 rgba(34,29,21,0.85) !important;
+        }
+        /* ── 게임 상단 HUD: 종이 스트립 ── */
+        #top-hud { background: var(--paper-hi) !important; border-bottom: 2px solid var(--ink); box-shadow: 0 3px 0 rgba(34,29,21,0.2); }
+        #top-hud button { background: var(--paper-hi) !important; border: 2px solid var(--ink) !important; color: var(--ink) !important; box-shadow: 2px 2px 0 rgba(34,29,21,0.4) !important; text-shadow: none !important; }
+        #top-hud button *, #top-hud span { color: var(--ink) !important; text-shadow: none !important; }
+        .tournament-info { background: var(--paper-hi) !important; border: 2px solid var(--ink) !important; color: var(--ink) !important; box-shadow: 2px 2px 0 rgba(34,29,21,0.4) !important; }
+        .tournament-info * { color: var(--ink) !important; text-shadow: none !important; }
+        /* ── 레이즈 슬라이더: 잉크 트랙 + 버밀리언 썸 ── */
+        #raise-slider::-webkit-slider-thumb { background: var(--verm) !important; border: 2px solid var(--ink) !important; box-shadow: 2px 2px 0 rgba(34,29,21,0.5) !important; }
+        #raise-slider::-webkit-slider-runnable-track { background: rgba(34,29,21,0.7) !important; }
+        /* ── 하단 컨트롤: 종이 밴드 ── */
+        .controls { background: var(--paper) !important; border-top: 2px solid var(--ink); }
+        .btn-qb-half, .btn-qb-full, .btn-qb-max {
+            background: var(--paper-hi) !important; border: 2px solid var(--ink) !important; color: var(--ink) !important;
+            box-shadow: 2px 2px 0 rgba(34,29,21,0.5) !important; text-shadow: none !important; font-weight: 800;
+        }
+        .step-btn { background: var(--paper-hi) !important; border: 2px solid var(--ink) !important; color: var(--ink) !important; box-shadow: 2px 2px 0 rgba(34,29,21,0.5) !important; }
+        /* ── 학습모드 패널: 에디토리얼 카드 ── */
+        #gto-advice {
+            background: var(--paper-hi) !important; border: 2px solid var(--ink) !important; border-radius: 8px;
+            box-shadow: 4px 4px 0 rgba(34,29,21,0.35) !important; color: var(--ink) !important;
+        }
+        #gto-advice .gto-head { color: var(--ink) !important; border-bottom: 1.5px solid rgba(34,29,21,0.3); }
+        #learn-range-panel { background: var(--paper-hi) !important; border: 2px solid var(--ink) !important; color: var(--ink) !important; box-shadow: 4px 4px 0 rgba(34,29,21,0.35) !important; }
+        #learn-range-panel .lrp-head { color: var(--ink) !important; }
+        /* ── 턴 타임바: 버밀리언 ── */
+        .time-bar-fill { background: var(--verm) !important; }
+        /* ── 칩 배지: 종이 필 ── */
+        .chips-info { background: var(--paper-lo) !important; border: 1.5px solid var(--ink); border-radius: 999px; }
+        /* ── 카드 뒷면: 구식 장식 제거 (로열블루 하프톤만) ── */
+        .card-back-side::before { background: none !important; border: none !important; }
+        .card-back-side::after { color: rgba(240,231,210,0.9) !important; text-shadow: none !important; }
+        /* ── 스크롤바 ── */
+        ::-webkit-scrollbar-thumb { background: rgba(34,29,21,0.35); }
+        ::-webkit-scrollbar-track { background: transparent; }
     </style>
 </head>
 <body>
