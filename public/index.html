@@ -1709,6 +1709,50 @@
         #mtt-status-bar * { color: var(--ink) !important; }
         /* 상단 액션행 잔재 */
         .action-top-row { background: transparent !important; }
+        /* ═══ 로비 리디자인: 신문 1면(에디토리얼) 레이아웃 ═══ */
+        #lobby-overlay .login-box { padding-top: 18px; }
+        /* 마스트헤드: 세리프 대제목 + 더블 룰 + 이탤릭 태그라인 */
+        #lobby-overlay .login-box > h2 {
+            margin: 0 0 14px; padding-bottom: 10px;
+            border-bottom: 4px double var(--ink);
+            font-size: 34px; letter-spacing: 2px; line-height: 1.15;
+        }
+        #lobby-overlay .login-box > h2::after {
+            content: '— 오늘도 좋은 핸드 되이소 —';
+            display: block; margin-top: 6px;
+            font-family: var(--font-disp); font-style: italic; font-weight: 600;
+            font-size: 13px; letter-spacing: 1px; color: var(--verm); -webkit-text-fill-color: var(--verm);
+        }
+        #lobby-overlay .login-box > h2 span, #lobby-overlay .login-box > h2 small {
+            display: block; margin-top: 4px;
+            font-family: var(--font-num); font-size: 14px !important; font-weight: 600;
+            letter-spacing: 1px; color: var(--ink) !important; -webkit-text-fill-color: var(--ink);
+        }
+        /* 설정 패널: 2×2 컴팩트 그리드 (모드 토글은 풀폭) */
+        .settings-panel { display: grid !important; grid-template-columns: 1fr 1fr; gap: 10px 14px; padding: 14px !important; }
+        .settings-panel > .setting-row:first-child, .settings-panel > .setting-row:has(.mode-toggle) { grid-column: 1 / -1; }
+        .settings-panel .setting-row { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; margin: 0 !important; }
+        .settings-panel .setting-row:first-child { flex-direction: row; align-items: center; justify-content: space-between; }
+        .settings-panel .setting-row:first-child label, .settings-panel .setting-row:first-child .setting-label { white-space: nowrap; }
+        .settings-panel .setting-row label, .settings-panel .setting-row .setting-label { font-size: 12px; letter-spacing: 0.5px; color: var(--txt-dim); }
+        .settings-panel .setting-input { width: 100% !important; text-align: left; font-size: 17px; padding: 2px 0; }
+        /* 생성 줄: BR 제거 + 버튼 간격 */
+        #lobby-overlay .login-box > br { display: none; }
+        #room-input { margin: 14px 0 10px; }
+        #btn-create-room { margin-bottom: 4px; }
+        /* 섹션 구분: 더블 룰 ── 기록·랭킹 스탬프 줄 */
+        .rank-row { border-top: 1px solid rgba(34,29,21,0.35); border-bottom: 1px solid rgba(34,29,21,0.35); padding: 12px 0; margin: 14px 0 12px; }
+        /* 학습/출석: 슬림한 리스트형 버튼 */
+        #learn-btn, #daily-btn { padding-top: 11px !important; padding-bottom: 11px !important; margin-bottom: 10px !important; font-size: 14.5px !important; letter-spacing: 0.5px; }
+        /* 대기자/소셜 카드 */
+        #lobby-social { background: var(--paper-hi); border: 2px solid var(--ink); border-radius: 8px; box-shadow: 3px 3px 0 rgba(34,29,21,0.3); padding: 10px; margin-top: 12px; }
+        /* 📱 모바일: 접힌 GTO 칩을 슬림하게 — 상단 좌석과 겹침 방지 */
+        @media (max-width: 480px) {
+            #gto-advice.collapsed { padding: 3px 8px !important; top: 50px !important; }
+            #gto-advice.collapsed .gto-head { font-size: 9.5px; }
+            /* 짧은 화면에서 팟 금액이 커질 때 상단 좌석 칩과 겹치지 않게 살짝 아래로+슬림 */
+            .pot-area { margin-top: 8px !important; padding-top: 3px !important; padding-bottom: 3px !important; }
+        }
         /* ── 스크롤바 ── */
         ::-webkit-scrollbar-thumb { background: rgba(34,29,21,0.35); }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -3802,7 +3846,7 @@
             <div class="gto-head">
                 <span class="gto-title">🎓 GTO 코칭 · ${streetKo} · vs ${a.opponents}명</span>
                 <span class="gto-tier" style="color:${a.tierColor}; background:${a.tierColor}22; border:1px solid ${a.tierColor}55;">${a.tierLabel}</span>
-                <button class="gto-collapse" onclick="toggleGtoPanel()" title="접기/펴기">▼</button>
+                <button class="gto-collapse" onclick="toggleGtoPanel()" title="접기/펴기">${_gtoCollapsed ? '▲' : '▼'}</button>
             </div>
             <div class="gto-collapsible">
             ${posHeader}
@@ -3823,7 +3867,8 @@
         if (_gtoCollapsed) panel.classList.add('collapsed');
         else panel.classList.remove('collapsed');
     });
-    let _gtoCollapsed = false;
+    // 📱 모바일(≤480px)은 기본 접힘 — 펼친 패널이 보드/좌석/팟을 가리는 문제 방지 (탭하면 펼침)
+    let _gtoCollapsed = window.innerWidth <= 480;
     function toggleGtoPanel() {
         _gtoCollapsed = !_gtoCollapsed;
         const p = document.getElementById('gto-advice');
