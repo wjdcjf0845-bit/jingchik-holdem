@@ -21,6 +21,7 @@ const { makeServerSeed, commitHash, seededShuffle } = require('./lib/shuffle');
 const { createRemoteStorage } = require('./lib/storage');
 // 🎰 봇 베팅 사이징 (이산 GTO 버킷 + 체크레이즈 사이징) — 순수 모듈, 테스트로 분포 검증
 const { pickBetFraction, raiseToAmount } = require('./lib/betsizing');
+const { classifyBetPlan, barrelFrequency } = require('./lib/botplan'); // 🧠 봇 스트리트 플랜 (배럴/의도 유지)
 
 const app = express();
 const server = http.createServer(app);
@@ -865,7 +866,7 @@ class GameRoom {
         if (!p || !p.isBot || p.isFolded || p.isAllIn) return;
         const expectedNick = nick;
         // 사람처럼 0.9~2.0초 생각 후 행동
-        const thinkMs = 900 + Math.floor(Math.random() * 1100);
+        const thinkMs = process.env.BOT_FAST ? 1 : 900 + Math.floor(Math.random() * 1100);
         if (p._botTimer) clearTimeout(p._botTimer);
         p._botTimer = setTimeout(() => {
             // 그 사이 턴이 바뀌었으면 취소
@@ -1027,16 +1028,34 @@ class GameRoom {
                     }
                 }
                 const target = Math.min(p.currentBet + p.chips, p.currentBet + sizeBet(1.0));
-                if (target > this.currentHighestBet && r < Math.min(0.95, persona.valueBetFreq * valueMod)) return { type: 'raise', amount: target };
+                if (target > this.currentHighestBet && r < Math.min(0.95, persona.valueBetFreq * valueMod)) {
+                    // 🧠 밸류 벳 — 의도 기록 (다음 스트리트도 계속 밸류로 이어감)
+                    p._plan = { betStreet: street, type: classifyBetPlan({ isValue: true }), eqAtBet: equity };
+                    return { type: 'raise', amount: target };
+                }
                 return { type: 'check' };
             }
+            // ── 약~중 핸드: 블러프/세미블러프 + 🧠 스트리트 플랜 배럴(연속 벳) ──
             let bluffChance = persona.bluffFreq * bluffMod;
             if (isLastToAct) bluffChance += 0.08;
             if (board && board.dry && equity < 0.35) bluffChance += 0.06;
+
+            // 🧠 [스트리트 플랜] 직전 스트리트에 내가 벳한 어그레서면 "배럴" — 한 번 시작한 공격을 이어감.
+            //    포기하고 체크하면 상대에게 무료 카드 + 주도권을 공짜로 넘기므로, 상황이 좋으면 계속 벳.
+            const activeOpp = this.playerOrder.filter(n => n !== nick && !this.players[n].isFolded && !this.players[n].isAllIn).length;
+            const barrel = barrelFrequency({ plan: p._plan, street, board, oppRead, skill, activeOpp, equity });
+            if (barrel > 0) bluffChance = Math.max(bluffChance, barrel);
+
             if (r < bluffChance && p.chips > bb * 3) {
                 const target = Math.min(p.currentBet + p.chips, p.currentBet + sizeBet(0.85));
-                if (target > this.currentHighestBet) return { type: 'raise', amount: target };
+                if (target > this.currentHighestBet) {
+                    // 🧠 플랜 갱신 — 다음 스트리트 배럴 판단의 근거가 된다
+                    p._plan = { betStreet: street, type: classifyBetPlan({ equity, board }), eqAtBet: equity };
+                    return { type: 'raise', amount: target };
+                }
             }
+            // 배럴 안 함 → 공격 플랜 종료(손절), 체크
+            if (p._plan && p._plan.betStreet === street - 1) p._plan = null;
             return { type: 'check' };
         }
 
@@ -1439,6 +1458,7 @@ class GameRoom {
                 this.players[nick].hasActed = false;
                 this.players[nick].role = '';
                 this.players[nick]._trapStreet = -1; // 🪤 체크레이즈 트랩 플래그 초기화 (스트리트 번호 재사용 오발동 방지)
+                this.players[nick]._plan = null;      // 🧠 [스트리트 플랜] 핸드 단위 의도(밸류/블러프/세미블러프) 초기화
 
                 if (this.players[nick].chips <= 0 && (this.tournamentStarted || this.mode === 'cash')) {
                     // 🎓 [학습모드] 칩 0이면 자동 리필 (사람·봇 모두) — 연습이 끊기지 않게
