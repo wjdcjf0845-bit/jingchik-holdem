@@ -23,6 +23,7 @@ const { createRemoteStorage } = require('./lib/storage');
 const { pickBetFraction, raiseToAmount } = require('./lib/betsizing');
 const { classifyBetPlan, barrelFrequency } = require('./lib/botplan'); // 🧠 봇 스트리트 플랜 (배럴/의도 유지)
 const RIT = require('./lib/runittwice'); // 🎲 런잇트와이스 (올인 시 보드 2번) — 캐시 전용
+const HandRead = require('./lib/handread'); // 🔍 상대 레인지 추정 (핸드 리딩)
 
 const app = express();
 const server = http.createServer(app);
@@ -599,10 +600,6 @@ const FULL_DECK = (() => {
 // 🎯 프리플랍 GTO 레인지 로직 — lib/preflop.js 로 추출 (봇 botDecide + 학습모드 getGtoAdvice 가 같은 출처 공유)
 const { handToCode, handRangeScore, openThreshold, preflopRangeTier, isInOpenRange } = require('./lib/preflop');
 
-// ⏳ 타임뱅크: 기본 턴 시간 소진 시 자동 발동되는 개인 추가 시간(초). 사용한 만큼 차감,
-//    블라인드 레벨업마다 +15초 충전(상한까지), 리바이/재바이인 시 전액 충전.
-const TIME_BANK_MAX = 60;
-
 class GameRoom {
     constructor(roomId, settings) {
         this.roomId = roomId;
@@ -785,10 +782,6 @@ class GameRoom {
                 this.timeRemaining = this.blindUpInterval;
                 const bl = this.blindStructure[this.blindLevel];
                 io.to(this.roomId).emit('gameMessage', `🚨 블라인드 레벨 업! (${bl.sb}/${bl.bb})`);
-                // ⏳ [타임뱅크] 레벨업마다 사람 플레이어에게 +15초 충전 (상한 60초)
-                Object.values(this.players).forEach(pl => {
-                    if (pl && !pl.isBot) pl.timeBank = Math.min(TIME_BANK_MAX, (pl.timeBank || 0) + 15);
-                });
                 this.sendState();
             }
         }, 1000);
@@ -825,28 +818,6 @@ class GameRoom {
 
         this.turnTimeout = setTimeout(() => {
             if (this.turnIndex === -1 || this.playerOrder[this.turnIndex] !== expectedNick) return;
-
-            // ⏳ [타임뱅크] 기본 시간 소진 시, 사람+접속중+잔여 뱅크가 있으면 자동 발동 —
-            //    턴을 뱅크 잔여 초만큼 연장하고, 실제 사용한 만큼만 stopTurnTimer에서 차감(미사용분 환불)
-            const p = this.players[expectedNick];
-            if (p && !p.isBot && !p.isFolded && !p.isAllIn && !p.isDisconnected && (p.timeBank || 0) >= 1 && this._timeBankUser !== expectedNick) {
-                const tbMs = Math.round(p.timeBank * 1000);
-                this._timeBankUser = expectedNick;
-                this._timeBankStart = Date.now();
-                this.turnEndTime = Date.now() + tbMs;
-                io.to(this.roomId).emit('updateTurnTimer', this.turnEndTime);
-                io.to(this.roomId).emit('gameMessage', `⏳ ${expectedNick} 타임뱅크 발동! (+${Math.round(p.timeBank)}초)`);
-                if (this.turnTimeout) clearTimeout(this.turnTimeout);
-                this.turnTimeout = setTimeout(() => {
-                    // 뱅크까지 소진 → 전액 차감 후 자동 처리
-                    const pl = this.players[expectedNick];
-                    if (pl) pl.timeBank = 0;
-                    this._timeBankUser = null;
-                    autoAct();
-                }, tbMs);
-                return;
-            }
-
             autoAct();
         }, msLimit);
 
@@ -1340,7 +1311,8 @@ class GameRoom {
         const p = this.players[nick];
         if (!p.hand || p.hand.length !== 2) return 0.3;
 
-        const opponents = this.playerOrder.filter(n => n !== nick && !this.players[n].isFolded).length;
+        const oppNicks = this.playerOrder.filter(n => n !== nick && !this.players[n].isFolded);
+        const opponents = oppNicks.length;
         if (opponents === 0) return 1;
 
         // 프리플랍: 간이 핸드 강도 (Chen 공식 변형)
@@ -1348,11 +1320,21 @@ class GameRoom {
             return this.preflopStrength(p.hand) / Math.sqrt(opponents);
         }
 
+        // 🔍 [핸드 리딩] 상대별로 이번 핸드 액션에서 레인지 임계값을 뽑아둔다.
+        //    3벳/배럴한 상대는 강한 레인지로 좁혀지고, 체크만 한 상대는 랜덤 그대로.
+        //    실력 낮은 봇은 임계값이 0에 수렴 → 기존 랜덤 가정과 동일하게 동작한다.
+        //    (봇이 아니면 persona가 없다 — 사람의 승률 조회(학습모드 등)는 리딩 없이 랜덤 가정)
+        const persona = p.isBot ? (p._persona || (p._persona = this.assignPersona(nick, p.difficulty))) : null;
+        const skill = (persona && persona.skillFactor != null) ? persona.skillFactor : 0;
+        const oppMinStrength = oppNicks.map(n =>
+            HandRead.villainMinStrength(HandRead.summarizeVillain(this.actionLog, n), skill));
+
         // 포스트플랍: 몬테카를로
         const known = new Set([...this.communityCards, ...p.hand]);
         const pool = FULL_DECK.filter(c => !known.has(c));
         const need = 5 - this.communityCards.length;
         const ITER = 500; // 120→500: 표준편차 0.041→0.017로 안정화 (GTO 평가 정확도 ↑)
+        const MAX_TRIES = 4; // 레인지 표본 재추첨 상한 — 못 찾으면 그냥 수용 (성능·표본 고갈 방지)
         let win = 0;
 
         for (let it = 0; it < ITER; it++) {
@@ -1360,8 +1342,21 @@ class GameRoom {
             for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
             let idx = 0;
             const board = this.communityCards.concat(shuffled.slice(idx, idx += need));
+
+            // 상대 핸드를 레인지에 맞게 추첨 (거절 샘플링, 시도 횟수 제한)
             const oppHands = [];
-            for (let o = 0; o < opponents; o++) oppHands.push([shuffled[idx++], shuffled[idx++]]);
+            for (let o = 0; o < opponents; o++) {
+                const min = oppMinStrength[o];
+                let hand = null;
+                for (let t = 0; t < MAX_TRIES; t++) {
+                    if (idx + 1 >= shuffled.length) break; // 덱 소진 — 마지막 후보 사용
+                    const cand = [shuffled[idx++], shuffled[idx++]];
+                    hand = cand;
+                    if (min <= 0) break; // 안 좁히는 상대 → 첫 추첨 그대로 (기존 동작)
+                    if (HandRead.acceptOppHand(this.preflopStrength(cand), min)) break;
+                }
+                oppHands.push(hand || [shuffled[idx++], shuffled[idx++]]);
+            }
 
             try {
                 const mine = Hand.solve(p.hand.concat(board));
@@ -1398,15 +1393,6 @@ class GameRoom {
         if (this.turnTimeout) clearTimeout(this.turnTimeout);
         this.turnTimeout = null;
         this.turnEndTime = 0;
-        // ⏳ [타임뱅크] 뱅크 사용 중 액션이 들어왔으면 실제 사용한 초만큼만 차감 (미사용분 환불)
-        if (this._timeBankUser) {
-            const pl = this.players[this._timeBankUser];
-            if (pl) {
-                const usedSec = Math.max(0, (Date.now() - (this._timeBankStart || Date.now())) / 1000);
-                pl.timeBank = Math.max(0, Math.floor((pl.timeBank || 0) - usedSec));
-            }
-            this._timeBankUser = null;
-        }
     }
 
     stopAllTimers() {
@@ -2245,7 +2231,6 @@ class GameRoom {
         if (p.chips > 0) return false;
         p.chips = this.startingChips;
         p.rebuysUsed = (p.rebuysUsed || 0) + 1;
-        if (!p.isBot) p.timeBank = TIME_BANK_MAX; // ⏳ 리바이 시 타임뱅크 충전
         p.isSpectator = false;
         p._rebuyOfferSent = false;
         this._rebuyGraceActive = false;
@@ -2275,7 +2260,6 @@ class GameRoom {
         p.chips = this.startingChips;
         p.isSpectator = false;
         p.totalBuyins = (p.totalBuyins || 1) + 1; // 첫 입장이 1회
-        if (!p.isBot) p.timeBank = TIME_BANK_MAX; // ⏳ 재바이인 시 타임뱅크 충전
         MockDB.recordCashNet(nick, -this.startingChips); // 💵 바이인 = 순익 -
         MockDB.adjustBankroll(nick, -this.startingChips); // 💰 뱅크롤에서 차감
         io.to(this.roomId).emit('gameMessage', `💵 ${nick} 님이 ${this.startingChips.toLocaleString()} 칩 바이인! (재입장)`);
@@ -3149,7 +3133,7 @@ class MTTManager {
 function makeFreshPlayer(nick, socketId, isBot, chips) {
     return {
         id: nick, socketId: socketId || null, isBot: !!isBot,
-        chips: chips, currentBet: 0, totalInvested: 0, timeBank: TIME_BANK_MAX,
+        chips: chips, currentBet: 0, totalInvested: 0,
         isFolded: false, hasActed: false, role: '', isAllIn: false,
         isDisconnected: false, isMucked: false, hand: [], lastEmoteTime: 0,
         isSpectator: false, rebuysUsed: 0, totalBuyins: 1, position: ''
@@ -3397,7 +3381,7 @@ io.on('connection', (socket) => {
                 isDisconnected: false, isMucked: false, hand: [], lastEmoteTime: 0,
                 isSpectator: asSpectator,
                 _fullRoomSpectator: joinAsSpectatorFull, // 풀방 관전 — 자리 나면 합류 가능
-                rebuysUsed: 0, totalBuyins: 1, timeBank: TIME_BANK_MAX
+                rebuysUsed: 0, totalBuyins: 1
             };
             if (asSpectator) {
                 const reason = joinAsSpectatorFull ? '(자리가 차서 관전석으로)' : '';
@@ -3515,7 +3499,7 @@ io.on('connection', (socket) => {
             id: socket.nickname, socketId: socket.id, chips: settings.startingChips,
             currentBet: 0, totalInvested: 0, isFolded: false, hasActed: false, role: '',
             isAllIn: false, isDisconnected: false, isMucked: false, isSpectator: false,
-            hand: [], lastEmoteTime: 0, isBot: false, timeBank: TIME_BANK_MAX
+            hand: [], lastEmoteTime: 0, isBot: false
         };
         room.playerOrder.push(socket.nickname);
 
