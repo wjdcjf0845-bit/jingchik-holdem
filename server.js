@@ -22,6 +22,7 @@ const { createRemoteStorage } = require('./lib/storage');
 // 🎰 봇 베팅 사이징 (이산 GTO 버킷 + 체크레이즈 사이징) — 순수 모듈, 테스트로 분포 검증
 const { pickBetFraction, raiseToAmount } = require('./lib/betsizing');
 const { classifyBetPlan, barrelFrequency } = require('./lib/botplan'); // 🧠 봇 스트리트 플랜 (배럴/의도 유지)
+const RIT = require('./lib/runittwice'); // 🎲 런잇트와이스 (올인 시 보드 2번) — 캐시 전용
 
 const app = express();
 const server = http.createServer(app);
@@ -614,6 +615,9 @@ class GameRoom {
         // 💵 게임 모드: 'tournament'(기본) | 'cash'
         this.mode = settings.mode === 'cash' ? 'cash' : 'tournament';
         this.cashBlind = clampInt(settings.cashBlind, 1, 100000, 100); // 캐시 빅블라인드 고정값
+        // 🎲 런잇트와이스 — 올인 시 보드를 두 번 깔아 분산을 줄인다.
+        //    TDA 규정상 토너먼트는 금지 → 캐시 모드에서만 켤 수 있다.
+        this.runItTwice = this.mode === 'cash' && !!settings.runItTwice;
         this.hostNickname = null;
 
         this.players = {};
@@ -1689,6 +1693,8 @@ class GameRoom {
         this.communityCards = [];
         this.gameStage = 1;
         this.pot = 0;
+        this.ritBoards = null;      // 🎲 [런잇트와이스] 핸드마다 초기화 — 남아있으면 다음 핸드가 오판한다
+        this.ritSharedCount = 0;
 
         // 🎬 [리플레이] 이번 핸드의 액션 로그 + 시작 시점 스택 스냅샷
         this.actionLog = [];
@@ -1810,6 +1816,17 @@ class GameRoom {
         this.lastFullRaiseAmount = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
         this.raiseCountThisStreet = 0; // 📊 새 스트리트 — 레이즈 카운트 리셋
 
+        // 🎲 [런잇트와이스] 카드를 깔기 전에 판정 — 올인으로 액션이 끝났고 아직 깔 카드가 남았으면
+        //    보드를 두 번 깐다. (이미 발동했으면 재진입 금지 — ritBoards가 증거)
+        if (!this.ritBoards) {
+            const contestants = this.playerOrder.filter(n => !this.players[n].isFolded).length;
+            const actionable = this.playerOrder.filter(n => !this.players[n].isFolded && !this.players[n].isAllIn).length;
+            if (RIT.shouldRunItTwice({ enabled: this.runItTwice, mode: this.mode, gameStage: this.gameStage, contestants, actionable })) {
+                this.startRunItTwice();
+                return;
+            }
+        }
+
         if (this.gameStage === 1) { this.communityCards.push(this.deck.pop(), this.deck.pop(), this.deck.pop()); this.gameStage = 2; }
         else if (this.gameStage === 2) { this.communityCards.push(this.deck.pop()); this.gameStage = 3; }
         else if (this.gameStage === 3) { this.communityCards.push(this.deck.pop()); this.gameStage = 4; }
@@ -1829,6 +1846,36 @@ class GameRoom {
         this.turnIndex = this.findNextActiveIndex((this.dealerIndex + 1) % this.playerOrder.length);
         this.sendState();
         if (this.turnIndex !== -1) this.startTurnTimer();
+    }
+
+    // 🎲 [런잇트와이스] 올인 상황에서 보드를 두 번 깐다.
+    //    런2는 런1이 쓴 카드 다음부터 뽑으므로 두 보드에 같은 카드가 나올 수 없다.
+    //    깔린 카드는 연출을 위해 한 장씩(런1·런2 동시) 공개한 뒤 쇼다운으로 넘긴다.
+    startRunItTwice() {
+        this.turnIndex = -1;
+        const shared = this.communityCards.slice();          // 두 런이 공유하는 이미 깔린 카드
+        const boards = RIT.buildRunBoards(shared, () => this.deck.pop(), this.gameStage, 2);
+        this.ritBoards = boards;
+        this.ritSharedCount = shared.length;
+        this.gameStage = 4; // 보드 완성 — 더 이상 스트리트 진행 없음
+
+        io.to(this.roomId).emit('gameMessage', '🎲 런잇트와이스! 보드를 두 번 깝니데이.');
+
+        // 남은 카드를 한 장씩 순차 공개 (양쪽 런 동시) — 긴장감 연출
+        const total = boards[0].length;
+        let shown = shared.length;
+        const revealNext = () => {
+            shown++;
+            this.communityCards = boards[0].slice(0, shown); // 기존 클라 호환: 런1을 메인 보드로
+            this.sendState();
+            if (shown < total) {
+                this.pendingStageTimeout = setTimeout(revealNext, 1400);
+            } else {
+                this.pendingStageTimeout = setTimeout(() => { this.gameStage = 5; this.evaluateWinner(); }, 1600);
+            }
+        };
+        this.sendState();
+        this.pendingStageTimeout = setTimeout(revealNext, 1200);
     }
 
     // 💡 [신규] 사람·봇 공유 액션 적용 — 검증 통과 시 베팅 반영 후 nextTurn
@@ -2039,46 +2086,60 @@ class GameRoom {
             return sym + val;
         };
 
+        // 🎲 [런잇트와이스] 보드가 둘이면 각 보드로 따로 평가하고 팟을 반씩 나눈다.
+        //    평범한 핸드면 boards = [현재 보드] 하나 → 기존 동작과 완전히 동일.
+        const boards = this.ritBoards || [this.communityCards];
+
         sidePots.forEach((sp, idx) => {
             if (sp.amount <= 0) return;
             const eligibleActive = sp.eligible.filter(n => !this.players[n].isFolded);
             if (eligibleActive.length === 0) return;
 
-            const hands = eligibleActive.map(nick => {
-                const solved = Hand.solve(this.players[nick].hand.concat(this.communityCards));
-                solved.playerId = nick;
-                return solved;
+            const baseLabel = sidePots.length > 1 ? (idx === 0 ? '[메인팟]' : `[사이드팟 ${idx}]`) : '[최종 팟]';
+            const runAmounts = RIT.splitPotForRuns(sp.amount, boards.length); // 홀수 칩은 앞 런에게
+
+            boards.forEach((board, runIdx) => {
+                const runAmount = runAmounts[runIdx];
+                if (runAmount <= 0) return;
+
+                const hands = eligibleActive.map(nick => {
+                    const solved = Hand.solve(this.players[nick].hand.concat(board));
+                    solved.playerId = nick;
+                    return solved;
+                });
+
+                const winners = Hand.winners(hands);
+                const { perWinner, remainder } = Pots.splitAmount(runAmount, winners.length); // 홀수 칩은 winners[0]에게
+
+                winners.forEach((w, i) => {
+                    this.players[w.playerId].chips += perWinner + (i === 0 ? remainder : 0);
+                    allWinnerIds.add(w.playerId);
+                });
+
+                const label = boards.length > 1 ? `[런 ${runIdx + 1}] ${baseLabel}` : baseLabel;
+
+                const winnerStrs = winners.map(w => {
+                    const pCards = this.players[w.playerId].hand.map(formatCard).join(', ');
+                    const rankStr = rankKorMap[w.name] || w.name;
+                    return `🥇 ${w.playerId} ➔ 🃏[${pCards}] (${rankStr})`;
+                });
+
+                potResults.push({
+                    label, amount: runAmount,
+                    board: board.slice(), // 🎲 이 런의 보드 (클라 결과창에서 런별로 표시)
+                    winners: winners.map((w, i) => ({
+                        nick: w.playerId,
+                        cards: this.players[w.playerId].hand.slice(),
+                        rank: rankKorMap[w.name] || w.name,
+                        won: perWinner + (i === 0 ? remainder : 0),
+                        // 🌟 승리 조합 5장 (커뮤니티+홀카드 중 실제 사용된 카드)
+                        best5: w.cards.map(c => ((c.value === '10' ? 'T' : c.value) + c.suit))
+                    }))
+                });
+
+                const boardStr = boards.length > 1 ? `\n🃏 보드: ${board.map(formatCard).join(' ')}` : '';
+                messages.push(`💰 ${label} ${runAmount.toLocaleString()} 칩${boardStr}\n${winnerStrs.join('\n')}`);
             });
-
-            const winners = Hand.winners(hands);
-            const { perWinner, remainder } = Pots.splitAmount(sp.amount, winners.length); // 홀수 칩은 winners[0]에게
-
-            winners.forEach((w, i) => {
-                this.players[w.playerId].chips += perWinner + (i === 0 ? remainder : 0);
-                allWinnerIds.add(w.playerId);
-            });
-
-            const label = sidePots.length > 1 ? (idx === 0 ? '[메인팟]' : `[사이드팟 ${idx}]`) : '[최종 팟]';
-
-            const winnerStrs = winners.map(w => {
-                const pCards = this.players[w.playerId].hand.map(formatCard).join(', ');
-                const rankStr = rankKorMap[w.name] || w.name;
-                return `🥇 ${w.playerId} ➔ 🃏[${pCards}] (${rankStr})`;
-            });
-
-            potResults.push({
-                label, amount: sp.amount,
-                winners: winners.map((w, i) => ({
-                    nick: w.playerId,
-                    cards: this.players[w.playerId].hand.slice(),
-                    rank: rankKorMap[w.name] || w.name,
-                    won: perWinner + (i === 0 ? remainder : 0),
-                    // 🌟 승리 조합 5장 (커뮤니티+홀카드 중 실제 사용된 카드)
-                    best5: w.cards.map(c => ((c.value === '10' ? 'T' : c.value) + c.suit))
-                }))
-            });
-
-            messages.push(`💰 ${label} ${sp.amount.toLocaleString()} 칩\n${winnerStrs.join('\n')}`);
         });
 
         this.playerOrder.forEach(nick => {
@@ -2134,10 +2195,13 @@ class GameRoom {
         this.revealShuffle(); // 🔐 셔플 검증 시드 공개
 
         io.to(this.roomId).emit('gameResult', {
-            message: '🏆 [쇼다운 결과]\n\n' + messages.join('\n\n'),
+            message: (this.ritBoards ? '🎲 [런잇트와이스 결과]\n\n' : '🏆 [쇼다운 결과]\n\n') + messages.join('\n\n'),
             winners: [...allWinnerIds],
             pots: potResults,
-            community: this.communityCards.slice()
+            community: this.communityCards.slice(),
+            // 🎲 런잇트와이스: 두 보드 + 공유 카드 수 (클라가 두 줄로 렌더)
+            runBoards: this.ritBoards ? this.ritBoards.map(b => b.slice()) : null,
+            sharedCount: this.ritBoards ? this.ritSharedCount : null
         });
 
         this.sendState();

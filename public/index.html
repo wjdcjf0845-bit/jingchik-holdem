@@ -1782,6 +1782,16 @@
         .pf-name { color: var(--ink) !important; }
         /* 7. 플레잉카드 하트/다이아 → 버밀리언 통일 */
         .card-red { color: var(--verm) !important; }
+
+        /* 🎲 런잇트와이스 — 로비 토글 + 결과창 런별 보드 */
+        .rit-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--ink); font-weight: 700; }
+        .rit-toggle input { width: 16px; height: 16px; accent-color: var(--verm); cursor: pointer; }
+        .sd-rit-wrap { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+        .sd-rit-label { color: var(--verm); font-weight: 900; }
+        /* 두 런이 공유하는 카드는 흐리게 — 어디서부터 갈렸는지 바로 보이게 */
+        .sd-rit-shared { opacity: 0.45; }
+        .sd-rit-split { position: relative; }
+        .sd-rit-split::after { content: ''; position: absolute; left: 1px; right: 1px; bottom: -3px; height: 2px; background: var(--verm); border-radius: 1px; }
         /* ── 스크롤바 ── */
         ::-webkit-scrollbar-thumb { background: rgba(34,29,21,0.35); }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -1862,6 +1872,11 @@
             <div class="setting-row" id="row-cashblind" style="display:none;">
                 <span>🎯 빅블라인드 (고정)</span>
                 <input type="number" id="set-cash-blind" class="setting-input" value="100" min="2" step="10" max="100000">
+            </div>
+            <!-- 🎲 런잇트와이스 — 캐시 전용 (TDA 규정상 토너먼트 금지) -->
+            <div class="setting-row" id="row-rit" style="display:none;">
+                <span>🎲 런잇트와이스 <span style="font-size:11px; color:var(--txt-dim); font-weight:400;">(올인 시 보드 2번)</span></span>
+                <label class="rit-toggle"><input type="checkbox" id="set-rit"><span>사용</span></label>
             </div>
             <div class="setting-row" id="row-turntime">
                 <span>⏳ 턴 대기 시간 (초)</span>
@@ -2336,6 +2351,7 @@
         const isMtt = (m === 'mtt');
         document.getElementById('row-blindtime').style.display = isCash ? 'none' : 'flex';
         document.getElementById('row-cashblind').style.display = isCash ? 'flex' : 'none';
+        document.getElementById('row-rit').style.display = isCash ? 'flex' : 'none'; // 🎲 런잇트와이스는 캐시 전용
         document.getElementById('row-rebuys').style.display = (isCash || isMtt) ? 'none' : 'flex'; // MTT는 리바이 없음
         document.getElementById('row-turntime').style.display = isMtt ? 'none' : 'flex';
         document.getElementById('row-mtt-tablesize').style.display = isMtt ? 'flex' : 'none';
@@ -2370,10 +2386,11 @@
         const turnTime = parseInt(document.getElementById('set-turn-time').value) || 20;
         const maxRebuys = parseInt(document.getElementById('set-rebuys').value);
         const cashBlind = parseInt(document.getElementById('set-cash-blind').value) || 100;
+        const runItTwice = !!document.getElementById('set-rit').checked; // 🎲 캐시 전용 (서버가 모드 재검증)
         socket.emit('joinRoom', { roomId: rm, settings: {
             startingChips: chips, blindUpInterval: blindTime, turnTimeLimit: turnTime,
             maxRebuys: isNaN(maxRebuys) ? 1 : maxRebuys,
-            mode: selectedMode, cashBlind: cashBlind
+            mode: selectedMode, cashBlind: cashBlind, runItTwice: runItTwice
         } });
     }
 
@@ -3022,7 +3039,19 @@
         let html = `<div class="sd-title">♠ ${title} ♠</div>`;
         // 🃏 [개선] 결과창에 공유 보드(커뮤니티 카드)를 함께 표시 — 모달이 테이블 보드를 가려도
         //    "어떤 보드로 이 족보가 나왔는지"를 한눈에 볼 수 있게 (기권승은 보드 의미 없어 제외)
-        if (!data.foldWin && data.community && data.community.length) {
+        if (!data.foldWin && data.runBoards && data.runBoards.length > 1) {
+            // 🎲 런잇트와이스 — 보드를 런별로 두 줄. 공유 카드는 흐리게, 갈린 카드만 강조해
+            //    "어디서부터 갈렸는지"가 한눈에 보이게 한다.
+            const shared = Number(data.sharedCount) || 0;
+            html += `<div class="sd-rit-wrap">`;
+            data.runBoards.forEach((b, i) => {
+                const cards = b.map((c, idx) =>
+                    `<span class="${idx < shared ? 'sd-rit-shared' : 'sd-rit-split'}">${miniCard(c)}</span>`).join('');
+                html += `<div class="sd-board-wrap"><div class="sd-board-label sd-rit-label">런 ${i + 1}</div>` +
+                        `<div class="sd-board">${cards}</div></div>`;
+            });
+            html += `</div>`;
+        } else if (!data.foldWin && data.community && data.community.length) {
             html += `<div class="sd-board-wrap"><div class="sd-board-label">보드</div>` +
                     `<div class="sd-board">${data.community.map(miniCard).join('')}</div></div>`;
         }
