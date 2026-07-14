@@ -1734,7 +1734,9 @@
         .settings-panel .setting-row { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; margin: 0 !important; }
         .settings-panel .setting-row:first-child { flex-direction: row; align-items: center; justify-content: space-between; }
         .settings-panel .setting-row:first-child label, .settings-panel .setting-row:first-child .setting-label { white-space: nowrap; }
-        .settings-panel .setting-row label, .settings-panel .setting-row .setting-label { font-size: 12px; letter-spacing: 0.5px; color: var(--txt-dim); }
+        /* 라벨은 <span> — 첫 span은 한 줄 유지, 안의 힌트 span은 아래 줄로 */
+        .settings-panel .setting-row > span:first-child { font-size: 13px; letter-spacing: 0.2px; color: var(--ink); white-space: nowrap; }
+        .settings-panel .setting-row > span:first-child > span { display: block; white-space: nowrap; margin-top: 1px; }
         .settings-panel .setting-input { width: 100% !important; text-align: left; font-size: 17px; padding: 2px 0; }
         /* 생성 줄: BR 제거 + 버튼 간격 */
         #lobby-overlay .login-box > br { display: none; }
@@ -1753,6 +1755,33 @@
             /* 짧은 화면에서 팟 금액이 커질 때 상단 좌석 칩과 겹치지 않게 살짝 아래로+슬림 */
             .pot-area { margin-top: 8px !important; padding-top: 3px !important; padding-bottom: 3px !important; }
         }
+        /* ═══ 3차 보완: 모달 인라인 색 잔재 정밀 제압 (attribute 셀렉터) ═══ */
+        /* 1. 네이비 닫기 버튼 → 잉크 레터프레스 */
+        .btn-join[style*="232c44"], .btn-join[style*="3a455f"] {
+            background: var(--ink) !important; color: var(--paper-hi) !important;
+            box-shadow: 4px 4px 0 rgba(200,80,31,0.9) !important;
+        }
+        /* 2. 초록 버튼(학습/시즌보드) → 로열블루 */
+        .btn-join[style*="7bedaa"], .btn-join[style*="2c5f4a"], .btn-join[style*="2c5a3f"] {
+            background: var(--royal) !important; color: #fdf8ec !important;
+            box-shadow: 4px 4px 0 rgba(34,29,21,0.85) !important;
+        }
+        .btn-join[style*="7bedaa"] *, .btn-join[style*="2c5f4a"] * { color: #fdf8ec !important; }
+        /* 3. 초록 텍스트(뱅크롤·시즌포인트·태그·전당 우승수) → 로열블루 (버튼 제외) */
+        [style*="color:#7bedaa"]:not(.btn-join):not([style*="linear-gradient"]),
+        [style*="color: #7bedaa"]:not(.btn-join):not([style*="linear-gradient"]) {
+            color: var(--royal) !important; -webkit-text-fill-color: var(--royal) !important;
+        }
+        /* 4. 초록 그라디언트 제목(전당/시즌 h2 등) → 잉크 */
+        h2[style*="7bedaa"] { background: none !important; color: var(--ink) !important; -webkit-text-fill-color: var(--ink) !important; }
+        /* 5. 출석 연속 박스: 갈색 다크 → 페이퍼 */
+        .checkin-card { background: var(--paper-lo) !important; border: 2px solid var(--ink) !important; }
+        .checkin-streak { color: var(--txt-dim) !important; }
+        .checkin-streak b { color: var(--verm) !important; }
+        /* 6. 프로필 이름(흰색 → 잉크, 크림 위 가독성) */
+        .pf-name { color: var(--ink) !important; }
+        /* 7. 플레잉카드 하트/다이아 → 버밀리언 통일 */
+        .card-red { color: var(--verm) !important; }
         /* ── 스크롤바 ── */
         ::-webkit-scrollbar-thumb { background: rgba(34,29,21,0.35); }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -3199,7 +3228,7 @@
                         <span style="font-size:19px;">${medal}</span>
                         <span class="sd-avatar" style="--av:${avatarHue(u.nickname)}">${avatarInitial(u.nickname)}</span>
                         <div style="flex:1; min-width:0;">
-                            <div style="font-weight:900; color:white;">${esc(u.nickname)} <span style="color:#7bedaa; font-size:13px;">우승 ${u.wins || 0}회</span></div>
+                            <div style="font-weight:900; color:var(--ink);">${esc(u.nickname)} <span style="color:var(--royal); font-size:13px;">우승 ${u.wins || 0}회</span></div>
                             <div style="font-size:11.5px; color:var(--txt-dim); font-family:var(--font-num);">핸드 ${hp} · 승률 ${winRate}% · VPIP ${vpip}% · 최대팟 ${(u.biggestPot || 0).toLocaleString()}</div>
                         </div>
                     </div>`;
@@ -3271,7 +3300,7 @@
                 return `<div class="season-row">
                     <span class="season-rank ${i < 3 ? 'top' : ''}">${medal}</span>
                     <span class="sd-avatar" style="--av:${avatarHue(u.nickname)}">${avatarInitial(u.nickname)}</span>
-                    <span style="font-weight:900; color:white;">${esc(u.nickname)}</span>
+                    <span style="font-weight:900; color:var(--ink);">${esc(u.nickname)}</span>
                     <span class="season-pts">${(u.seasonPoints || 0).toLocaleString()}<small> pt</small></span>
                 </div>`;
             }).join('');
