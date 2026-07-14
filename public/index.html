@@ -1644,6 +1644,71 @@
         /* ── 카드 뒷면: 구식 장식 제거 (로열블루 하프톤만) ── */
         .card-back-side::before { background: none !important; border: none !important; }
         .card-back-side::after { color: rgba(240,231,210,0.9) !important; text-shadow: none !important; }
+        /* ═══ 2차 스캔 보완: 잔여 다크 컴포넌트 일괄 페이퍼화 ═══ */
+        /* 로비 방 목록 */
+        .room-list-box { background: var(--paper-hi) !important; border: 2px solid var(--ink) !important; box-shadow: 4px 4px 0 rgba(34,29,21,0.3) !important; }
+        .room-item { background: var(--paper) !important; border: 1.5px solid rgba(34,29,21,0.45) !important; color: var(--ink) !important; box-shadow: 2px 2px 0 rgba(34,29,21,0.25) !important; }
+        .room-item div, .room-item span, .room-item b { color: var(--ink) !important; text-shadow: none !important; }
+        .room-badge { background: var(--royal) !important; color: #fdf8ec !important; border: 1px solid var(--ink) !important; }
+        .lobby-col { background: transparent !important; border: none !important; }
+        .mode-toggle { background: transparent !important; border: none !important; }
+        /* 채팅 패널 */
+        #chat-panel { background: var(--paper-hi) !important; border: 2px solid var(--ink) !important; box-shadow: -4px 0 0 rgba(34,29,21,0.25) !important; color: var(--ink) !important; }
+        #chat-header { background: var(--paper-lo) !important; border-bottom: 2px solid var(--ink) !important; color: var(--ink) !important; }
+        #chat-log { background: transparent !important; }
+        .chat-msg { background: var(--paper) !important; border: 1px solid rgba(34,29,21,0.3) !important; color: var(--ink) !important; }
+        .chat-msg * { color: var(--ink) !important; }
+        #chat-input-area { background: var(--paper-lo) !important; border-top: 1.5px solid var(--ink) !important; }
+        #chat-input { background: var(--paper-hi) !important; border: 1.5px solid var(--ink) !important; color: var(--ink) !important; border-radius: 4px; }
+        #chat-send { background: var(--ink) !important; color: var(--paper-hi) !important; border: 2px solid var(--ink) !important; }
+        /* 출석·일일 미션 */
+        .checkin-day { background: var(--paper) !important; border: 1.5px solid rgba(34,29,21,0.45) !important; color: var(--ink) !important; }
+        .checkin-day.done, .checkin-day.today { background: var(--mustard) !important; border-color: var(--ink) !important; color: var(--ink) !important; }
+        .mission-item { background: var(--paper) !important; border: 1.5px solid rgba(34,29,21,0.4) !important; color: var(--ink) !important; }
+        .mission-item div, .mission-item span { color: var(--ink) !important; }
+        .btn-claim { background: var(--verm) !important; color: #fdf8ec !important; border: 2px solid var(--ink) !important; box-shadow: 2px 2px 0 rgba(34,29,21,0.6) !important; }
+        .btn-claim:disabled { background: var(--paper-lo) !important; color: var(--txt-dim) !important; box-shadow: none !important; }
+        /* 도움말 */
+        .help-tabs { background: transparent !important; border-bottom: 2px solid var(--ink) !important; }
+        .help-tab { background: var(--paper) !important; border: 1.5px solid var(--ink) !important; color: var(--ink) !important; }
+        .help-tab.active { background: var(--ink) !important; color: var(--paper-hi) !important; }
+        #help-body { color: var(--ink) !important; }
+        #help-body h3, #help-body h4, #help-body b { color: var(--verm) !important; }
+        .hr-row { background: var(--paper) !important; border: 1px solid rgba(34,29,21,0.3) !important; color: var(--ink) !important; }
+        /* 세션 리포트 */
+        .sr-hero { background: var(--paper-lo) !important; border: 2px solid var(--ink) !important; color: var(--ink) !important; }
+        .sr-hero *, .sr-card *, .sr-delta * { text-shadow: none !important; }
+        .sr-card { background: var(--paper) !important; border: 1.5px solid rgba(34,29,21,0.45) !important; color: var(--ink) !important; }
+        .sr-card div, .sr-card span { color: var(--ink) !important; }
+        .sr-delta { background: var(--paper) !important; border: 1.5px solid rgba(34,29,21,0.35) !important; }
+        .sr-coach { background: rgba(47,79,196,0.08) !important; border: 1.5px solid var(--royal) !important; color: var(--ink) !important; }
+        .sr-coach * { color: var(--ink) !important; }
+        .sr-issue { background: var(--paper) !important; border-left: 3px solid var(--verm) !important; color: var(--ink) !important; }
+        .sr-range-tabs { background: transparent !important; }
+        .sr-range-btn { background: var(--paper) !important; border: 1.5px solid var(--ink) !important; color: var(--ink) !important; }
+        .sr-range-btn.active { background: var(--verm) !important; color: #fdf8ec !important; }
+        /* 프로필 모달 */
+        .pf-stat, .pf-adv-stat, .pf-gto, .pf-style { background: var(--paper) !important; border: 1.5px solid rgba(34,29,21,0.4) !important; color: var(--ink) !important; }
+        .pf-stat *, .pf-adv-stat *, .pf-gto *, .pf-style * { color: var(--ink) !important; text-shadow: none !important; }
+        .pf-gto-ring { background: var(--paper-lo) !important; }
+        .pf-adv-legend { background: transparent !important; color: var(--txt-dim) !important; }
+        /* 학습모드 인원 선택 + 레인지 패널 버튼 */
+        .learn-bot-opt { background: var(--paper) !important; border: 2px solid var(--ink) !important; color: var(--ink) !important; box-shadow: 2px 2px 0 rgba(34,29,21,0.35) !important; }
+        .learn-bot-opt * { color: var(--ink) !important; }
+        .learn-bot-opt.active { background: var(--royal) !important; }
+        .learn-bot-opt.active * { color: #fdf8ec !important; }
+        .lrp-pos-btn { background: var(--paper) !important; border: 1.5px solid var(--ink) !important; color: var(--ink) !important; }
+        .lrp-pos-btn.active { background: var(--verm) !important; color: #fdf8ec !important; }
+        /* GTO 지표 타일 + 타임바 트랙 */
+        .gto-metric { background: var(--paper) !important; border: 1.5px solid rgba(34,29,21,0.4) !important; color: var(--ink) !important; }
+        .time-bar-wrapper { background: rgba(34,29,21,0.18) !important; border: 1px solid rgba(34,29,21,0.4) !important; }
+        /* 쇼다운 팟 라인 */
+        .sd-pot { background: var(--paper-lo) !important; border: 1.5px solid rgba(34,29,21,0.4) !important; color: var(--ink) !important; }
+        /* MTT 상태/목록 */
+        #mtt-list { color: var(--ink) !important; }
+        #mtt-status-bar * { color: var(--ink) !important; }
+        /* 상단 액션행 잔재 */
+        .action-top-row { background: transparent !important; }
         /* ── 스크롤바 ── */
         ::-webkit-scrollbar-thumb { background: rgba(34,29,21,0.35); }
         ::-webkit-scrollbar-track { background: transparent; }
