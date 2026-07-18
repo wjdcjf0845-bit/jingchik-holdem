@@ -24,6 +24,7 @@ const { pickBetFraction, raiseToAmount } = require('./lib/betsizing');
 const { classifyBetPlan, barrelFrequency } = require('./lib/botplan'); // 🧠 봇 스트리트 플랜 (배럴/의도 유지)
 const RIT = require('./lib/runittwice'); // 🎲 런잇트와이스 (올인 시 보드 2번) — 캐시 전용
 const HandRead = require('./lib/handread'); // 🔍 상대 레인지 추정 (핸드 리딩)
+const Defense = require('./lib/defense'); // 🛡️ 벳 직면 시 콜 문턱 (임플라이드 오즈 + 상대 익스플로잇)
 
 const app = express();
 const server = http.createServer(app);
@@ -1037,6 +1038,17 @@ class GameRoom {
         // ─── 콜 비용이 있는 상황 ───
         const margin = equity - potOdds;
 
+        // 🛡️ [방어] 콜에 필요한 최소 승률 — 임플라이드 오즈(드로우+딥스택) + 상대 성향 익스플로잇.
+        //    유효 스택(콜 후 남는 내/상대 중 작은 쪽)으로 임플라이드 크기를 잡는다.
+        const maxOppChips = Math.max(0, ...this.playerOrder
+            .filter(n => n !== nick && !this.players[n].isFolded)
+            .map(n => this.players[n].chips + (this.players[n].currentBet || 0)));
+        const effBehind = Math.max(0, Math.min(p.chips - toCall, maxOppChips));
+        const sprBehind = totalPot + toCall > 0 ? effBehind / (totalPot + toCall) : 0;
+        const isDraw = Defense.looksLikeDraw(board, equity, street);
+        const oppAggr = oppRead && oppRead.aggression != null ? oppRead.aggression : null;
+        const callThresh = Defense.requiredEquity({ potOdds, isDraw, sprBehind, oppAggression: oppAggr, skill });
+
         // 🎯 [GTO 올인 콜] 콜 비용이 내 스택의 큰 비중(올인성)이면 팟오즈 기준 엄격 판단
         //    토너먼트 생존이 걸린 콜이므로, equity가 팟오즈를 충분히 상회할 때만 콜
         const callCostRatio = p.chips > 0 ? toCall / p.chips : 1;
@@ -1044,8 +1056,9 @@ class GameRoom {
         if (isBigCall) {
             // 실제 콜 시점의 정확한 팟오즈 (이미 위에서 potOdds 계산됨)
             // GTO 기본: equity > potOdds 면 +EV 콜. 단 토너먼트 생존 가치(ICM) 반영해 약간의 여유(+0.03) 요구
-            const requiredEdge = (toCall >= p.chips) ? 0.04 : 0.02; // 풀 올인은 더 엄격
-            if (equity >= potOdds + requiredEdge) {
+            const requiredEdge = (toCall >= p.chips) ? 0.04 : 0.02; // 풀 올인은 더 엄격(생존 가치)
+            // 🛡️ 방어 문턱(상대 성향 반영) + ICM 여유. 올인이라 유효스택≈0 → 임플라이드는 자동 0.
+            if (equity >= callThresh + requiredEdge) {
                 // 매우 강하면 레이즈(재올인), 아니면 콜
                 if (equity > 0.72 && p.chips > toCall) {
                     const target = Math.min(p.currentBet + p.chips, this.currentHighestBet + sizeBet(1.1));
@@ -1095,9 +1108,11 @@ class GameRoom {
                 const target = Math.min(p.currentBet + p.chips, this.currentHighestBet + sizeBet(1.0));
                 if (target >= this.currentHighestBet + this.lastFullRaiseAmount) return { type: 'raise', amount: target };
             }
-            // 콜링스테이션 성격 or 상대가 어그레시브해서 블러프 의심되면 콜다운
-            const suspectBluff = oppRead && oppRead.aggression !== null && oppRead.aggression > 0.5;
-            if ((persona.callSticky || suspectBluff) && margin > -0.14 && r < 0.55) return { type: 'call' };
+            // 🛡️ [방어] 팟오즈엔 못 미쳐도 방어 문턱(임플라이드 오즈/블러프 캐치)을 넘으면 콜.
+            //    딥스택 드로우 추격, 공격적 상대의 벳 콜다운이 여기서 살아난다.
+            if (callable && equity >= callThresh) return { type: 'call' };
+            // 콜링스테이션 성격이면 여전히 끈적하게 콜(성격 반영)
+            if (persona.callSticky && margin > -0.14 && r < 0.5) return { type: 'call' };
             return { type: 'fold' };
         }
 
@@ -1109,6 +1124,9 @@ class GameRoom {
                     return { type: 'raise', amount: target };
                 }
             }
+            // 🛡️ [익스플로잇] 좀처럼 안 치는 정직한 상대가 큰 벳을 하면 방어 문턱이 올라간다 —
+            //    승률이 그에 못 미치면 마진이 양수여도 폴드. 고수 봇일수록 이 절제를 잘 한다.
+            if (callable && equity < callThresh - 0.02 && r < 0.7 * skill) return { type: 'fold' };
             return { type: 'call' };
         }
 
