@@ -792,11 +792,17 @@ class GameRoom {
 
     startTurnTimer() {
         if (this.turnTimeout) clearTimeout(this.turnTimeout);
-        const msLimit = this.turnTimeLimit * 1000;
+        const _turnNick = this.playerOrder[this.turnIndex];
+        const _tp = this.players[_turnNick];
+        // 🔌 [끊김 무결성] 턴 대상이 끊긴 사람이면 풀 타이머 대신 1초 후 자동 체크/폴드.
+        //    끊긴 좌석은 매 핸드 좌석을 유지하는데(칩 보유 중), 예전엔 그의 턴마다
+        //    전체가 턴 타임리밋(기본 20초)을 통째로 기다렸다. 재접속하면 다시 정상 타이머.
+        //    (0ms가 아닌 1초: 끊긴 사람이 연달아 있어도 스택 재귀 없이 순차 처리 + 흐름 자연스러움)
+        const msLimit = (_tp && !_tp.isBot && _tp.isDisconnected) ? 1000 : this.turnTimeLimit * 1000;
         this.turnEndTime = Date.now() + msLimit;
         io.to(this.roomId).emit('updateTurnTimer', this.turnEndTime);
 
-        const expectedNick = this.playerOrder[this.turnIndex];
+        const expectedNick = _turnNick;
 
         // ⏳ 시간 만료 시 자동 처리 (체크 가능하면 체크, 아니면 폴드)
         const autoAct = () => {
