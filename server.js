@@ -26,6 +26,7 @@ const RIT = require('./lib/runittwice'); // 🎲 런잇트와이스 (올인 시 
 const HandRead = require('./lib/handread'); // 🔍 상대 레인지 추정 (핸드 리딩)
 const Defense = require('./lib/defense'); // 🛡️ 벳 직면 시 콜 문턱 (임플라이드 오즈 + 상대 익스플로잇)
 const Blockers = require('./lib/blockers'); // 🃏 블로커 기반 블러프 선택 (넛 차단 시 블러프 ↑)
+const Showdown = require('./lib/showdown'); // 💰 쇼다운 팟 분배 파이프라인 (돈 로직 — 시나리오 테스트로 방어)
 
 const app = express();
 const server = http.createServer(app);
@@ -2069,26 +2070,30 @@ class GameRoom {
         const active = this.playerOrder.filter(n => !this.players[n].isFolded);
         if (active.length === 1) { this.handleWin(active[0]); return; }
 
-        const sidePots = this.calculateSidePots();
-        const sidePotsTotal = sidePots.reduce((s, sp) => s + sp.amount, 0);
-        const diff = this.pot - sidePotsTotal;
-        if (diff > 0 && sidePots.length > 0) {
-            sidePots[sidePots.length - 1].amount += diff;
-        }
+        // 💰 [돈 로직] 사이드팟 보정 → 롤다운 → (RIT) 런별 분배 계산은 lib/showdown.js 순수 모듈로.
+        //    시나리오 테스트(3중 사이드팟·무승부 홀수칩·RIT 조합·무작위 300개 칩 보존)가 회귀를 방어한다.
+        //    여기서는 결과를 받아 칩 반영 + 한국어 라벨/메시지 등 표현만 담당.
+        const boards = this.ritBoards || [this.communityCards];
+        const sd = Showdown.computeShowdown({
+            contributions: this.playerOrder
+                .filter(nick => this.players[nick] && this.players[nick].totalInvested > 0)
+                .map(nick => ({ nick, invested: this.players[nick].totalInvested })),
+            totalPot: this.pot,
+            boards,
+            holeCards: Object.fromEntries(this.playerOrder.map(n => [n, this.players[n].hand])),
+            isFolded: n => this.players[n].isFolded
+        });
 
-        // 폴드한 적격자만 남은 상위 사이드팟 → 하위 팟으로 롤다운 (lib/pots.js)
-        Pots.rollDownFoldedPots(sidePots, n => this.players[n].isFolded);
+        // 칩 반영
+        for (const [nick, won] of Object.entries(sd.awards)) this.players[nick].chips += won;
+        const allWinnerIds = new Set(sd.winnersAll);
 
-        const messages = [];
-        const allWinnerIds = new Set();
-        const potResults = []; // 💡 클라이언트 결과창 렌더링용 구조화 데이터
-
+        // ── 표현 계층: 한국어 라벨/메시지/클라 렌더 구조 ──
         const rankKorMap = {
             'High Card': '하이카드', 'Pair': '원페어', 'Two Pair': '투페어', 'Three of a Kind': '트리플',
             'Straight': '스트레이트', 'Flush': '플러시', 'Full House': '풀하우스', 'Four of a Kind': '포카드',
             'Straight Flush': '스트레이트 플러시', 'Royal Flush': '로얄 플러시'
         };
-
         const formatCard = (c) => {
             if (!c || c === '?') return '?';
             const val = c[0] === 'T' ? '10' : c[0];
@@ -2096,61 +2101,32 @@ class GameRoom {
             return sym + val;
         };
 
-        // 🎲 [런잇트와이스] 보드가 둘이면 각 보드로 따로 평가하고 팟을 반씩 나눈다.
-        //    평범한 핸드면 boards = [현재 보드] 하나 → 기존 동작과 완전히 동일.
-        const boards = this.ritBoards || [this.communityCards];
+        const messages = [];
+        const potResults = []; // 💡 클라이언트 결과창 렌더링용 구조화 데이터
+        for (const res of sd.results) {
+            const baseLabel = sd.sidePotCount > 1 ? (res.potIdx === 0 ? '[메인팟]' : `[사이드팟 ${res.potIdx}]`) : '[최종 팟]';
+            const label = boards.length > 1 ? `[런 ${res.runIdx + 1}] ${baseLabel}` : baseLabel;
 
-        sidePots.forEach((sp, idx) => {
-            if (sp.amount <= 0) return;
-            const eligibleActive = sp.eligible.filter(n => !this.players[n].isFolded);
-            if (eligibleActive.length === 0) return;
-
-            const baseLabel = sidePots.length > 1 ? (idx === 0 ? '[메인팟]' : `[사이드팟 ${idx}]`) : '[최종 팟]';
-            const runAmounts = RIT.splitPotForRuns(sp.amount, boards.length); // 홀수 칩은 앞 런에게
-
-            boards.forEach((board, runIdx) => {
-                const runAmount = runAmounts[runIdx];
-                if (runAmount <= 0) return;
-
-                const hands = eligibleActive.map(nick => {
-                    const solved = Hand.solve(this.players[nick].hand.concat(board));
-                    solved.playerId = nick;
-                    return solved;
-                });
-
-                const winners = Hand.winners(hands);
-                const { perWinner, remainder } = Pots.splitAmount(runAmount, winners.length); // 홀수 칩은 winners[0]에게
-
-                winners.forEach((w, i) => {
-                    this.players[w.playerId].chips += perWinner + (i === 0 ? remainder : 0);
-                    allWinnerIds.add(w.playerId);
-                });
-
-                const label = boards.length > 1 ? `[런 ${runIdx + 1}] ${baseLabel}` : baseLabel;
-
-                const winnerStrs = winners.map(w => {
-                    const pCards = this.players[w.playerId].hand.map(formatCard).join(', ');
-                    const rankStr = rankKorMap[w.name] || w.name;
-                    return `🥇 ${w.playerId} ➔ 🃏[${pCards}] (${rankStr})`;
-                });
-
-                potResults.push({
-                    label, amount: runAmount,
-                    board: board.slice(), // 🎲 이 런의 보드 (클라 결과창에서 런별로 표시)
-                    winners: winners.map((w, i) => ({
-                        nick: w.playerId,
-                        cards: this.players[w.playerId].hand.slice(),
-                        rank: rankKorMap[w.name] || w.name,
-                        won: perWinner + (i === 0 ? remainder : 0),
-                        // 🌟 승리 조합 5장 (커뮤니티+홀카드 중 실제 사용된 카드)
-                        best5: w.cards.map(c => ((c.value === '10' ? 'T' : c.value) + c.suit))
-                    }))
-                });
-
-                const boardStr = boards.length > 1 ? `\n🃏 보드: ${board.map(formatCard).join(' ')}` : '';
-                messages.push(`💰 ${label} ${runAmount.toLocaleString()} 칩${boardStr}\n${winnerStrs.join('\n')}`);
+            const winnerStrs = res.winners.map(w => {
+                const pCards = this.players[w.nick].hand.map(formatCard).join(', ');
+                return `🥇 ${w.nick} ➔ 🃏[${pCards}] (${rankKorMap[w.rankName] || w.rankName})`;
             });
-        });
+
+            potResults.push({
+                label, amount: res.amount,
+                board: res.board, // 🎲 이 런의 보드 (클라 결과창에서 런별로 표시)
+                winners: res.winners.map(w => ({
+                    nick: w.nick,
+                    cards: this.players[w.nick].hand.slice(),
+                    rank: rankKorMap[w.rankName] || w.rankName,
+                    won: w.won,
+                    best5: w.best5 // 🌟 승리 조합 5장
+                }))
+            });
+
+            const boardStr = boards.length > 1 ? `\n🃏 보드: ${res.board.map(formatCard).join(' ')}` : '';
+            messages.push(`💰 ${label} ${res.amount.toLocaleString()} 칩${boardStr}\n${winnerStrs.join('\n')}`);
+        }
 
         this.playerOrder.forEach(nick => {
             if (!allWinnerIds.has(nick)) {
