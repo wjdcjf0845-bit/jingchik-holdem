@@ -115,6 +115,25 @@
   .sub{ text-align:center; color:var(--dim); font-size:22px; margin-bottom:22px; }
   .center{ flex:1; display:flex; flex-direction:column; justify-content:center; }
   .confetti-em{ font-size:60px; text-align:center; }
+
+  /* 그림 맞히기 */
+  .drawrow{ flex:1; display:grid; grid-template-columns:1fr 340px; gap:20px; min-height:0; margin-top:8px; }
+  .canvaswrap{ background:#fff; border-radius:18px; border:1px solid var(--line); overflow:hidden; display:flex; align-items:center; justify-content:center; }
+  #hcanvas{ width:100%; height:100%; object-fit:contain; display:block; }
+  .drawside{ display:flex; flex-direction:column; gap:14px; min-height:0; }
+  .drawer{ font-size:26px; font-weight:800; background:var(--card2); border:1px solid var(--line); border-radius:14px; padding:16px; text-align:center; }
+  .drawer b{ color:var(--accent); }
+  .wordhint{ text-align:center; }
+  .wboxes{ display:inline-flex; gap:8px; }
+  .wbox{ width:34px; height:44px; border-bottom:5px solid var(--accent); display:inline-block; }
+  .wlen{ display:block; margin-top:8px; color:var(--dim); font-size:18px; }
+  .dcount{ text-align:center; color:var(--accent2); font-weight:800; font-size:20px; }
+  .dglist{ flex:1; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+  .grow{ display:flex; align-items:center; gap:10px; background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:20px; }
+  .grow.ok{ border-color:var(--good); background:rgba(34,197,94,.15); }
+  .grow b{ color:var(--good); margin-left:auto; }
+  .answerbig{ font-size:30px; font-weight:900; text-align:center; background:rgba(34,197,94,.15); border:2px solid var(--good); border-radius:14px; padding:16px; }
+  .answerbig b{ color:#4ade80; }
 </style>
 </head>
 <body>
@@ -148,6 +167,15 @@ socket.on('host:created', ({ code }) => {
 socket.on('host:gone', () => { localStorage.removeItem('party_host_code'); CODE=null; socket.emit('host:create'); });
 
 const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ── 그림 맞히기: 실시간 캔버스 ──
+let strokeBuf=[]; let hostDrawRound=null;
+function hctx(){ const c=document.getElementById('hcanvas'); return c?c.getContext('2d'):null; }
+function clearHostCanvas(){ const c=document.getElementById('hcanvas'); if(c){ const x=c.getContext('2d'); x.fillStyle='#ffffff'; x.fillRect(0,0,c.width,c.height); } }
+function drawSeg(x,seg){ const c=document.getElementById('hcanvas'); if(!c) return; x.strokeStyle=seg.c||'#111827'; x.lineWidth=(seg.w||4)*(c.width/1000); x.lineCap='round'; x.lineJoin='round'; x.beginPath(); x.moveTo(seg.x0*c.width,seg.y0*c.height); x.lineTo(seg.x1*c.width,seg.y1*c.height); x.stroke(); }
+function replayHostCanvas(){ clearHostCanvas(); const x=hctx(); if(!x) return; strokeBuf.forEach(s=>drawSeg(x,s)); }
+socket.on('host:stroke', (seg)=>{ strokeBuf.push(seg); const x=hctx(); if(x) drawSeg(x,seg); });
+socket.on('host:strokeClear', ()=>{ strokeBuf=[]; clearHostCanvas(); });
 
 socket.on('host:view', (v) => {
   topcode.innerHTML = v.code ? ('입장코드 <b>'+esc(v.code)+'</b>') : '';
@@ -241,38 +269,35 @@ function renderGame(v){
       '<div class="choices">'+g.choices.map((c,i)=>'<div class="choice '+(i===g.correct?'correct':'dim')+'"><span class="k">'+'ABCD'[i]+'</span>'+esc(c)+'<span class="cnt">'+g.dist[i]+'표</span></div>').join('')+'</div>'+
       '<div class="gains">'+(g.gains.length?g.gains.map(x=>'<div class="g">'+esc(x.nick)+' <b>+'+x.pts+'</b></div>').join(''):'<div class="hint">정답자가 없네요 😅</div>')+'</div></div>';
     nextBtn(g.isLast?'점수 집계 ▶':'다음 문제 ▶');
-  } else if (s==='ww_writing'){
-    main.innerHTML='<div class="stage">'+head(rp(g.round,g.total)+' '+clock(g.secLeft))+
-      '<div class="cat">✍️ 폰에서 답을 작성하세요</div><div class="question">'+esc(g.prompt)+'</div>'+
-      '<div class="answered">'+g.submitted+' / '+g.connected+' 명 제출</div></div>';
-    nextBtn('작성 마감 ▶');
-  } else if (s==='ww_voting'){
-    main.innerHTML='<div class="stage">'+head(rp(g.round,g.total)+' '+clock(g.secLeft))+
-      '<div class="cat">🗳️ 폰에서 최고의 답에 투표!</div><div class="question" style="font-size:34px">'+esc(g.prompt)+'</div>'+
-      '<div class="answers">'+g.answers.map(a=>'<div class="ans"><span class="lt">'+a.letter+'</span>'+esc(a.text)+'</div>').join('')+'</div>'+
-      '<div class="answered">'+g.voted+' / '+g.connected+' 명 투표</div></div>';
-    nextBtn('투표 마감 ▶');
-  } else if (s==='ww_reveal'){
+  } else if (s==='draw_drawing'){
+    const boxes='<span class="wboxes">'+Array.from({length:g.wordLen}).map(()=>'<span class="wbox"></span>').join('')+'</span> <span class="wlen">'+g.wordLen+'글자</span>';
+    const glist=g.guessers.map(x=>'<div class="grow '+(x.guessed?'ok':'')+'"><span class="dot" style="background:'+esc(x.color)+'"></span>'+esc(x.nick)+(x.guessed?' <b>정답!</b>':'')+'</div>').join('')||'<div class="hint">참가자 대기 중…</div>';
+    if(hostDrawRound===g.round && document.getElementById('hcanvas')){
+      // 같은 라운드 재렌더: 캔버스 유지, 정보만 갱신
+      const t=document.getElementById('dtimer'); if(t) t.outerHTML=clock(g.secLeft).replace('class="clock','id="dtimer" class="clock');
+      const gl=document.getElementById('dglist'); if(gl) gl.innerHTML=glist;
+      const cc=document.getElementById('dcount'); if(cc) cc.textContent=g.correctCount+' / '+g.guessers.length+' 명 정답';
+    } else {
+      hostDrawRound=g.round; strokeBuf=[];
+      main.innerHTML='<div class="stage">'+
+        '<div class="stagehead"><div class="g"><span class="em">'+em+'</span>'+esc(v.gameName)+'</div>'+rp(g.round,g.total)+' '+clock(g.secLeft).replace('class="clock','id="dtimer" class="clock')+'</div>'+
+        '<div class="drawrow"><div class="canvaswrap"><canvas id="hcanvas" width="1000" height="600"></canvas></div>'+
+        '<div class="drawside"><div class="drawer">🎨 <b>'+esc(g.drawerNick)+'</b> 님이<br>그리는 중</div>'+
+        '<div class="wordhint">'+boxes+'</div>'+
+        '<div class="dcount" id="dcount">'+g.correctCount+' / '+g.guessers.length+' 명 정답</div>'+
+        '<div class="dglist" id="dglist">'+glist+'</div></div></div></div>';
+      clearHostCanvas();
+    }
+    nextBtn('그림 종료 ▶');
+  } else if (s==='draw_reveal'){
+    const rows=g.results.map(r=>'<div class="rrow"><span class="medal">'+medal(r.order+1)+'</span>'+esc(r.nick)+'<span class="pt">+'+r.pts+'</span></div>').join('')||'<div class="hint">아무도 못 맞혔어요 😅</div>';
     main.innerHTML='<div class="stage">'+head(rp(g.round,g.total))+
-      '<div class="question" style="font-size:32px">'+esc(g.prompt)+'</div>'+
-      '<div class="answers">'+g.answers.map((a,i)=>'<div class="ans"><span class="lt">'+(i===0&&a.votes>0?'👑':a.letter)+'</span>'+esc(a.text)+'<span class="au">'+esc(a.author)+'</span><span class="vt">'+a.votes+'표</span></div>').join('')+'</div></div>';
-    nextBtn(g.isLast?'점수 집계 ▶':'다음 라운드 ▶');
-  } else if (s==='balance_voting'){
-    main.innerHTML='<div class="stage">'+head(rp(g.round,g.total)+' '+clock(g.secLeft))+
-      '<div class="question" style="font-size:38px">'+esc(g.q)+'</div>'+
-      '<div class="bsplit"><div class="bside a"><div>'+esc(g.a)+'</div><div class="num">'+g.ca+'</div></div>'+
-      '<div class="vs">VS</div><div class="bside b"><div>'+esc(g.b)+'</div><div class="num">'+g.cb+'</div></div></div>'+
-      '<div class="answered">'+g.voted+' / '+g.connected+' 명 투표 · 다수파에 점수!</div></div>';
-    nextBtn('공개 ▶');
-  } else if (s==='balance_reveal'){
-    const winA=g.winner==='a', winB=g.winner==='b';
-    main.innerHTML='<div class="stage">'+head(rp(g.round,g.total))+
-      '<div class="question" style="font-size:34px">'+esc(g.q)+'</div>'+
-      '<div class="bsplit"><div class="bside a '+(winA?'win':'')+'"><div>'+esc(g.a)+'</div><div class="num">'+g.ca+'</div><div class="names">'+g.listA.map(esc).join(', ')+'</div></div>'+
-      '<div class="vs">'+(g.winner==='tie'?'무승부':'')+'</div>'+
-      '<div class="bside b '+(winB?'win':'')+'"><div>'+esc(g.b)+'</div><div class="num">'+g.cb+'</div><div class="names">'+g.listB.map(esc).join(', ')+'</div></div></div>'+
-      (g.minority&&g.minority.length?'<div class="answered">🍻 소수파 벌주 후보: <b style="color:#f87171">'+g.minority.map(esc).join(', ')+'</b></div>':'<div class="answered">다수파 +100점</div>')+'</div>';
-    nextBtn(g.isLast?'점수 집계 ▶':'다음 ▶');
+      '<div class="drawrow"><div class="canvaswrap"><canvas id="hcanvas" width="1000" height="600"></canvas></div>'+
+      '<div class="drawside"><div class="answerbig">정답: <b>'+esc(g.word)+'</b></div>'+
+      '<div class="drawer">🎨 '+esc(g.drawerNick)+' <span style="color:#22c55e">+'+g.drawerPts+'</span></div>'+
+      '<div class="rank" style="margin-top:8px">'+rows+'</div></div></div></div>';
+    replayHostCanvas();
+    nextBtn(g.isLast?'점수 집계 ▶':'다음 그림 ▶');
   } else if (s==='reaction_ready'){
     main.innerHTML='<div class="stage">'+head(rp(g.round,g.total))+
       '<div class="reactBig ready">✋ 준비…<div style="font-size:24px;color:#eab308;margin-top:16px">신호가 뜨면 폰을 탭! (미리 누르면 부정출발)</div></div>'+

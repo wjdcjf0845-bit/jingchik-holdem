@@ -60,6 +60,19 @@
   .clockbadge{ align-self:center; font-size:20px; font-weight:900; color:var(--accent); }
   .toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#000a; border:1px solid var(--line); padding:10px 18px; border-radius:999px; font-size:14px; opacity:0; transition:opacity .2s; }
   .toast.show{ opacity:1; }
+
+  /* 그림 맞히기 */
+  .drawtop{ display:flex; align-items:center; justify-content:space-between; font-size:15px; color:var(--dim); font-weight:700; }
+  .drawtop .word{ color:var(--accent); font-size:22px; }
+  #dcanvas{ width:100%; aspect-ratio:5/3; background:#fff; border-radius:14px; border:1px solid var(--line); touch-action:none; display:block; }
+  .palette{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .pdot{ width:38px; height:38px; border-radius:50%; border:3px solid var(--line); padding:0; }
+  .pdot.on{ border-color:var(--accent); transform:scale(1.1); }
+  .clearbtn{ margin-left:auto; background:var(--card2); color:var(--txt); border:1px solid var(--line); border-radius:12px; padding:10px 16px; font-size:16px; font-weight:700; }
+  .gboxes{ display:flex; gap:10px; align-items:center; justify-content:center; flex-wrap:wrap; }
+  .gbox2{ width:30px; height:40px; border-bottom:5px solid var(--accent); display:inline-block; }
+  .wlen2{ color:var(--dim); font-size:16px; }
+  #gbox{ text-align:center; font-size:24px; }
 </style>
 </head>
 <body>
@@ -175,43 +188,16 @@ function renderGame(g){
       (ok?'<div class="result-pts">+'+g.pts+'</div>':'<div class="muted">정답은 '+'ABCD'[g.correctChoice]+' 였어요</div>')+
       '<div class="muted">다음 문제를 기다려주세요</div></div>';
     if(ok) vibe([20,40,20]);
-  } else if(s==='ww_write'){
-    if(g.submitted){
-      wrap.innerHTML='<div class="center"><div class="big-emoji">📝</div><h1>제출 완료!</h1><div class="card" style="width:100%">'+esc(g.myText)+'</div><div class="muted">다른 사람들을 기다려주세요</div></div>';
-      return;
-    }
-    wrap.innerHTML='<div class="muted">라운드 '+g.round+'/'+g.total+'</div>'+
-      '<div class="prompt">'+esc(g.prompt)+'</div>'+
-      '<textarea id="wtext" placeholder="여기에 답을 적어요 (최대 100자)" maxlength="100"></textarea>'+
-      '<button class="btn" id="wsub">제출하기</button>';
-    document.getElementById('wsub').onclick=()=>{ const t=document.getElementById('wtext').value.trim(); if(!t){toast('답을 입력하세요');return;} vibe(30); act({type:'submit',text:t}); };
-  } else if(s==='ww_vote'){
-    if(g.voted){
-      wrap.innerHTML='<div class="center"><div class="big-emoji">🗳️</div><h1>투표 완료!</h1><div class="muted">결과 공개를 기다려주세요</div></div>';
-      return;
-    }
-    wrap.innerHTML='<div class="muted" style="text-align:center">가장 마음에 드는 답에 투표! (내 답 제외)</div>'+
-      '<div id="vlist">'+g.options.map(o=>'<button class="voteopt '+(o.mine?'mine':'')+'" data-pid="'+esc(o.pid)+'" '+(o.mine?'disabled':'')+'><span class="lt">'+o.letter+'</span><span>'+esc(o.text)+(o.mine?' (내 답)':'')+'</span></button>').join('')+'</div>';
-    document.querySelectorAll('#vlist .voteopt').forEach(b=>{ if(b.disabled)return; b.onclick=()=>{ vibe(30); act({type:'vote',target:b.dataset.pid}); }; });
-  } else if(s==='ww_reveal'){
-    wrap.innerHTML='<div class="center"><div class="big-emoji">'+(g.myVotes>0?'🌟':'🙂')+'</div>'+
-      '<h1>'+(g.myVotes>0?g.myVotes+'표 획득!':'이번엔 0표')+'</h1>'+
-      (g.gained>0?'<div class="result-pts">+'+g.gained+'</div>':'')+
-      '<div class="muted">TV에서 결과를 확인하세요</div></div>';
-  } else if(s==='balance_vote'){
-    const sel=g.myVote;
-    wrap.innerHTML='<div class="muted" style="text-align:center">라운드 '+g.round+'/'+g.total+' · 다수파에 점수! 눈치껏 🤫</div>'+
-      '<div class="prompt">'+esc(g.q)+'</div>'+
-      '<button class="bside a '+(sel==='a'?'sel':'')+'" data-c="a">'+esc(g.a)+'</button>'+
-      '<button class="bside b '+(sel==='b'?'sel':'')+'" data-c="b">'+esc(g.b)+'</button>'+
-      '<div class="muted" style="text-align:center">마감 전까지 바꿀 수 있어요</div>';
-    document.querySelectorAll('.bside[data-c]').forEach(b=> b.onclick=()=>{ vibe(30); act({type:'vote',choice:b.dataset.c}); });
-  } else if(s==='balance_result'){
-    const won=g.won;
-    wrap.innerHTML='<div class="center"><div class="big-emoji">'+(won?'🙌':'🍻')+'</div>'+
-      '<h1>'+(won?'다수파! +'+g.pts:'소수파… 벌주?')+'</h1>'+
-      '<div class="muted">내 선택: '+esc(g.my==='a'?g.a:g.my==='b'?g.b:'미투표')+'</div></div>';
-    if(won) vibe(40);
+  } else if(s==='draw_draw'){
+    if(g.isDrawer){ return renderDrawer(g); }
+    return renderGuesser(g);
+  } else if(s==='draw_reveal'){
+    const em = g.iWasDrawer ? '🎨' : g.guessedRight ? '🎉' : '🙂';
+    wrap.innerHTML='<div class="center"><div class="big-emoji">'+em+'</div>'+
+      '<h1>정답: '+esc(g.word)+'</h1>'+
+      (g.iWasDrawer?'<div class="muted">그림 담당! 맞힌 사람 수만큼 득점</div>':(g.guessedRight?'<div class="muted">정답 맞혔어요!</div>':'<div class="muted">아쉽! 다음 기회에</div>'))+
+      (g.myPts>0?'<div class="result-pts">+'+g.myPts+'</div>':'')+'</div>';
+    if(g.myPts>0) vibe(40);
   } else if(s==='reaction_wait'){
     wrap.innerHTML='<div class="muted" style="text-align:center">라운드 '+g.round+'/'+g.total+'</div>'+
       '<div class="taparea '+(g.falseStarted?'bad':'wait')+'" id="tap">'+(g.falseStarted?'🚫 부정출발!<br>이번 라운드 0점':'✋ 아직…<br>신호를 기다려요')+'</div>';
@@ -230,6 +216,75 @@ function renderGame(g){
   } else {
     wrap.innerHTML='<div class="center"><div class="muted">잠시만요…</div></div>';
   }
+}
+
+// ── 그림 맞히기: 드로어(그리는 사람) ──
+const PALETTE=['#111827','#ef4444','#3b82f6','#22c55e','#eab308','#f97316','#ec4899','#ffffff'];
+let drawColor='#111827', penW=6;
+function renderDrawer(g){
+  const key='draw_d:'+g.round;
+  if(curKey===key && document.getElementById('dcanvas')){
+    const t=document.getElementById('drtimer'); if(t) t.textContent='⏱ '+g.secLeft+'초';
+    const c=document.getElementById('drcount'); if(c) c.textContent=g.correctCount+'명 정답';
+    return;
+  }
+  curKey=key;
+  wrap.innerHTML='<div class="drawtop"><div>🎨 제시어 <b class="word">'+esc(g.word)+'</b></div>'+
+      '<div><span id="drtimer">⏱ '+g.secLeft+'초</span> · <span id="drcount">'+g.correctCount+'명 정답</span></div></div>'+
+    '<canvas id="dcanvas"></canvas>'+
+    '<div class="palette">'+PALETTE.map(c=>'<button class="pdot'+(c===drawColor?' on':'')+'" data-c="'+c+'" style="background:'+c+'"></button>').join('')+
+      '<button class="clearbtn" id="dclear">지우개 🧽</button></div>';
+  const canvas=document.getElementById('dcanvas');
+  setupDrawCanvas(canvas);
+  document.querySelectorAll('.pdot').forEach(b=> b.onclick=()=>{ drawColor=b.dataset.c; document.querySelectorAll('.pdot').forEach(x=>x.classList.remove('on')); b.classList.add('on'); });
+  document.getElementById('dclear').onclick=()=>{ const ctx=canvas.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height); socket.emit('player:draw',{type:'clear'}); vibe(20); };
+}
+
+function setupDrawCanvas(canvas){
+  const rect=canvas.getBoundingClientRect();
+  canvas.width=Math.round(rect.width); canvas.height=Math.round(rect.width*0.6);
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  let drawing=false, lx=0, ly=0;
+  const pos=(e)=>{ const r=canvas.getBoundingClientRect(); const cx=(e.touches?e.touches[0].clientX:e.clientX); const cy=(e.touches?e.touches[0].clientY:e.clientY); return { x:Math.min(1,Math.max(0,(cx-r.left)/r.width)), y:Math.min(1,Math.max(0,(cy-r.top)/r.height)) }; };
+  const start=(e)=>{ e.preventDefault(); drawing=true; const p=pos(e); lx=p.x; ly=p.y; };
+  const move=(e)=>{ if(!drawing) return; e.preventDefault(); const p=pos(e);
+    const seg={type:'seg',x0:lx,y0:ly,x1:p.x,y1:p.y,c:drawColor,w:penW};
+    ctx.strokeStyle=drawColor; ctx.lineWidth=penW*(canvas.width/1000); ctx.beginPath(); ctx.moveTo(lx*canvas.width,ly*canvas.height); ctx.lineTo(p.x*canvas.width,p.y*canvas.height); ctx.stroke();
+    socket.emit('player:draw',seg); lx=p.x; ly=p.y; };
+  const end=()=>{ drawing=false; };
+  canvas.addEventListener('pointerdown',start); canvas.addEventListener('pointermove',move);
+  canvas.addEventListener('pointerup',end); canvas.addEventListener('pointerleave',end); canvas.addEventListener('pointercancel',end);
+}
+
+// ── 그림 맞히기: 맞히는 사람 ──
+function renderGuesser(g){
+  const key='draw_g:'+g.round+':'+(g.guessed?1:0);
+  if(curKey===key && document.getElementById('gbox')){
+    const t=document.getElementById('grtimer'); if(t) t.textContent='⏱ '+g.secLeft+'초';
+    return;
+  }
+  curKey=key;
+  if(g.guessed){
+    wrap.innerHTML='<div class="center"><div class="big-emoji">🎉</div><h1>정답! +'+g.myPts+'</h1>'+
+      '<div class="muted">TV 그림을 보며 다른 친구들을 응원해요</div></div>';
+    vibe([20,40,20]);
+    return;
+  }
+  const boxes=Array.from({length:g.wordLen}).map(()=>'<span class="gbox2"></span>').join('');
+  wrap.innerHTML='<div class="drawtop"><div>라운드 '+g.round+'/'+g.total+'</div><div id="grtimer">⏱ '+g.secLeft+'초</div></div>'+
+    '<div class="center" style="gap:18px">'+
+      '<div class="muted">TV 그림을 보고 정답을 맞혀요!</div>'+
+      '<div class="gboxes">'+boxes+' <span class="wlen2">'+g.wordLen+'글자</span></div>'+
+      '<input id="gbox" placeholder="정답 입력" maxlength="20" autocomplete="off">'+
+      '<button class="btn" id="gsub">정답 제출</button>'+
+    '</div>';
+  const inp=document.getElementById('gbox');
+  const submit=()=>{ const t=inp.value.trim(); if(!t) return; act({type:'guess',text:t}); inp.value=''; toast('제출!'); vibe(20); };
+  document.getElementById('gsub').onclick=submit;
+  inp.addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); });
+  inp.focus();
 }
 </script>
 </body>
