@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0b1020">
+<title>🎉 파티 나이트</title>
+<style>
+  :root{ --bg:#0b1020; --card:#161c30; --card2:#1e2740; --line:#2b3554; --txt:#f1f5f9; --dim:#94a3b8;
+         --accent:#f59e0b; --accent2:#38bdf8; --good:#22c55e; --bad:#ef4444; }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; }
+  body{ background:var(--bg); color:var(--txt); font-family:'Pretendard','Apple SD Gothic Neo',system-ui,sans-serif;
+        display:flex; flex-direction:column; min-height:100vh; overflow-x:hidden; }
+  .bar{ display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:5; }
+  .me{ display:flex; align-items:center; gap:8px; font-weight:800; font-size:16px; }
+  .dot{ width:22px; height:22px; border-radius:50%; }
+  .score{ background:var(--card2); border:1px solid var(--line); border-radius:999px; padding:5px 12px; font-weight:800; color:var(--accent); font-size:15px; }
+  .wrap{ flex:1; display:flex; flex-direction:column; padding:18px; gap:14px; }
+  h1{ font-size:26px; font-weight:900; }
+  .muted{ color:var(--dim); font-size:15px; line-height:1.5; }
+  input,textarea{ width:100%; background:var(--card); border:2px solid var(--line); border-radius:14px; color:var(--txt); font-size:20px; padding:16px; font-family:inherit; }
+  input:focus,textarea:focus{ outline:none; border-color:var(--accent); }
+  textarea{ min-height:120px; resize:none; }
+  button{ font-family:inherit; cursor:pointer; border:none; }
+  .btn{ width:100%; background:var(--accent); color:#1a1205; font-size:20px; font-weight:800; padding:18px; border-radius:14px; }
+  .btn:disabled{ opacity:.5; }
+  .btn.ghost{ background:var(--card2); color:var(--txt); border:1px solid var(--line); }
+  .err{ color:var(--bad); font-size:15px; min-height:20px; }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:18px; padding:20px; }
+  .center{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:14px; }
+  .big-emoji{ font-size:72px; }
+
+  .prompt{ font-size:22px; font-weight:800; text-align:center; line-height:1.35; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; flex:1; }
+  .opt{ display:flex; align-items:center; justify-content:center; gap:10px; background:var(--card2); border:3px solid var(--line); border-radius:18px; font-size:30px; font-weight:900; padding:24px 10px; min-height:110px; }
+  .opt.qA{ border-color:#ef4444; } .opt.qB{ border-color:#3b82f6; } .opt.qC{ border-color:#eab308; } .opt.qD{ border-color:#22c55e; }
+  .opt .k{ font-size:34px; }
+  .opt.sel{ box-shadow:0 0 0 4px var(--accent) inset; transform:scale(.97); }
+  .opt:active{ transform:scale(.95); }
+  .opt.dim{ opacity:.35; }
+
+  .voteopt{ width:100%; text-align:left; background:var(--card2); border:2px solid var(--line); border-radius:14px; padding:16px; font-size:18px; color:var(--txt); display:flex; gap:12px; align-items:flex-start; margin-bottom:12px; }
+  .voteopt .lt{ font-weight:900; color:var(--accent); font-size:20px; }
+  .voteopt.sel{ border-color:var(--accent); background:rgba(245,158,11,.15); }
+  .voteopt.mine{ opacity:.5; }
+
+  .bside{ flex:1; border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:32px; font-weight:900; text-align:center; padding:20px; border:3px solid var(--line); }
+  .bside.a{ background:linear-gradient(180deg, rgba(56,189,248,.2), var(--card2)); }
+  .bside.b{ background:linear-gradient(180deg, rgba(245,158,11,.2), var(--card2)); }
+  .bside.sel{ box-shadow:0 0 0 4px var(--accent) inset; }
+
+  .taparea{ flex:1; border-radius:24px; display:flex; align-items:center; justify-content:center; font-size:40px; font-weight:900; text-align:center; user-select:none; }
+  .taparea.wait{ background:#3f2d05; color:var(--accent); }
+  .taparea.go{ background:var(--good); color:#052e12; font-size:56px; animation:flash .25s infinite alternate; }
+  .taparea.bad{ background:#3f0a0a; color:var(--bad); }
+  @keyframes flash{ to{ filter:brightness(1.2);} }
+  .pill{ align-self:center; background:var(--card2); border:1px solid var(--line); border-radius:999px; padding:6px 16px; color:var(--dim); font-size:14px; }
+  .result-pts{ font-size:44px; font-weight:900; color:var(--good); }
+  .clockbadge{ align-self:center; font-size:20px; font-weight:900; color:var(--accent); }
+  .toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#000a; border:1px solid var(--line); padding:10px 18px; border-radius:999px; font-size:14px; opacity:0; transition:opacity .2s; }
+  .toast.show{ opacity:1; }
+</style>
+</head>
+<body>
+<div class="bar" id="bar" style="display:none">
+  <div class="me"><span class="dot" id="medot"></span><span id="menick"></span></div>
+  <div class="score" id="mescore">0점</div>
+</div>
+<div class="wrap" id="wrap"></div>
+<div class="toast" id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io('/party');
+const wrap = document.getElementById('wrap');
+const bar = document.getElementById('bar');
+const q = new URLSearchParams(location.search);
+let CODE = (q.get('c')||'').toUpperCase();
+let PID = null; let NICK=null;
+try { const saved = JSON.parse(localStorage.getItem('party_me')||'{}'); if(saved.pid&&saved.code){ PID=saved.pid; CODE=saved.code; NICK=saved.nick; } } catch(e){}
+
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function vibe(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms);}catch(e){} }
+let toastT; function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),1500); }
+
+socket.on('connect', ()=>{ if(PID&&CODE) doJoin(NICK,true); else renderJoin(''); });
+socket.on('player:kicked', ()=>{ localStorage.removeItem('party_me'); PID=null; renderJoin('진행자가 내보냈어요.'); });
+
+function doJoin(nick, silent){
+  socket.emit('player:join', {code:CODE, nick, pid:PID}, (res)=>{
+    if(!res||!res.ok){ PID=null; localStorage.removeItem('party_me'); renderJoin(res&&res.err||'입장 실패'); return; }
+    PID=res.pid; NICK=res.nick; CODE=res.code;
+    localStorage.setItem('party_me', JSON.stringify({pid:PID,code:CODE,nick:NICK}));
+    bar.style.display='flex';
+  });
+}
+function renderJoin(errMsg){
+  bar.style.display='none';
+  wrap.innerHTML =
+    '<div class="center">'+
+      '<div class="big-emoji">🎉</div>'+
+      '<h1>파티 나이트 입장</h1>'+
+      '<div class="muted">닉네임을 정하고 들어오세요</div>'+
+      '<input id="jcode" placeholder="입장코드 4자리" maxlength="5" value="'+esc(CODE)+'" style="text-align:center;letter-spacing:6px;text-transform:uppercase">'+
+      '<input id="jnick" placeholder="닉네임 (한/영/숫자)" maxlength="12">'+
+      '<div class="err" id="jerr">'+esc(errMsg||'')+'</div>'+
+      '<button class="btn" id="jbtn">입장하기</button>'+
+    '</div>';
+  const nickEl=document.getElementById('jnick'); const codeEl=document.getElementById('jcode');
+  document.getElementById('jbtn').onclick=()=>{
+    CODE=(codeEl.value||'').toUpperCase().trim();
+    const n=(nickEl.value||'').trim();
+    if(CODE.length<4){ document.getElementById('jerr').textContent='입장코드를 확인하세요'; return; }
+    if(!n){ document.getElementById('jerr').textContent='닉네임을 입력하세요'; return; }
+    PID=null; doJoin(n,false);
+  };
+  nickEl.focus();
+}
+
+socket.on('player:view', (v)=>{
+  document.getElementById('menick').textContent = NICK||'';
+  render(v);
+});
+
+function updateBar(score, color){
+  bar.style.display='flex';
+  document.getElementById('mescore').textContent = (score!=null?score.toLocaleString():'0')+'점';
+  if(color) document.getElementById('medot').style.background=color;
+}
+
+function render(v){
+  if(v.screen==='lobby'){ updateBar(v.score, v.color); return renderLobby(v); }
+  if(v.screen==='scoreboard'||v.screen==='final'){ updateBar(v.myScore); return renderStanding(v); }
+  if(v.screen==='game'){ return renderGame(v.view); }
+}
+
+function renderLobby(v){
+  wrap.innerHTML='<div class="center"><div class="big-emoji">🙌</div>'+
+    '<h1>'+esc(v.nick)+' 님 입장 완료!</h1>'+
+    '<div class="muted">TV 화면을 보면서 진행자가<br>게임을 시작하길 기다려주세요.</div>'+
+    '<div class="pill">입장코드 '+esc(v.code)+'</div></div>';
+}
+
+function renderStanding(v){
+  const rankTxt = v.myRank ? (v.myRank+'위 / '+v.total+'명') : '-';
+  const medal = v.myRank===1?'🥇':v.myRank===2?'🥈':v.myRank===3?'🥉':'🎯';
+  wrap.innerHTML='<div class="center"><div class="big-emoji">'+medal+'</div>'+
+    '<h1>'+(v.final?'최종 ':'')+'현재 '+rankTxt+'</h1>'+
+    '<div class="result-pts">'+(v.myScore!=null?v.myScore.toLocaleString():'0')+'점</div>'+
+    '<div class="muted">'+(v.final?'수고하셨어요! TV에서 최종 결과를 확인하세요 🎊':'TV 화면에서 전체 순위를 확인하세요')+'</div></div>';
+}
+
+function act(msg){ socket.emit('player:act', msg); }
+
+let curKey=null;
+function renderGame(g){
+  const s=g.screen;
+  // 입력 중 화면 보호: 답 작성 중(미제출)엔 다른 사람 활동으로 재렌더돼도 입력창을 유지
+  if(s==='ww_write' && !g.submitted && document.getElementById('wtext') && curKey==='ww_write:'+g.round){ return; }
+  curKey = s + (s==='ww_write' ? (':'+g.round) : '');
+  if(s==='quiz_answer'){
+    if(g.answered){
+      wrap.innerHTML='<div class="clockbadge">⏱ '+g.secLeft+'초</div><div class="center"><div class="big-emoji">✅</div><h1>제출 완료!</h1><div class="muted">'+'ABCD'[g.myChoice]+' 선택 · 결과를 기다려주세요</div></div>';
+      return;
+    }
+    wrap.innerHTML='<div class="clockbadge">⏱ '+g.secLeft+'초</div>'+
+      '<div class="muted" style="text-align:center">문제 '+g.qNum+'/'+g.total+' · TV의 문제를 보고 선택!</div>'+
+      '<div class="grid2" id="qg">'+['A','B','C','D'].map((k,i)=>'<button class="opt q'+k+'" data-i="'+i+'"><span class="k">'+k+'</span></button>').join('')+'</div>';
+    document.querySelectorAll('#qg .opt').forEach(b=> b.onclick=()=>{ vibe(30); act({type:'answer',choice:+b.dataset.i}); });
+  } else if(s==='quiz_result'){
+    const ok=g.correct;
+    wrap.innerHTML='<div class="center"><div class="big-emoji">'+(ok?'🎉':g.answered?'😢':'😴')+'</div>'+
+      '<h1>'+(ok?'정답!':g.answered?'아쉬워요':'시간 초과')+'</h1>'+
+      (ok?'<div class="result-pts">+'+g.pts+'</div>':'<div class="muted">정답은 '+'ABCD'[g.correctChoice]+' 였어요</div>')+
+      '<div class="muted">다음 문제를 기다려주세요</div></div>';
+    if(ok) vibe([20,40,20]);
+  } else if(s==='ww_write'){
+    if(g.submitted){
+      wrap.innerHTML='<div class="center"><div class="big-emoji">📝</div><h1>제출 완료!</h1><div class="card" style="width:100%">'+esc(g.myText)+'</div><div class="muted">다른 사람들을 기다려주세요</div></div>';
+      return;
+    }
+    wrap.innerHTML='<div class="muted">라운드 '+g.round+'/'+g.total+'</div>'+
+      '<div class="prompt">'+esc(g.prompt)+'</div>'+
+      '<textarea id="wtext" placeholder="여기에 답을 적어요 (최대 100자)" maxlength="100"></textarea>'+
+      '<button class="btn" id="wsub">제출하기</button>';
+    document.getElementById('wsub').onclick=()=>{ const t=document.getElementById('wtext').value.trim(); if(!t){toast('답을 입력하세요');return;} vibe(30); act({type:'submit',text:t}); };
+  } else if(s==='ww_vote'){
+    if(g.voted){
+      wrap.innerHTML='<div class="center"><div class="big-emoji">🗳️</div><h1>투표 완료!</h1><div class="muted">결과 공개를 기다려주세요</div></div>';
+      return;
+    }
+    wrap.innerHTML='<div class="muted" style="text-align:center">가장 마음에 드는 답에 투표! (내 답 제외)</div>'+
+      '<div id="vlist">'+g.options.map(o=>'<button class="voteopt '+(o.mine?'mine':'')+'" data-pid="'+esc(o.pid)+'" '+(o.mine?'disabled':'')+'><span class="lt">'+o.letter+'</span><span>'+esc(o.text)+(o.mine?' (내 답)':'')+'</span></button>').join('')+'</div>';
+    document.querySelectorAll('#vlist .voteopt').forEach(b=>{ if(b.disabled)return; b.onclick=()=>{ vibe(30); act({type:'vote',target:b.dataset.pid}); }; });
+  } else if(s==='ww_reveal'){
+    wrap.innerHTML='<div class="center"><div class="big-emoji">'+(g.myVotes>0?'🌟':'🙂')+'</div>'+
+      '<h1>'+(g.myVotes>0?g.myVotes+'표 획득!':'이번엔 0표')+'</h1>'+
+      (g.gained>0?'<div class="result-pts">+'+g.gained+'</div>':'')+
+      '<div class="muted">TV에서 결과를 확인하세요</div></div>';
+  } else if(s==='balance_vote'){
+    const sel=g.myVote;
+    wrap.innerHTML='<div class="muted" style="text-align:center">라운드 '+g.round+'/'+g.total+' · 다수파에 점수! 눈치껏 🤫</div>'+
+      '<div class="prompt">'+esc(g.q)+'</div>'+
+      '<button class="bside a '+(sel==='a'?'sel':'')+'" data-c="a">'+esc(g.a)+'</button>'+
+      '<button class="bside b '+(sel==='b'?'sel':'')+'" data-c="b">'+esc(g.b)+'</button>'+
+      '<div class="muted" style="text-align:center">마감 전까지 바꿀 수 있어요</div>';
+    document.querySelectorAll('.bside[data-c]').forEach(b=> b.onclick=()=>{ vibe(30); act({type:'vote',choice:b.dataset.c}); });
+  } else if(s==='balance_result'){
+    const won=g.won;
+    wrap.innerHTML='<div class="center"><div class="big-emoji">'+(won?'🙌':'🍻')+'</div>'+
+      '<h1>'+(won?'다수파! +'+g.pts:'소수파… 벌주?')+'</h1>'+
+      '<div class="muted">내 선택: '+esc(g.my==='a'?g.a:g.my==='b'?g.b:'미투표')+'</div></div>';
+    if(won) vibe(40);
+  } else if(s==='reaction_wait'){
+    wrap.innerHTML='<div class="muted" style="text-align:center">라운드 '+g.round+'/'+g.total+'</div>'+
+      '<div class="taparea '+(g.falseStarted?'bad':'wait')+'" id="tap">'+(g.falseStarted?'🚫 부정출발!<br>이번 라운드 0점':'✋ 아직…<br>신호를 기다려요')+'</div>';
+    if(!g.falseStarted){ document.getElementById('tap').onclick=()=>{ vibe(80); act({type:'tap'}); }; }
+  } else if(s==='reaction_tap'){
+    if(g.falseStarted){ wrap.innerHTML='<div class="taparea bad">🚫 부정출발<br>0점</div>'; return; }
+    if(g.tapped){ wrap.innerHTML='<div class="center"><div class="big-emoji">⚡</div><h1>'+g.ms+'ms</h1><div class="muted">순위 집계 중…</div></div>'; return; }
+    wrap.innerHTML='<div class="taparea go" id="tap">지금<br>탭!!</div>';
+    document.getElementById('tap').onclick=()=>{ vibe(80); act({type:'tap'}); };
+  } else if(s==='reaction_result'){
+    const medal=g.rank===1?'🥇':g.rank===2?'🥈':g.rank===3?'🥉':g.falseStarted?'🚫':'⚡';
+    wrap.innerHTML='<div class="center"><div class="big-emoji">'+medal+'</div>'+
+      '<h1>'+(g.falseStarted?'부정출발':g.rank?g.rank+'등':'미반응')+'</h1>'+
+      (g.ms!=null?'<div class="muted">'+g.ms+'ms</div>':'')+
+      (g.pts>0?'<div class="result-pts">+'+g.pts+'</div>':'')+'</div>';
+  } else {
+    wrap.innerHTML='<div class="center"><div class="muted">잠시만요…</div></div>';
+  }
+}
+</script>
+</body>
+</html>

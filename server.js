@@ -3977,6 +3977,13 @@ io.on('connection', (socket) => {
     });
 });
 
+// 🎉 파티 나이트 — 포커(기본 네임스페이스)와 분리된 /party 모듈 마운트
+try {
+    require('./lib/party/engine')(io, app);
+} catch (e) {
+    console.error('🎉 [파티 나이트] 마운트 실패(포커에는 영향 없음):', e && e.message);
+}
+
 const PORT = process.env.PORT || 3000;
 // 🌐 원격 DB(Turso)가 설정된 경우 부팅 시 원격 데이터를 먼저 로드한 뒤 리슨
 //    (재배포 직후 빈 로컬 상태로 로그인 받다가 원격 데이터로 뒤늦게 덮어쓰는 레이스 방지)
