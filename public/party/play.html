@@ -114,6 +114,13 @@
   /* ── 포스터 장식 ── */
   .poster-orn{ font-family:var(--serif); font-size:20px; color:var(--rust); letter-spacing:.6em; }
   .poster-rule{ width:120px; height:0; border-top:4px double var(--ink); }
+  /* QR로 들어왔을 때 확정된 입장코드 배지 */
+  .codelock{ font-family:var(--serif); font-size:17px; color:var(--ink2); letter-spacing:.1em;
+    background:var(--cream); border:2px solid var(--ink); box-shadow:4px 4px 0 rgba(31,23,14,.16);
+    padding:12px 22px; }
+  .codelock b{ font-size:26px; color:var(--rust); letter-spacing:.28em; margin-left:8px; }
+  .linkbtn{ background:none; border:none; color:var(--ink2); font-size:13px;
+    text-decoration:underline; padding:0; font-family:var(--sans); }
 
   /* ── 대기방 점수 현황 ── */
   .standbox{ width:100%; background:var(--cream); border:2px solid var(--ink);
@@ -140,9 +147,18 @@ const socket = io('/party');
 const wrap = document.getElementById('wrap');
 const bar = document.getElementById('bar');
 const q = new URLSearchParams(location.search);
-let CODE = (q.get('c')||'').toUpperCase();
+const URL_CODE = (q.get('c')||'').toUpperCase().trim();   // QR로 들어온 방 코드
+let CODE = URL_CODE;
 let PID = null; let NICK=null;
-try { const saved = JSON.parse(localStorage.getItem('party_me')||'{}'); if(saved.pid&&saved.code){ PID=saved.pid; CODE=saved.code; NICK=saved.nick; } } catch(e){}
+// 저장된 참가 정보는 '같은 방'일 때만 재사용.
+// QR로 다른 방에 들어오면 예전 방 코드가 덮어써서 코드가 달라 보이던 문제 방지.
+try {
+  const saved = JSON.parse(localStorage.getItem('party_me')||'{}');
+  if(saved.pid && saved.code){
+    if(!URL_CODE || saved.code===URL_CODE){ PID=saved.pid; CODE=saved.code; NICK=saved.nick; }
+    else { localStorage.removeItem('party_me'); }   // 다른 방 QR → 이전 정보 폐기
+  }
+} catch(e){}
 
 const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function vibe(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms);}catch(e){} }
@@ -153,36 +169,50 @@ socket.on('player:kicked', ()=>{ localStorage.removeItem('party_me'); PID=null; 
 
 function doJoin(nick, silent){
   socket.emit('player:join', {code:CODE, nick, pid:PID}, (res)=>{
-    if(!res||!res.ok){ PID=null; localStorage.removeItem('party_me'); renderJoin(res&&res.err||'입장 실패'); return; }
+    if(!res||!res.ok){
+      PID=null; localStorage.removeItem('party_me');
+      if(URL_CODE) CODE=URL_CODE;   // 실패해도 QR 코드는 유지 (예전 코드가 남지 않게)
+      renderJoin(res&&res.err||'입장 실패'); return;
+    }
     PID=res.pid; NICK=res.nick; CODE=res.code;
     localStorage.setItem('party_me', JSON.stringify({pid:PID,code:CODE,nick:NICK}));
     bar.style.display='flex';
   });
 }
+let manualCode=false;   // QR로 들어왔어도 '코드 직접 입력'을 누르면 true
 function renderJoin(errMsg){
   bar.style.display='none';
+  // QR로 들어왔으면 코드를 확정 배지로 보여줌 (오타·이전 코드 섞임 방지)
+  const fromQR = !!URL_CODE && !manualCode;
+  const codeField = fromQR
+    ? '<div class="codelock">입장코드 <b>'+esc(CODE)+'</b></div>'+
+      '<button class="linkbtn" id="jmanual">코드 직접 입력</button>'
+    : '<input id="jcode" placeholder="입장코드 4자리" maxlength="5" value="'+esc(CODE)+'" style="text-align:center;letter-spacing:6px;text-transform:uppercase">';
   wrap.innerHTML =
     '<div class="center">'+
       '<div class="poster-orn">✦ ✦ ✦</div>'+
       '<h1>징칠 파티 게임</h1>'+
       '<div class="poster-rule"></div>'+
-      '<div class="muted">입장권을 받으세요 · 닉네임을 정하고 들어오세요</div>'+
-      '<input id="jcode" placeholder="입장코드 4자리" maxlength="5" value="'+esc(CODE)+'" style="text-align:center;letter-spacing:6px;text-transform:uppercase">'+
+      '<div class="muted">'+(fromQR?'방에 입장합니다 · 닉네임만 정해주세요':'입장권을 받으세요 · 닉네임을 정하고 들어오세요')+'</div>'+
+      codeField+
       '<input id="jnick" placeholder="닉네임 (한/영/숫자)" maxlength="12">'+
       '<div class="err" id="jerr">'+esc(errMsg||'')+'</div>'+
       '<button class="btn" id="jbtn">입장하기</button>'+
     '</div>';
   const nickEl=document.getElementById('jnick'); const codeEl=document.getElementById('jcode');
-  document.getElementById('jbtn').onclick=()=>{
-    CODE=(codeEl.value||'').toUpperCase().trim();
+  const mb=document.getElementById('jmanual');
+  if(mb) mb.onclick=()=>{ manualCode=true; renderJoin(''); };
+  const submit=()=>{
+    if(codeEl) CODE=(codeEl.value||'').toUpperCase().trim();
     const n=(nickEl.value||'').trim();
     if(CODE.length<4){ document.getElementById('jerr').textContent='입장코드를 확인하세요'; return; }
     if(!n){ document.getElementById('jerr').textContent='닉네임을 입력하세요'; return; }
     PID=null; doJoin(n,false);
   };
+  nickEl.addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); });
+  document.getElementById('jbtn').onclick=submit;
   nickEl.focus();
 }
-
 socket.on('player:view', (v)=>{
   document.getElementById('menick').textContent = NICK||'';
   render(v);
