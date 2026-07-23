@@ -131,6 +131,38 @@
   .linkbtn{ background:none; border:none; color:var(--ink2); font-size:13px;
     text-decoration:underline; padding:0; font-family:var(--sans); }
 
+  /* ── 게임 규칙 브리핑 ── */
+  .briefhead{ text-align:center; padding-bottom:14px; border-bottom:4px double var(--ink); }
+  .briefhead h1{ margin-top:2px; }
+  .bgoal{ font-family:var(--serif); font-style:italic; font-size:16px; color:var(--ink2); margin-top:6px; line-height:1.5; }
+  .bsec{ background:var(--cream); border:2px solid var(--ink); box-shadow:4px 4px 0 rgba(31,23,14,.16); padding:14px 16px; }
+  .bsec h4{ font-family:var(--serif); font-size:12px; font-weight:800; letter-spacing:.26em;
+    border-bottom:1px solid var(--faded); padding-bottom:8px; margin-bottom:11px; }
+  .blist{ list-style:none; display:flex; flex-direction:column; gap:10px; }
+  .blist li{ display:flex; gap:9px; align-items:flex-start; font-size:15px; line-height:1.5; }
+  .blist li b{ color:var(--rust); }
+  .blist .num{ flex:none; width:22px; height:22px; border-radius:50%; background:var(--rust); color:var(--cream);
+    font-family:var(--serif); font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center; margin-top:1px; }
+  .blist .bul{ flex:none; color:var(--rust); font-weight:900; }
+
+  /* ── 숫자 경매 ── */
+  .lbox{ width:100%; background:var(--cream); border:2px solid var(--ink); box-shadow:5px 5px 0 rgba(31,23,14,.16);
+    padding:12px 16px; display:flex; flex-direction:column; }
+  .lrow{ display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:8px 0; border-bottom:1px dotted var(--faded); font-size:16px; }
+  .lrow:last-child{ border-bottom:none; }
+  .lrow b{ font-family:var(--serif); color:var(--rust); }
+  .itemmini{ text-align:center; font-family:var(--serif); font-size:20px; background:var(--cream);
+    border:2px solid var(--ink); padding:12px; box-shadow:4px 4px 0 rgba(31,23,14,.16); }
+  .itemmini b{ color:var(--rust); }
+  #bidbox{ text-align:center; font-family:var(--serif); font-size:32px; font-weight:900; letter-spacing:.05em; }
+  .quick{ display:flex; gap:8px; flex-wrap:wrap; }
+  .qbtn{ flex:1; min-width:64px; font-family:var(--serif); font-size:17px; font-weight:800;
+    background:var(--cream); color:var(--ink); border:2px solid var(--ink); padding:12px 6px;
+    box-shadow:3px 3px 0 var(--ink); }
+  .qbtn:active{ transform:translate(3px,3px); box-shadow:0 0 0 var(--ink); }
+  .qbtn.clear{ background:var(--paper2); }
+
   /* ── 대기방 점수 현황 ── */
   .standbox{ width:100%; background:var(--cream); border:2px solid var(--ink);
     box-shadow:5px 5px 0 rgba(31,23,14,.16); padding:14px 16px; display:flex; flex-direction:column; gap:9px; }
@@ -257,9 +289,25 @@ function updateBar(score, color){
 }
 
 function render(v){
+  if(v.screen==='briefing'){ return renderBriefing(v); }
   if(v.screen==='lobby'){ updateBar(v.score, v.color); return renderLobby(v); }
   if(v.screen==='scoreboard'||v.screen==='final'){ updateBar(v.myScore); return renderStanding(v); }
   if(v.screen==='game'){ return renderGame(v.view); }
+}
+
+function renderBriefing(v){
+  curKey='briefing:'+(v.game&&v.game.id);
+  const g=v.game||{}; const r=g.rules||{};
+  const sec=(title,arr,numbered)=> !arr||!arr.length ? '' :
+    '<div class="bsec"><h4>'+title+'</h4><'+(numbered?'ol':'ul')+' class="blist">'+
+    arr.map((x,i)=>'<li>'+(numbered?'<span class="num">'+(i+1)+'</span>':'<span class="bul">·</span>')+'<span>'+x+'</span></li>').join('')+
+    '</'+(numbered?'ol':'ul')+'></div>';
+  wrap.innerHTML=
+    '<div class="briefhead"><div class="big-emoji">'+(g.emoji||'')+'</div>'+
+      '<h1>'+esc(g.name||'')+'</h1>'+
+      '<div class="bgoal">'+(r.goal||esc(g.desc||''))+'</div></div>'+
+    sec('진행 방법',r.steps,true)+sec('점수',r.scoring,false)+sec('알아두기',r.tips,false)+
+    '<div class="pill">TV를 보며 진행자가 시작하길 기다려주세요</div>';
 }
 
 function renderLobby(v){
@@ -343,6 +391,65 @@ function renderGame(g){
         ? (g.pts>0?'<div class="result-pts">'+g.rank+'등 +'+g.pts+'</div>'
                   :'<div class="muted">맞혔지만 3등 밖이라 0점 😢</div>')
         : '<div class="muted">다음 곡에서 만회해요!</div>')+'</div>';
+    return;
+  }
+  if(s==='auc_intro'){
+    curKey='auc_intro';
+    const lines=g.lineup.map(it=>'<div class="lrow"><span>'+it.emoji+' '+esc(it.name)+'</span><b>'+(it.value==null?'???':it.value.toLocaleString()+'점')+'</b></div>').join('');
+    wrap.innerHTML='<div class="center"><div class="big-emoji">💰</div>'+
+      '<h1>내 예산 '+g.budget.toLocaleString()+'점</h1>'+
+      '<div class="muted">물건 '+g.total+'개에 예산을 나눠 쓰세요.<br>보충은 없습니다.</div>'+
+      '<div class="lbox">'+lines+'</div>'+
+      '<div class="muted">최고가 <b>단독</b> 1명만 낙찰 · 동점이면 <b>유찰</b>인데 입찰금은 잃어요</div></div>';
+    return;
+  }
+  if(s==='auc_bid'){
+    const key='auc_bid:'+g.round;
+    if(curKey===key && document.getElementById('bidbox')){
+      const t=document.getElementById('btimer'); if(t) t.textContent='⏱ '+g.secLeft+'초';
+      return;
+    }
+    curKey=key;
+    const cur=(g.myBid!=null?g.myBid:'');
+    wrap.innerHTML='<div class="clockbadge" id="btimer">⏱ '+g.secLeft+'초</div>'+
+      '<div class="itemmini">'+g.item.emoji+' <b>'+esc(g.item.name)+'</b> · '+(g.item.value==null?'???':g.item.value.toLocaleString()+'점')+'</div>'+
+      '<div class="muted" style="text-align:center">내 예산 <b>'+g.budget.toLocaleString()+'</b>점 · '+g.round+'/'+g.total+'라운드</div>'+
+      '<input id="bidbox" type="number" inputmode="numeric" min="0" max="'+g.budget+'" placeholder="입찰액" value="'+cur+'">'+
+      '<div class="quick">'+[50,100,200,'올인'].map(q=>'<button class="qbtn" data-q="'+q+'">'+(q==='올인'?'올인':'+'+q)+'</button>').join('')+
+        '<button class="qbtn clear" data-q="0">패스</button></div>'+
+      '<button class="btn" id="bidsub">'+(g.myBid!=null?'입찰 수정':'입찰하기')+'</button>'+
+      (g.myBid!=null?'<div class="muted" style="text-align:center">현재 입찰 <b>'+g.myBid.toLocaleString()+'</b>점 (마감 전까지 수정 가능)</div>':'')+
+      '<div class="muted" style="text-align:center">입찰액은 아무에게도 보이지 않아요 🤫</div>';
+    const box=document.getElementById('bidbox');
+    document.querySelectorAll('.qbtn').forEach(b=>b.onclick=()=>{
+      const q=b.dataset.q; vibe(20);
+      if(q==='올인') box.value=g.budget;
+      else if(q==='0') box.value=0;
+      else box.value=Math.min(g.budget,(parseInt(box.value)||0)+parseInt(q));
+    });
+    const submit=()=>{
+      let a=parseInt(box.value);
+      if(!Number.isFinite(a)){ toast('입찰액을 입력하세요'); return; }
+      a=Math.max(0,Math.min(g.budget,a));
+      act({type:'bid',amount:a}); vibe(30); toast(a===0?'패스!':a.toLocaleString()+'점 입찰!');
+    };
+    document.getElementById('bidsub').onclick=submit;
+    box.addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); });
+    return;
+  }
+  if(s==='auc_result'){
+    curKey='auc_res:'+g.round;
+    const em = g.won?'🎉':g.tied?'💥':g.passed?'😐':'🙂';
+    const head = g.won ? '낙찰! +'+g.value+'점'
+               : g.tied ? '동점 유찰… 입찰금만 잃었어요'
+               : g.passed ? '전원 패스 — 유찰'
+               : (g.winnerNick? esc(g.winnerNick)+' 낙찰' : '유찰');
+    wrap.innerHTML='<div class="center"><div class="big-emoji">'+em+'</div>'+
+      '<h1>'+head+'</h1>'+
+      '<div class="muted">'+g.item.emoji+' '+esc(g.item.name)+' · 가치 '+(g.value!=null?g.value.toLocaleString():'?')+'점</div>'+
+      '<div class="muted">내 입찰 <b>'+g.myBid.toLocaleString()+'</b>점</div>'+
+      '<div class="result-pts">잔액 '+g.budget.toLocaleString()+'</div></div>';
+    if(g.won) vibe([20,40,20]);
     return;
   }
   curKey = s;

@@ -234,6 +234,58 @@
   .rrow.outrank{ opacity:.55; }
   .rrow.outrank .pt{ color:var(--ink2); }
 
+  /* ── 게임 규칙 브리핑 ── */
+  .brief{ flex:1; display:flex; flex-direction:column; min-height:0; }
+  .briefhead{ text-align:center; padding-bottom:16px; margin-bottom:20px; border-bottom:4px double var(--ink); }
+  .bemoji{ font-size:66px; line-height:1; }
+  .btitle{ font-family:var(--serif); font-size:46px; font-weight:900; letter-spacing:.12em; margin-top:4px; }
+  .bgoal{ font-family:var(--serif); font-style:italic; font-size:24px; color:var(--ink2); margin-top:8px; }
+  .briefcols{ flex:1; display:grid; grid-template-columns:1.25fr 1fr 1fr; gap:22px; min-height:0; }
+  .bcol{ background:var(--cream); border:2px solid var(--ink); box-shadow:5px 5px 0 rgba(31,23,14,.18);
+    padding:18px 20px; overflow:auto; }
+  .bcol h4{ font-family:var(--serif); font-size:15px; font-weight:800; letter-spacing:.28em;
+    border-bottom:1px solid var(--faded); padding-bottom:9px; margin-bottom:12px; }
+  .blist{ list-style:none; display:flex; flex-direction:column; gap:12px; }
+  .blist li{ display:flex; gap:11px; align-items:flex-start; font-size:20px; line-height:1.45; }
+  .blist li b{ color:var(--rust); }
+  .blist .num{ flex:none; width:28px; height:28px; border-radius:50%; background:var(--rust); color:var(--cream);
+    font-family:var(--serif); font-size:16px; font-weight:800; display:flex; align-items:center; justify-content:center; margin-top:2px; }
+  .blist .bul{ flex:none; color:var(--rust); font-weight:900; font-size:22px; line-height:1.2; }
+  .blist li.sc b{ color:var(--teal); }
+
+  /* ── 숫자 경매 ── */
+  .aucrow{ flex:1; display:grid; grid-template-columns:1fr 420px; gap:20px; min-height:0; }
+  .aucmain{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
+  .itemcard{ background:var(--cream); border:2px solid var(--ink); box-shadow:6px 6px 0 rgba(31,23,14,.2);
+    padding:22px 40px; text-align:center; }
+  .itemcard.big{ margin:0 auto 12px; }
+  .itemcard .iemoji{ font-size:64px; line-height:1; }
+  .itemcard .iname{ font-family:var(--serif); font-size:28px; font-weight:800; margin-top:6px; letter-spacing:.06em; }
+  .itemcard .ivalue{ font-family:var(--serif); font-size:34px; font-weight:900; color:var(--rust); margin-top:4px; }
+  .lineup{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
+  .lineitem{ display:flex; align-items:center; gap:8px; background:var(--cream); border:1.5px solid var(--ink);
+    padding:8px 14px; font-size:18px; }
+  .lineitem .le{ font-size:22px; }
+  .lineitem .lv{ font-family:var(--serif); color:var(--rust); }
+  .lineitem.done{ opacity:.42; }
+  .lineitem.cur{ background:var(--mustard); box-shadow:3px 3px 0 var(--ink); }
+  .bbar{ display:flex; align-items:center; gap:9px; padding:8px 0; border-bottom:1px dotted var(--faded); font-size:18px; }
+  .bbar:last-child{ border-bottom:none; }
+  .bbar .bn{ font-family:var(--serif); font-weight:800; width:92px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .btrack{ flex:1; height:14px; background:var(--paper2); border:1.5px solid var(--ink); }
+  .bfill{ display:block; height:100%; background:var(--teal); }
+  .bbar .bv{ font-family:var(--serif); min-width:64px; text-align:right; color:var(--ink2); }
+  .bbar .bdone{ color:var(--teal); font-weight:900; }
+  .bidrow{ display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px dotted var(--faded);
+    font-size:21px; }
+  .bidrow:last-child{ border-bottom:none; }
+  .bidrow .bidamt{ margin-left:auto; font-family:var(--serif); font-weight:900; font-size:24px; }
+  .bidrow.win{ background:rgba(44,98,85,.18); font-weight:800; }
+  .bidrow.win .bidamt{ color:var(--teal); }
+  .bidrow.tied{ background:rgba(109,34,51,.15); }
+  .bidrow.tied .bidamt{ color:var(--wine); }
+  .answerbig.tie{ background:var(--wine); }
+
   .notebig{ font-family:var(--serif); font-size:110px; color:var(--rust); text-align:center; line-height:1; }
   .notebig.playing{ animation:notepulse .7s infinite alternate; }
   @keyframes notepulse{ from{ transform:scale(1); opacity:.85; } to{ transform:scale(1.09); opacity:1; } }
@@ -335,6 +387,7 @@ function render(v){
   ctrl.innerHTML = '';
   // 노래 맞히기 '재생 중' 화면을 벗어나면 음악 정지
   if(!(v.screen==='game' && v.gameId==='music' && v.view && v.view.screen==='music_play')) stopSong();
+  if (v.screen==='briefing') return renderBriefing(v);
   if (v.screen==='lobby') return renderLobby(v);
   if (v.screen==='scoreboard') return renderBoard(v, false);
   if (v.screen==='final') return renderBoard(v, true);
@@ -372,6 +425,30 @@ function renderLobby(v){
   ctrl.innerHTML = '<span class="hint">게임 카드를 누르면 시작됩니다 · 진행 중에도 새 참가자 입장 가능</span>'+
     (v.gameIndex>0 ? ' <button class="big blue" id="tofinal">최종 결과 🏆</button>' : '');
   const tf=document.getElementById('tofinal'); if(tf) tf.onclick=()=>socket.emit('host:final');
+}
+
+// 게임 시작 전 규칙 설명 화면
+function renderBriefing(v){
+  const g=v.game||{}; const r=g.rules||{};
+  const list=(arr,cls,numbered)=> (arr||[]).map((x,i)=>
+    '<li class="'+cls+'">'+(numbered?'<span class="num">'+(i+1)+'</span>':'<span class="bul">·</span>')+'<span>'+x+'</span></li>').join('');
+  main.innerHTML=
+    '<div class="brief">'+
+      '<div class="briefhead">'+
+        '<div class="bemoji">'+(g.emoji||'')+'</div>'+
+        '<div class="btitle">'+esc(g.name||'')+'</div>'+
+        '<div class="bgoal">'+(r.goal||esc(g.desc||''))+'</div>'+
+      '</div>'+
+      '<div class="briefcols">'+
+        '<div class="bcol"><h4>진행 방법</h4><ol class="blist">'+list(r.steps,'st',true)+'</ol></div>'+
+        '<div class="bcol"><h4>점수</h4><ul class="blist">'+list(r.scoring,'sc')+'</ul></div>'+
+        '<div class="bcol"><h4>알아두기</h4><ul class="blist">'+list(r.tips,'tp')+'</ul></div>'+
+      '</div>'+
+    '</div>';
+  ctrl.innerHTML='<span class="hint">다 읽으셨으면 시작하세요</span> <button class="big" id="startg">'+(g.emoji||'')+' 게임 시작 ▶</button>'+
+    ' <button class="big ghost" id="backlobby">← 다른 게임</button>';
+  document.getElementById('startg').onclick=()=>socket.emit('host:advance');
+  document.getElementById('backlobby').onclick=()=>socket.emit('host:toLobby');
 }
 
 function medal(rank){ return rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':('#'+rank); }
@@ -416,6 +493,29 @@ function podium(g){
   return [0,1,2].map(i=>'<span class="pslot'+(i<taken?' filled':'')+'">'+
     (i<taken?'✓':(i+1)+'등')+'<b>'+g.rankPts[i]+'</b></span>').join('')+
     '<span class="pleft">'+Math.max(0,(g.winners||3)-taken)+'자리 남음</span>';
+}
+// ── 숫자 경매 ──
+let hostAucKey=null;
+function itemCardHTML(it, big){
+  const val = it.value==null ? '???' : it.value.toLocaleString()+'점';
+  return '<div class="itemcard'+(big?' big':'')+'"><div class="iemoji">'+it.emoji+'</div>'+
+    '<div class="iname">'+esc(it.name)+'</div><div class="ivalue">'+val+'</div></div>';
+}
+function lineupHTML(list){
+  return list.map(it=>'<div class="lineitem'+(it.done?' done':'')+(it.current?' cur':'')+'">'+
+    '<span class="le">'+it.emoji+'</span><span class="ln">'+esc(it.name)+'</span>'+
+    '<b class="lv">'+(it.value==null?'???':it.value.toLocaleString())+'</b></div>').join('');
+}
+function barsHTML(players, budget, hideAmount){
+  if(!players||!players.length) return '<div class="hint">참가자 없음</div>';
+  return players.slice().sort((a,b)=>b.budget-a.budget).map(p=>{
+    const pct=Math.max(0,Math.min(100, Math.round(p.budget/budget*100)));
+    return '<div class="bbar"><span class="dot" style="background:'+esc(p.color)+'"></span>'+
+      '<span class="bn">'+esc(p.nick)+'</span>'+
+      '<span class="btrack"><span class="bfill" style="width:'+pct+'%"></span></span>'+
+      '<b class="bv">'+p.budget.toLocaleString()+'</b>'+
+      (hideAmount&&p.bidDone?'<span class="bdone">✓</span>':'')+'</div>';
+  }).join('');
 }
 function clock(sec){ return '<div class="clock '+(sec<=5?'low':'')+'">'+Math.max(0,sec)+'</div>'; }
 function nextBtn(label){ ctrl.innerHTML='<button class="big" id="adv">'+(label||'다음 ▶')+'</button>';
@@ -506,6 +606,54 @@ function renderGame(v){
       '<div class="rank" style="margin-top:8px">'+rows+'</div></div></div></div>';
     replayHostCanvas();
     nextBtn(g.isLast?'점수 집계 ▶':'다음 그림 ▶');
+  } else if (s==='auc_intro'){
+    main.innerHTML='<div class="stage">'+head('')+
+      '<div class="cat">✦ 예 산 을 배 분 하 라 ✦</div>'+
+      '<div class="center">'+
+        '<div class="question" style="font-size:36px">각자 예산 <b>'+g.budget.toLocaleString()+'</b>점 · 물건 '+g.total+'개</div>'+
+        '<div class="lineup">'+lineupHTML(g.lineup)+'</div>'+
+        '<div class="answered">최고가 <b>단독</b> 1명이 낙찰 · 낙찰자만 입찰금 지불<br>'+
+        '⚠ 동점이면 <b>유찰</b> — 아무도 못 갖는데 동점자는 입찰금을 잃습니다</div>'+
+      '</div></div>';
+    nextBtn('경매 시작 ▶');
+  } else if (s==='auc_bidding'){
+    const key='auc:'+g.round;
+    if(hostAucKey===key && document.getElementById('aucbars')){
+      const t=document.getElementById('atimer'); if(t) t.outerHTML=clock(g.secLeft).replace('class="clock','id="atimer" class="clock');
+      const c=document.getElementById('adone'); if(c) c.innerHTML='<b>'+g.done+'</b> / '+g.connected+' 명 입찰 완료';
+      const b=document.getElementById('aucbars'); if(b) b.innerHTML=barsHTML(g.players,g.budget,true);
+    } else {
+      hostAucKey=key;
+      main.innerHTML='<div class="stage">'+
+        '<div class="stagehead"><div class="g"><span class="em">'+em+'</span>'+esc(v.gameName)+'</div>'+
+          '<div class="headright">'+rp(g.round,g.total)+clock(g.secLeft).replace('class="clock','id="atimer" class="clock')+'</div></div>'+
+        '<div class="aucrow">'+
+          '<div class="aucmain">'+itemCardHTML(g.item)+
+            '<div class="answered" id="adone"><b>'+g.done+'</b> / '+g.connected+' 명 입찰 완료</div>'+
+            '<div class="hint">입찰액은 공개되지 않습니다</div></div>'+
+          '<div class="feedwrap"><h4 class="feedh">남은 예산</h4><div class="feedlist" id="aucbars">'+barsHTML(g.players,g.budget,true)+'</div></div>'+
+        '</div></div>';
+    }
+    nextBtn('입찰 마감 ▶');
+  } else if (s==='auc_reveal'){
+    hostAucKey=null;
+    const r=g.result||{};
+    let banner;
+    if(r.passed) banner='<div class="answerbig">전원 패스 — <b>유찰</b></div>';
+    else if(r.tiedNicks&&r.tiedNicks.length) banner='<div class="answerbig tie">💥 동점 '+r.tiedBid.toLocaleString()+' — <b>유찰!</b><br><span style="font-size:20px">'+r.tiedNicks.map(esc).join(', ')+' 님은 입찰금을 잃습니다</span></div>';
+    else banner='<div class="answerbig">🎉 <b>'+esc(r.winnerNick)+'</b> 낙찰 · '+r.winningBid.toLocaleString()+'점에 획득 <span style="font-size:22px">(+'+r.value+'점)</span></div>';
+    const rows=(r.rows||[]).map(x=>{
+      const cls = x.pid===r.winnerPid ? 'win' : ((r.tiedNicks||[]).includes(x.nick) ? 'tied' : '');
+      return '<div class="bidrow '+cls+'"><span class="dot" style="background:'+esc(x.color)+'"></span>'+esc(x.nick)+
+        '<span class="bidamt">'+x.bid.toLocaleString()+'</span></div>';
+    }).join('');
+    main.innerHTML='<div class="stage">'+head(rp(g.round,g.total))+
+      itemCardHTML(g.item,true)+banner+
+      '<div class="aucrow" style="margin-top:14px">'+
+        '<div class="feedwrap"><h4 class="feedh">입찰 공개</h4><div class="feedlist">'+rows+'</div></div>'+
+        '<div class="feedwrap"><h4 class="feedh">남은 예산</h4><div class="feedlist">'+barsHTML(g.players,g.budget,false)+'</div></div>'+
+      '</div></div>';
+    nextBtn(g.isLast?'점수 집계 ▶':'다음 물건 ▶');
   } else if (s==='reaction_ready'){
     main.innerHTML='<div class="stage">'+head(rp(g.round,g.total))+
       '<div class="reactBig ready">✋ 준비…<div style="font-size:24px;color:#eab308;margin-top:16px">신호가 뜨면 폰을 탭! (미리 누르면 부정출발)</div></div>'+
