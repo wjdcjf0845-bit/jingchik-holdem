@@ -171,7 +171,7 @@
   .wbox{ width:32px; height:42px; border-bottom:5px solid var(--rust); display:inline-block; }
   .wlen{ display:block; margin-top:8px; color:var(--ink2); font-family:var(--serif); font-size:17px; }
   .dcount{ text-align:center; font-family:var(--serif); color:var(--teal); font-weight:800; font-size:19px; }
-  .dglist{ flex:1; overflow:auto; display:flex; flex-direction:column; gap:7px; }
+  .dglist{ flex:none; max-height:34%; overflow:auto; display:flex; flex-direction:column; gap:7px; }
   .grow{ display:flex; align-items:center; gap:10px; background:var(--cream); border:1.5px solid var(--ink);
     padding:9px 14px; font-size:19px; }
   .grow.ok{ background:var(--teal); color:var(--cream); }
@@ -180,6 +180,49 @@
   .answerbig{ font-family:var(--serif); font-size:29px; font-weight:800; text-align:center;
     background:var(--teal); color:var(--cream); border:2px solid var(--ink); padding:15px; }
   .answerbig b{ color:var(--mustard); }
+
+  /* ── 대기방 점수 현황 ── */
+  .pchip .rk{ font-family:var(--serif); font-size:16px; font-weight:800; color:var(--faded);
+    min-width:24px; text-align:center; }
+  .pchip .sc{ font-family:var(--serif); color:var(--rust); margin-left:6px; font-size:18px; }
+  .pchip.lead{ background:var(--mustard); border-width:2px; box-shadow:3px 3px 0 var(--ink); }
+  .pchip.lead .rk{ font-size:19px; }
+  .pchip.lead .sc{ color:var(--ink); }
+
+  /* ── 노래 맞히기 ── */
+  /* ── 실시간 입력 현황(오답 공개) ── */
+  .musicrow{ flex:1; display:grid; grid-template-columns:1fr 400px; gap:20px; min-height:0; }
+  .musicmain{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; }
+  .feedwrap{ background:var(--cream); border:2px solid var(--ink); box-shadow:5px 5px 0 rgba(31,23,14,.18);
+    padding:12px 16px; display:flex; flex-direction:column; min-height:0; }
+  .feedwrap.tight{ flex:1; box-shadow:none; padding:10px 12px; }
+  .feedh{ font-family:var(--serif); font-size:14px; font-weight:800; letter-spacing:.28em; color:var(--ink);
+    border-bottom:1px solid var(--faded); padding-bottom:8px; margin-bottom:8px; }
+  .feedlist{ flex:1; overflow:auto; display:flex; flex-direction:column; }
+  .feeditem{ display:flex; align-items:center; gap:9px; padding:8px 0;
+    border-bottom:1px dotted var(--faded); font-size:20px; }
+  .feeditem:last-child{ border-bottom:none; }
+  .fdot{ width:14px; height:14px; border-radius:50%; border:1.5px solid var(--ink); flex:none; }
+  .feeditem .fn{ font-family:var(--serif); font-weight:800; flex:none; max-width:120px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .feeditem .ft{ color:var(--wine); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .feeditem .fok{ color:var(--teal); font-weight:800; font-family:var(--serif); }
+  .feedwrap.tight .feeditem{ font-size:17px; padding:6px 0; }
+
+  /* 선착순 자리 현황 */
+  .podium{ display:flex; gap:10px; align-items:center; justify-content:center; flex-wrap:wrap; margin-top:6px; }
+  .pslot{ display:flex; flex-direction:column; align-items:center; gap:2px; min-width:74px;
+    font-family:var(--serif); font-size:17px; padding:8px 12px;
+    border:2px dashed var(--faded); color:var(--faded); background:transparent; }
+  .pslot b{ font-size:21px; }
+  .pslot.filled{ border-style:solid; border-color:var(--ink); background:var(--teal); color:var(--cream); }
+  .pleft{ font-family:var(--serif); font-size:17px; color:var(--ink2); margin-left:6px; }
+  .rrow.outrank{ opacity:.55; }
+  .rrow.outrank .pt{ color:var(--ink2); }
+
+  .notebig{ font-family:var(--serif); font-size:110px; color:var(--rust); text-align:center; line-height:1; }
+  .notebig.playing{ animation:notepulse .7s infinite alternate; }
+  @keyframes notepulse{ from{ transform:scale(1); opacity:.85; } to{ transform:scale(1.09); opacity:1; } }
 </style>
 </head>
 <body>
@@ -214,8 +257,31 @@ socket.on('host:gone', () => { localStorage.removeItem('party_host_code'); CODE=
 
 const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
+// ── 노래 맞히기: 처음부터 계속 재생 (TV에서만) ──
+let audioEl=null;
+function playSong(a){
+  if(!a||!a.file) return;
+  try{
+    if(!audioEl){ audioEl=new Audio(); audioEl.preload='auto'; }
+    const src='/party/audio/'+encodeURIComponent(a.file);
+    const go=()=>{
+      try{ audioEl.currentTime=a.start||0; }catch(e){}
+      audioEl.play().catch(err=>console.warn('재생 실패:',err&&err.message));
+    };
+    try{ audioEl.pause(); }catch(e){}
+    if(!audioEl.src.endsWith(src)){
+      audioEl.src=src;
+      audioEl.addEventListener('loadedmetadata', go, {once:true});
+      audioEl.addEventListener('error', ()=>console.warn('음원 없음:', a.file), {once:true});
+      audioEl.load();
+    } else if(audioEl.readyState>=1){ go(); }
+    else { audioEl.addEventListener('loadedmetadata', go, {once:true}); }
+  }catch(e){ console.warn('playSong 오류', e); }
+}
+function stopSong(){ try{ if(audioEl) audioEl.pause(); }catch(e){} }
+
 // ── 그림 맞히기: 실시간 캔버스 ──
-let strokeBuf=[]; let hostDrawRound=null;
+let strokeBuf=[]; let hostDrawRound=null; let hostMusicKey=null;
 function hctx(){ const c=document.getElementById('hcanvas'); return c?c.getContext('2d'):null; }
 function clearHostCanvas(){ const c=document.getElementById('hcanvas'); if(c){ const x=c.getContext('2d'); x.fillStyle='#ffffff'; x.fillRect(0,0,c.width,c.height); } }
 function drawSeg(x,seg){ const c=document.getElementById('hcanvas'); if(!c) return; x.strokeStyle=seg.c||'#111827'; x.lineWidth=(seg.w||4)*(c.width/1000); x.lineCap='round'; x.lineJoin='round'; x.beginPath(); x.moveTo(seg.x0*c.width,seg.y0*c.height); x.lineTo(seg.x1*c.width,seg.y1*c.height); x.stroke(); }
@@ -231,6 +297,8 @@ socket.on('host:view', (v) => {
 
 function render(v){
   ctrl.innerHTML = '';
+  // 노래 맞히기 '재생 중' 화면을 벗어나면 음악 정지
+  if(!(v.screen==='game' && v.gameId==='music' && v.view && v.view.screen==='music_play')) stopSong();
   if (v.screen==='lobby') return renderLobby(v);
   if (v.screen==='scoreboard') return renderBoard(v, false);
   if (v.screen==='final') return renderBoard(v, true);
@@ -240,8 +308,13 @@ function render(v){
 function renderLobby(v){
   const qr = joinURL ? '<img alt="QR" style="width:100%;height:100%" src="/party/qr?d='+encodeURIComponent(joinURL)+'">' : '';
   const players = v.players||[];
+  const sc = !!v.showScores;   // 게임을 1개 이상 진행했으면 점수 현황 표시
   const plist = players.length ? players.map(p=>(
-    '<div class="pchip '+(p.connected?'':'off')+'"><span class="dot" style="background:'+esc(p.color)+'"></span>'+esc(p.nick)+'</div>'
+    '<div class="pchip'+(p.connected?'':' off')+(sc&&p.rank===1?' lead':'')+'">'+
+      (sc?'<span class="rk">'+(p.rank===1?'👑':p.rank)+'</span>':'')+
+      '<span class="dot" style="background:'+esc(p.color)+'"></span>'+esc(p.nick)+
+      (sc?'<b class="sc">'+p.score.toLocaleString()+'</b>':'')+
+    '</div>'
   )).join('') : '<div class="hint">폰으로 QR을 찍어 입장하세요…</div>';
   const games = (v.games||[]).map(g=>(
     '<div class="gcard '+(g.done?'done':'')+'" data-id="'+esc(g.id)+'"><div class="em">'+g.emoji+'</div><div class="nm">'+esc(g.name)+'</div><div class="ds">'+esc(g.desc)+'</div></div>'
@@ -255,7 +328,7 @@ function renderLobby(v){
         '<div class="bigcode">'+esc(v.code||'····')+'</div>'+
       '</div>'+
       '<div class="rightcol">'+
-        '<div class="players"><h3>참가자 ('+players.filter(p=>p.connected).length+')</h3><div class="plist">'+plist+'</div></div>'+
+        '<div class="players"><h3>'+(sc?'현재 순위 · 참가자 ':'참가자 ')+'('+players.filter(p=>p.connected).length+')</h3><div class="plist">'+plist+'</div></div>'+
         '<div class="games"><h3>게임을 골라 시작하세요 ▶</h3><div class="gcards">'+games+'</div></div>'+
       '</div>'+
     '</div>';
@@ -292,6 +365,22 @@ function renderBoard(v, final){
   }
 }
 
+// 실시간 입력 현황 — 오답은 내용까지, 정답은 내용을 가리고 표시
+function feedHTML(feed){
+  if(!feed||!feed.length) return '<div class="hint" style="padding:8px 0">아직 입력이 없어요…</div>';
+  return feed.map(f=>'<div class="feeditem'+(f.ok?' ok':'')+'">'+
+    '<span class="fdot" style="background:'+esc(f.color||'#8b7658')+'"></span>'+
+    '<span class="fn">'+esc(f.nick)+'</span>'+
+    (f.ok?'<span class="fok">✓ 정답!</span>':'<span class="ft">'+esc(f.text)+'</span>')+
+  '</div>').join('');
+}
+// 선착순 자리 현황 (1·2·3등이 채워지는 모습)
+function podium(g){
+  const taken=g.correctCount||0;
+  return [0,1,2].map(i=>'<span class="pslot'+(i<taken?' filled':'')+'">'+
+    (i<taken?'✓':(i+1)+'등')+'<b>'+g.rankPts[i]+'</b></span>').join('')+
+    '<span class="pleft">'+Math.max(0,(g.winners||3)-taken)+'자리 남음</span>';
+}
 function clock(sec){ return '<div class="clock '+(sec<=5?'low':'')+'">'+Math.max(0,sec)+'</div>'; }
 function nextBtn(label){ ctrl.innerHTML='<button class="big" id="adv">'+(label||'다음 ▶')+'</button>';
   document.getElementById('adv').onclick=()=>socket.emit('host:advance'); }
@@ -302,19 +391,50 @@ function renderGame(v){
   const rp = (a,b)=>'<span class="roundpill">'+a+' / '+b+'</span>';
   const s = g.screen;
 
-  if (s==='quiz_question'){
-    main.innerHTML='<div class="stage">'+head(rp(g.qNum,g.total)+' '+clock(g.secLeft))+
-      '<div class="cat">'+({music:'✦ 음 악 ✦',movie:'✦ 영 화 ✦',person:'✦ 인 물 ✦',general:'✦ 상 식 ✦'}[g.category]||'✦ 퀴 즈 ✦')+'</div>'+
-      '<div class="question">'+esc(g.question)+'</div>'+
-      '<div class="choices">'+g.choices.map((c,i)=>'<div class="choice"><span class="k">'+'ABCD'[i]+'</span>'+esc(c)+'</div>').join('')+'</div>'+
-      '<div class="answered">'+g.answered+' / '+g.connected+' 명 응답</div></div>';
-    nextBtn('결과 공개 ▶');
-  } else if (s==='quiz_reveal'){
+  if (s==='music_ready'){
     main.innerHTML='<div class="stage">'+head(rp(g.qNum,g.total))+
-      '<div class="question" style="font-size:38px">'+esc(g.question)+'</div>'+
-      '<div class="choices">'+g.choices.map((c,i)=>'<div class="choice '+(i===g.correct?'correct':'dim')+'"><span class="k">'+'ABCD'[i]+'</span>'+esc(c)+'<span class="cnt">'+g.dist[i]+'표</span></div>').join('')+'</div>'+
-      '<div class="gains">'+(g.gains.length?g.gains.map(x=>'<div class="g">'+esc(x.nick)+' <b>+'+x.pts+'</b></div>').join(''):'<div class="hint">정답자가 없네요 😅</div>')+'</div></div>';
-    nextBtn(g.isLast?'점수 집계 ▶':'다음 문제 ▶');
+      '<div class="cat">✦ 노 래 맞 히 기 ✦</div>'+
+      '<div class="center"><div class="notebig">♪</div>'+
+      '<div class="question" style="font-size:38px">준비되면 <b>재생</b>을 누르세요</div>'+
+      '<div class="answered">선착순 <b>3등</b>까지 점수! · 1등 '+g.rankPts[0]+' / 2등 '+g.rankPts[1]+' / 3등 '+g.rankPts[2]+'점</div>'+
+      '<div class="answered">폰에 제목을 입력 · 띄어쓰기는 틀려도 정답 처리</div></div></div>';
+    ctrl.innerHTML='<button class="big" id="playbtn">🔊 재생 ▶</button>';
+    document.getElementById('playbtn').onclick=()=>{ playSong(g.audio); socket.emit('host:advance'); };
+  } else if (s==='music_play'){
+    const key='music:'+g.qNum;
+    if(hostMusicKey===key && document.getElementById('mfeed')){
+      const t=document.getElementById('mtimer2'); if(t) t.outerHTML=clock(g.secLeft).replace('class="clock','id="mtimer2" class="clock');
+      const c=document.getElementById('mcount'); if(c) c.innerHTML=podium(g);
+      const f=document.getElementById('mfeed'); if(f) f.innerHTML=feedHTML(g.feed);
+    } else {
+      hostMusicKey=key;
+      main.innerHTML='<div class="stage">'+
+        '<div class="stagehead"><div class="g"><span class="em">'+em+'</span>'+esc(v.gameName)+'</div>'+rp(g.qNum,g.total)+' '+clock(g.secLeft).replace('class="clock','id="mtimer2" class="clock')+'</div>'+
+        '<div class="cat">✦ 선 착 순 3 등 까 지 ✦</div>'+
+        '<div class="musicrow">'+
+          '<div class="musicmain"><div class="notebig playing">♪ ♫ ♪</div>'+
+          '<div class="question" style="font-size:34px;padding:0 10px">폰에 노래 제목을<br>입력하세요!</div>'+
+          '<div class="podium" id="mcount">'+podium(g)+'</div></div>'+
+          '<div class="feedwrap"><h4 class="feedh">입력 현황</h4><div class="feedlist" id="mfeed">'+feedHTML(g.feed)+'</div></div>'+
+        '</div></div>';
+    }
+    ctrl.innerHTML='<button class="big ghost" id="replay">🔁 처음부터</button> <button class="big ghost" id="stopbtn">⏹ 정지</button> <button class="big" id="adv">정답 공개 ▶</button>';
+    document.getElementById('replay').onclick=()=>playSong(g.audio);
+    document.getElementById('stopbtn').onclick=()=>stopSong();
+    document.getElementById('adv').onclick=()=>socket.emit('host:advance');
+  } else if (s==='music_reveal'){
+    hostMusicKey=null;
+    const rows=g.scorers.map(x=>'<div class="rrow'+(x.pts?'':' outrank')+'"><span class="medal">'+(x.pts?medal(x.rank):'—')+'</span>'+esc(x.nick)+'<span class="ms">'+(x.ms/1000).toFixed(1)+'초</span><span class="pt">'+(x.pts?'+'+x.pts:'0')+'</span></div>').join('')||'<div class="hint">아무도 못 맞혔어요 😅</div>';
+    main.innerHTML='<div class="stage">'+head(rp(g.qNum,g.total))+
+      '<div class="answerbig" style="margin-bottom:12px">정답: <b>'+esc(g.title)+'</b></div>'+
+      '<div class="cat">'+esc(g.artist||'')+'</div>'+
+      '<div class="musicrow">'+
+        '<div class="rank" style="margin:0">'+rows+'</div>'+
+        '<div class="feedwrap"><h4 class="feedh">나온 오답들</h4><div class="feedlist">'+feedHTML(g.feed)+'</div></div>'+
+      '</div></div>';
+    ctrl.innerHTML='<button class="big ghost" id="replay">🔁 다시 듣기</button> <button class="big" id="adv">'+(g.isLast?'점수 집계 ▶':'다음 곡 ▶')+'</button>';
+    document.getElementById('replay').onclick=()=>playClip(g.audio);
+    document.getElementById('adv').onclick=()=>socket.emit('host:advance');
   } else if (s==='draw_drawing'){
     const boxes='<span class="wboxes">'+Array.from({length:g.wordLen}).map(()=>'<span class="wbox"></span>').join('')+'</span> <span class="wlen">'+g.wordLen+'글자</span>';
     const glist=g.guessers.map(x=>'<div class="grow '+(x.guessed?'ok':'')+'"><span class="dot" style="background:'+esc(x.color)+'"></span>'+esc(x.nick)+(x.guessed?' <b>정답!</b>':'')+'</div>').join('')||'<div class="hint">참가자 대기 중…</div>';
@@ -323,6 +443,7 @@ function renderGame(v){
       const t=document.getElementById('dtimer'); if(t) t.outerHTML=clock(g.secLeft).replace('class="clock','id="dtimer" class="clock');
       const gl=document.getElementById('dglist'); if(gl) gl.innerHTML=glist;
       const cc=document.getElementById('dcount'); if(cc) cc.textContent=g.correctCount+' / '+g.guessers.length+' 명 정답';
+      const df=document.getElementById('dfeed'); if(df) df.innerHTML=feedHTML(g.feed);
     } else {
       hostDrawRound=g.round; strokeBuf=[];
       main.innerHTML='<div class="stage">'+
@@ -331,7 +452,9 @@ function renderGame(v){
         '<div class="drawside"><div class="drawer">🎨 <b>'+esc(g.drawerNick)+'</b> 님이<br>그리는 중</div>'+
         '<div class="wordhint">'+boxes+'</div>'+
         '<div class="dcount" id="dcount">'+g.correctCount+' / '+g.guessers.length+' 명 정답</div>'+
-        '<div class="dglist" id="dglist">'+glist+'</div></div></div></div>';
+        '<div class="dglist" id="dglist">'+glist+'</div>'+
+        '<div class="feedwrap tight"><h4 class="feedh">정답 시도</h4><div class="feedlist" id="dfeed">'+feedHTML(g.feed)+'</div></div>'+
+        '</div></div></div>';
       clearHostCanvas();
     }
     nextBtn('그림 종료 ▶');

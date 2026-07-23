@@ -114,6 +114,16 @@
   /* ── 포스터 장식 ── */
   .poster-orn{ font-family:var(--serif); font-size:20px; color:var(--rust); letter-spacing:.6em; }
   .poster-rule{ width:120px; height:0; border-top:4px double var(--ink); }
+
+  /* ── 대기방 점수 현황 ── */
+  .standbox{ width:100%; background:var(--cream); border:2px solid var(--ink);
+    box-shadow:5px 5px 0 rgba(31,23,14,.16); padding:14px 16px; display:flex; flex-direction:column; gap:9px; }
+  .standrow{ display:flex; align-items:center; justify-content:space-between;
+    font-size:16px; padding-bottom:7px; border-bottom:1px dotted var(--faded); }
+  .standrow:last-child{ border-bottom:none; padding-bottom:0; }
+  .standrow span{ color:var(--ink2); letter-spacing:.05em; }
+  .standrow b{ font-family:var(--serif); font-size:19px; color:var(--rust); }
+  .standrow.lead b{ color:var(--teal); }
 </style>
 </head>
 <body>
@@ -191,8 +201,15 @@ function render(v){
 }
 
 function renderLobby(v){
-  wrap.innerHTML='<div class="center"><div class="big-emoji">🙌</div>'+
+  const standing = v.showScores ?
+    '<div class="standbox">'+
+      '<div class="standrow"><span>내 순위</span><b>'+(v.myRank||'-')+'위 / '+(v.total||0)+'명</b></div>'+
+      '<div class="standrow"><span>내 점수</span><b>'+(v.score||0).toLocaleString()+'점</b></div>'+
+      (v.leader?'<div class="standrow lead"><span>👑 1등</span><b>'+esc(v.leader.nick)+' · '+v.leader.score.toLocaleString()+'점</b></div>':'')+
+    '</div>' : '';
+  wrap.innerHTML='<div class="center"><div class="poster-orn">✦ ✦ ✦</div>'+
     '<h1>'+esc(v.nick)+' 님 입장 완료!</h1>'+
+    standing+
     '<div class="muted">TV 화면을 보면서 진행자가<br>게임을 시작하길 기다려주세요.</div>'+
     '<div class="pill">입장코드 '+esc(v.code)+'</div></div>';
 }
@@ -211,26 +228,62 @@ function act(msg){ socket.emit('player:act', msg); }
 let curKey=null;
 function renderGame(g){
   const s=g.screen;
-  // 입력 중 화면 보호: 답 작성 중(미제출)엔 다른 사람 활동으로 재렌더돼도 입력창을 유지
-  if(s==='ww_write' && !g.submitted && document.getElementById('wtext') && curKey==='ww_write:'+g.round){ return; }
-  curKey = s + (s==='ww_write' ? (':'+g.round) : '');
-  if(s==='quiz_answer'){
-    if(g.answered){
-      wrap.innerHTML='<div class="clockbadge">⏱ '+g.secLeft+'초</div><div class="center"><div class="big-emoji">✅</div><h1>제출 완료!</h1><div class="muted">'+'ABCD'[g.myChoice]+' 선택 · 결과를 기다려주세요</div></div>';
+  if(s==='music_wait'){
+    curKey='music_wait:'+g.qNum;
+    wrap.innerHTML='<div class="center"><div class="poster-orn">✦ ✦ ✦</div>'+
+      '<h1>'+g.qNum+'번째 곡</h1>'+
+      '<div class="muted">TV에서 노래가 3초 재생됩니다.<br>귀 기울여 주세요 🎧</div></div>';
+    return;
+  }
+  if(s==='music_answer'){
+    // 정답 맞힌 뒤엔 결과, 아직이면 입력창 유지(다른 사람 정답으로 재렌더돼도 타이핑 보존)
+    const key='music_ans:'+g.qNum+':'+(g.correct?1:0);
+    if(curKey===key && document.getElementById('mbox')){
+      // 입력 중인 글자를 지우지 않도록, 바뀌는 값만 제자리 갱신
+      const t=document.getElementById('mtimer'); if(t) t.textContent='⏱ '+g.secLeft+'초';
+      const sl=document.getElementById('mleft');
+      if(sl) sl.textContent=Math.max(0,(g.winners||3)-(g.taken||0))+'자리 남음';
       return;
     }
-    wrap.innerHTML='<div class="clockbadge">⏱ '+g.secLeft+'초</div>'+
-      '<div class="muted" style="text-align:center">문제 '+g.qNum+'/'+g.total+' · TV의 문제를 보고 선택!</div>'+
-      '<div class="grid2" id="qg">'+['A','B','C','D'].map((k,i)=>'<button class="opt q'+k+'" data-i="'+i+'"><span class="k">'+k+'</span></button>').join('')+'</div>';
-    document.querySelectorAll('#qg .opt').forEach(b=> b.onclick=()=>{ vibe(30); act({type:'answer',choice:+b.dataset.i}); });
-  } else if(s==='quiz_result'){
-    const ok=g.correct;
-    wrap.innerHTML='<div class="center"><div class="big-emoji">'+(ok?'🎉':g.answered?'😢':'😴')+'</div>'+
-      '<h1>'+(ok?'정답!':g.answered?'아쉬워요':'시간 초과')+'</h1>'+
-      (ok?'<div class="result-pts">+'+g.pts+'</div>':'<div class="muted">정답은 '+'ABCD'[g.correctChoice]+' 였어요</div>')+
-      '<div class="muted">다음 문제를 기다려주세요</div></div>';
-    if(ok) vibe([20,40,20]);
-  } else if(s==='draw_draw'){
+    curKey=key;
+    if(g.correct){
+      const m=g.rank===1?'🥇':g.rank===2?'🥈':g.rank===3?'🥉':'✅';
+      wrap.innerHTML='<div class="center"><div class="big-emoji">'+m+'</div>'+
+        '<h1>정답! '+(g.pts>0?g.rank+'등':'아쉽게 4등 밖')+'</h1>'+
+        (g.pts>0?'<div class="result-pts">+'+g.pts+'</div>'
+                :'<div class="muted">3등 안에 못 들어 0점이에요 😢</div>')+
+        '<div class="muted">다른 사람들을 기다려주세요</div></div>';
+      vibe([20,40,20]);
+      return;
+    }
+    const left=Math.max(0,(g.winners||3)-(g.taken||0));
+    wrap.innerHTML='<div class="clockbadge" id="mtimer">⏱ '+g.secLeft+'초</div>'+
+      '<div class="muted" style="text-align:center">'+g.qNum+' / '+g.total+' · 노래 <b>제목</b>을 입력하세요<br>띄어쓰기는 달라도 정답 처리돼요</div>'+
+      '<div class="pill">🏁 선착순 '+(g.winners||3)+'등까지 · <b id="mleft">'+left+'자리 남음</b></div>'+
+      '<input id="mbox" placeholder="노래 제목" maxlength="40" autocomplete="off">'+
+      '<button class="btn" id="msub">제출</button>'+
+      (g.wrongs>0?'<div class="muted" style="text-align:center">❌ '+g.wrongs+'번 틀렸어요 · 계속 도전!</div>':'');
+    const inp=document.getElementById('mbox');
+    const submit=()=>{ const t=inp.value.trim(); if(!t) return; act({type:'guess',text:t}); inp.value=''; toast('제출!'); vibe(20); };
+    document.getElementById('msub').onclick=submit;
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); });
+    inp.focus();
+    return;
+  }
+  if(s==='music_reveal'){
+    curKey='music_rev';
+    const m=!g.correct?'🙂':g.rank===1?'🥇':g.rank===2?'🥈':g.rank===3?'🥉':'✅';
+    wrap.innerHTML='<div class="center"><div class="big-emoji">'+m+'</div>'+
+      '<h1>'+esc(g.title)+'</h1>'+
+      '<div class="muted">'+esc(g.artist||'')+'</div>'+
+      (g.correct
+        ? (g.pts>0?'<div class="result-pts">'+g.rank+'등 +'+g.pts+'</div>'
+                  :'<div class="muted">맞혔지만 3등 밖이라 0점 😢</div>')
+        : '<div class="muted">다음 곡에서 만회해요!</div>')+'</div>';
+    return;
+  }
+  curKey = s;
+  if(s==='draw_draw'){
     if(g.isDrawer){ return renderDrawer(g); }
     return renderGuesser(g);
   } else if(s==='draw_reveal'){
