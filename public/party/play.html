@@ -11,8 +11,8 @@
     --paper:#ecdec0; --paper2:#e2d0aa; --cream:#f8f1de;
     --ink:#1f170e; --ink2:#4a3826; --faded:#8b7658;
     --rust:#a63d22; --mustard:#c4902b; --teal:#2c6255; --wine:#6d2233;
-    --serif:'Nanum Myeongjo','Batang','Iowan Old Style',Georgia,serif;
-    --sans:'Pretendard','Apple SD Gothic Neo',system-ui,sans-serif;
+    --serif:'Nanum Myeongjo','NanumMyeongjo','Batang','바탕','Apple SD Gothic Neo',Georgia,serif;
+    --sans:'Pretendard','Apple SD Gothic Neo','Malgun Gothic','맑은 고딕',system-ui,sans-serif;
   }
   *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
   html,body{ height:100%; }
@@ -54,9 +54,18 @@
   .card{ background:var(--cream); border:2px solid var(--ink); padding:18px;
     box-shadow:5px 5px 0 rgba(31,23,14,.16); }
   .center{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
-    text-align:center; gap:14px; }
-  .big-emoji{ font-size:66px; }
-  .prompt{ font-family:var(--serif); font-size:22px; font-weight:800; text-align:center; line-height:1.45; }
+    text-align:center; gap:16px; width:100%; }
+  .center > *{ max-width:100%; }
+  .big-emoji{ font-size:66px; line-height:1; }
+  .prompt{ font-family:var(--serif); font-size:22px; font-weight:800; text-align:center; line-height:1.45;
+    word-break:keep-all; }
+
+  /* 연결 상태 배너 */
+  .netbar{ position:fixed; top:0; left:0; right:0; z-index:10000; text-align:center;
+    background:var(--wine); color:var(--cream); font-family:var(--serif); font-weight:800;
+    font-size:15px; padding:11px 16px; line-height:1.45;
+    transform:translateY(-100%); transition:transform .25s; }
+  .netbar.show{ transform:translateY(0); }
 
   /* ── 퀴즈 4지선다 ── */
   .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:13px; flex:1; }
@@ -138,12 +147,21 @@
   <div class="me"><span class="dot" id="medot"></span><span id="menick"></span></div>
   <div class="score" id="mescore">0점</div>
 </div>
+<div class="netbar" id="netbar"></div>
 <div class="wrap" id="wrap"></div>
 <div class="toast" id="toast"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const socket = io('/party');
+// 파티 중엔 폰이 잠기거나 와이파이가 흔들려도 반드시 다시 붙도록 공격적으로 재연결
+const socket = io('/party', {
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 400,
+  reconnectionDelayMax: 2500,
+  randomizationFactor: 0.3,
+  timeout: 20000,
+});
 const wrap = document.getElementById('wrap');
 const bar = document.getElementById('bar');
 const q = new URLSearchParams(location.search);
@@ -164,7 +182,17 @@ const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&
 function vibe(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms);}catch(e){} }
 let toastT; function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),1500); }
 
-socket.on('connect', ()=>{ if(PID&&CODE) doJoin(NICK,true); else renderJoin(''); });
+// ── 연결 상태 표시 (끊김/재연결 중) ──
+function netShow(msg){ const b=document.getElementById('netbar'); if(b){ b.textContent=msg; b.classList.add('show'); } }
+function netHide(){ const b=document.getElementById('netbar'); if(b) b.classList.remove('show'); }
+socket.on('disconnect', ()=> netShow('⚠ 연결이 끊겼어요 · 다시 연결 중…'));
+socket.io.on('reconnect_attempt', (n)=> netShow('다시 연결 중… ('+n+')'));
+socket.io.on('reconnect_error', ()=> netShow('연결 재시도 중… 잠시만요'));
+
+socket.on('connect', ()=>{
+  if(PID&&CODE) doJoin(NICK,true);   // 저장된 참가 정보로 자동 복귀
+  else { netHide(); renderJoin(''); }
+});
 socket.on('player:kicked', ()=>{ localStorage.removeItem('party_me'); PID=null; renderJoin('진행자가 내보냈어요.'); });
 
 function doJoin(nick, silent){
@@ -172,11 +200,15 @@ function doJoin(nick, silent){
     if(!res||!res.ok){
       PID=null; localStorage.removeItem('party_me');
       if(URL_CODE) CODE=URL_CODE;   // 실패해도 QR 코드는 유지 (예전 코드가 남지 않게)
-      renderJoin(res&&res.err||'입장 실패'); return;
+      netHide();
+      const gone = /찾을 수 없/.test(res&&res.err||'');
+      renderJoin(gone ? '방이 종료됐거나 서버가 재시작됐어요. TV의 입장코드를 확인해 주세요.'
+                      : (res&&res.err||'입장 실패')); return;
     }
     PID=res.pid; NICK=res.nick; CODE=res.code;
     localStorage.setItem('party_me', JSON.stringify({pid:PID,code:CODE,nick:NICK}));
     bar.style.display='flex';
+    netHide();   // 재접속 성공 → 경고 배너 제거
   });
 }
 let manualCode=false;   // QR로 들어왔어도 '코드 직접 입력'을 누르면 true

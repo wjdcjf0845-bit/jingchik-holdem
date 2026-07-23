@@ -10,8 +10,9 @@
     --paper:#ecdec0; --paper2:#e2d0aa; --cream:#f8f1de;
     --ink:#1f170e; --ink2:#4a3826; --faded:#8b7658;
     --rust:#a63d22; --mustard:#c4902b; --teal:#2c6255; --wine:#6d2233;
-    --serif:'Nanum Myeongjo','Batang','Iowan Old Style',Georgia,serif;
-    --sans:'Pretendard','Apple SD Gothic Neo',system-ui,sans-serif;
+    /* 한글이 확실히 세리프/고딕으로 잡히도록 윈도우 기본 폰트까지 포함 */
+    --serif:'Nanum Myeongjo','NanumMyeongjo','Batang','바탕','Apple SD Gothic Neo',Georgia,serif;
+    --sans:'Pretendard','Apple SD Gothic Neo','Malgun Gothic','맑은 고딕',system-ui,sans-serif;
   }
   *{ box-sizing:border-box; margin:0; padding:0; }
   html,body{ height:100%; }
@@ -95,14 +96,16 @@
 
   /* ── 게임 무대 ── */
   .stage{ flex:1; display:flex; flex-direction:column; min-height:0; }
-  .stagehead{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;
-    padding-bottom:10px; border-bottom:1px solid var(--faded); }
-  .stagehead .g{ font-family:var(--serif); font-size:25px; font-weight:800; letter-spacing:.1em; }
-  .stagehead .g .em{ font-size:28px; margin-right:9px; }
-  .roundpill{ font-family:var(--serif); border:1.5px solid var(--ink); padding:5px 16px;
-    font-size:17px; letter-spacing:.12em; background:var(--cream); }
+  .stagehead{ display:flex; align-items:center; justify-content:space-between; gap:20px;
+    margin-bottom:18px; padding-bottom:12px; border-bottom:1px solid var(--faded); min-height:62px; }
+  .stagehead .g{ display:flex; align-items:center; font-family:var(--serif); font-size:25px;
+    font-weight:800; letter-spacing:.08em; white-space:nowrap; }
+  .stagehead .g .em{ font-size:28px; margin-right:10px; line-height:1; }
+  .headright{ display:flex; align-items:center; gap:16px; flex:none; }
+  .roundpill{ font-family:var(--serif); border:1.5px solid var(--ink); padding:6px 16px;
+    font-size:17px; letter-spacing:.1em; background:var(--cream); line-height:1.2; white-space:nowrap; }
   .clock{ font-family:var(--serif); font-size:44px; font-weight:800; color:var(--rust);
-    font-variant-numeric:tabular-nums; }
+    font-variant-numeric:tabular-nums; line-height:1; min-width:66px; text-align:right; }
   .clock.low{ color:var(--wine); animation:pulse .6s infinite alternate; }
   @keyframes pulse{ to{ transform:scale(1.13); } }
 
@@ -154,8 +157,19 @@
     text-align:center; margin-bottom:6px; }
   .sub{ text-align:center; font-family:var(--serif); font-style:italic; color:var(--ink2);
     font-size:20px; margin-bottom:20px; }
-  .center{ flex:1; display:flex; flex-direction:column; justify-content:center; }
-  .confetti-em{ font-size:56px; text-align:center; margin-bottom:6px; }
+  .center{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:18px; text-align:center; min-height:0; }
+  .center > *{ max-width:100%; }
+  /* .center 안에서는 개별 마진 대신 gap으로 간격을 통일 (들쭉날쭉 방지) */
+  .center .question, .center .answered, .center .podium, .center .rank, .center .board{ margin:0; }
+  .confetti-em{ font-size:56px; text-align:center; line-height:1; }
+
+  /* 연결 상태 배너 */
+  .netbar{ position:fixed; top:0; left:0; right:0; z-index:10000; text-align:center;
+    background:var(--wine); color:var(--cream); font-family:var(--serif); font-weight:800;
+    font-size:19px; letter-spacing:.05em; padding:12px 20px; line-height:1.4;
+    transform:translateY(-100%); transition:transform .25s; }
+  .netbar.show{ transform:translateY(0); }
 
   /* ── 그림 맞히기 ── */
   .drawrow{ flex:1; display:grid; grid-template-columns:1fr 330px; gap:20px; min-height:0; margin-top:6px; }
@@ -226,6 +240,7 @@
 </style>
 </head>
 <body>
+<div class="netbar" id="netbar"></div>
 <div id="app">
   <div class="topbar">
     <div class="brand">징칠 파티 게임 <small id="pcount"></small></div>
@@ -237,7 +252,10 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const socket = io('/party');
+const socket = io('/party', {
+  reconnection: true, reconnectionAttempts: Infinity,
+  reconnectionDelay: 400, reconnectionDelayMax: 2500, timeout: 20000,
+});
 const main = document.getElementById('main');
 const ctrl = document.getElementById('ctrl');
 const topcode = document.getElementById('topcode');
@@ -252,8 +270,26 @@ socket.on('connect', () => {
 socket.on('host:created', ({ code }) => {
   CODE = code; localStorage.setItem('party_host_code', code);
   joinURL = location.origin + '/party/play?c=' + code;
+  netHide();   // 재연결/방 복구 성공
 });
-socket.on('host:gone', () => { localStorage.removeItem('party_host_code'); CODE=null; socket.emit('host:create'); });
+// 방이 사라짐(서버 재시작 등) → 새 방을 만들되, 코드가 바뀐 걸 크게 알림
+socket.on('host:gone', () => {
+  localStorage.removeItem('party_host_code'); CODE=null;
+  socket.emit('host:create');
+  netShow('⚠ 방이 초기화되어 새 입장코드가 발급됐어요 — 참가자들에게 QR을 다시 찍어달라고 안내해 주세요', true);
+});
+
+// ── 연결 상태 표시 ──
+let netT=null;
+function netShow(msg, sticky){
+  const b=document.getElementById('netbar'); if(!b) return;
+  b.textContent=msg; b.classList.add('show');
+  clearTimeout(netT);
+  if(sticky) netT=setTimeout(()=>b.classList.remove('show'), 15000);
+}
+function netHide(){ const b=document.getElementById('netbar'); if(b) b.classList.remove('show'); }
+socket.on('disconnect', ()=> netShow('⚠ 서버 연결이 끊겼어요 · 다시 연결 중…'));
+socket.io.on('reconnect_attempt', (n)=> netShow('다시 연결 중… ('+n+')'));
 
 const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -387,7 +423,8 @@ function nextBtn(label){ ctrl.innerHTML='<button class="big" id="adv">'+(label||
 
 function renderGame(v){
   const g = v.view; const em = v.emoji;
-  const head = (right)=> '<div class="stagehead"><div class="g"><span class="em">'+em+'</span>'+esc(v.gameName)+'</div>'+(right||'')+'</div>';
+  const head = (right)=> '<div class="stagehead"><div class="g"><span class="em">'+em+'</span>'+esc(v.gameName)+'</div>'+
+    '<div class="headright">'+(right||'')+'</div></div>';
   const rp = (a,b)=>'<span class="roundpill">'+a+' / '+b+'</span>';
   const s = g.screen;
 
@@ -409,7 +446,8 @@ function renderGame(v){
     } else {
       hostMusicKey=key;
       main.innerHTML='<div class="stage">'+
-        '<div class="stagehead"><div class="g"><span class="em">'+em+'</span>'+esc(v.gameName)+'</div>'+rp(g.qNum,g.total)+' '+clock(g.secLeft).replace('class="clock','id="mtimer2" class="clock')+'</div>'+
+        '<div class="stagehead"><div class="g"><span class="em">'+em+'</span>'+esc(v.gameName)+'</div>'+
+          '<div class="headright">'+rp(g.qNum,g.total)+clock(g.secLeft).replace('class="clock','id="mtimer2" class="clock')+'</div></div>'+
         '<div class="cat">✦ 선 착 순 3 등 까 지 ✦</div>'+
         '<div class="musicrow">'+
           '<div class="musicmain"><div class="notebig playing">♪ ♫ ♪</div>'+
@@ -447,7 +485,8 @@ function renderGame(v){
     } else {
       hostDrawRound=g.round; strokeBuf=[];
       main.innerHTML='<div class="stage">'+
-        '<div class="stagehead"><div class="g"><span class="em">'+em+'</span>'+esc(v.gameName)+'</div>'+rp(g.round,g.total)+' '+clock(g.secLeft).replace('class="clock','id="dtimer" class="clock')+'</div>'+
+        '<div class="stagehead"><div class="g"><span class="em">'+em+'</span>'+esc(v.gameName)+'</div>'+
+          '<div class="headright">'+rp(g.round,g.total)+clock(g.secLeft).replace('class="clock','id="dtimer" class="clock')+'</div></div>'+
         '<div class="drawrow"><div class="canvaswrap"><canvas id="hcanvas" width="1000" height="600"></canvas></div>'+
         '<div class="drawside"><div class="drawer">🎨 <b>'+esc(g.drawerNick)+'</b> 님이<br>그리는 중</div>'+
         '<div class="wordhint">'+boxes+'</div>'+
