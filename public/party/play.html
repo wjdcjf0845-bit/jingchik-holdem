@@ -288,6 +288,7 @@ function renderStanding(v){
 function act(msg){ socket.emit('player:act', msg); }
 
 let curKey=null;
+let goShownAt=null;   // 반응속도: GO 화면이 폰에 실제로 그려진 시각
 function renderGame(g){
   const s=g.screen;
   if(s==='music_wait'){
@@ -362,8 +363,20 @@ function renderGame(g){
   } else if(s==='reaction_tap'){
     if(g.falseStarted){ wrap.innerHTML='<div class="taparea bad">🚫 부정출발<br>0점</div>'; return; }
     if(g.tapped){ wrap.innerHTML='<div class="center"><div class="big-emoji">⚡</div><h1>'+g.ms+'ms</h1><div class="muted">순위 집계 중…</div></div>'; return; }
+    // 이미 이 라운드의 GO 화면을 띄워둔 상태면 다시 그리지 않는다.
+    // (다른 사람이 탭해서 재렌더될 때 기준시각이 초기화되면 뒤에 탭한 사람이 부당하게 빨라짐)
+    const gkey='react_go:'+g.round;
+    if(curKey===gkey && document.getElementById('tap')) return;
+    curKey=gkey;
     wrap.innerHTML='<div class="taparea go" id="tap">지금<br>탭!!</div>';
-    document.getElementById('tap').onclick=()=>{ vibe(80); act({type:'tap'}); };
+    goShownAt=null;
+    // 화면이 실제로 그려진 시점을 기준으로 삼는다 (네트워크 지연 배제)
+    requestAnimationFrame(()=>{ goShownAt=performance.now(); });
+    document.getElementById('tap').onclick=()=>{
+      vibe(80);
+      const ms = goShownAt!=null ? Math.round(performance.now()-goShownAt) : undefined;
+      act({type:'tap', ms});
+    };
   } else if(s==='reaction_result'){
     const medal=g.rank===1?'🥇':g.rank===2?'🥈':g.rank===3?'🥉':g.falseStarted?'🚫':'⚡';
     wrap.innerHTML='<div class="center"><div class="big-emoji">'+medal+'</div>'+
