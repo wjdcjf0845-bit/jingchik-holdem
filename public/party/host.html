@@ -81,16 +81,17 @@
   .pchip.off{ opacity:.38; }
   .dot{ width:26px; height:26px; border-radius:50%; display:inline-block; border:2px solid var(--ink); }
   .games{ padding:20px 24px; }
-  .gcards{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; counter-reset:gc; }
-  .gcard{ position:relative; background:var(--paper); border:2px solid var(--ink); padding:22px 16px 16px;
+  /* 게임이 5개 — 한 줄에 모두 넣어 참가자 목록 공간을 확보 */
+  .gcards{ display:grid; grid-template-columns:repeat(5,1fr); gap:12px; counter-reset:gc; }
+  .gcard{ position:relative; background:var(--paper); border:2px solid var(--ink); padding:20px 8px 12px;
     cursor:pointer; text-align:center; box-shadow:5px 5px 0 rgba(31,23,14,.2);
     transition:transform .06s, box-shadow .06s, border-color .1s; }
   .gcard::before{ counter-increment:gc; content:'No. ' counter(gc); position:absolute; top:7px; left:12px;
     font-family:var(--serif); font-size:12px; letter-spacing:.18em; color:var(--faded); }
   .gcard:hover{ transform:translate(2px,2px); box-shadow:3px 3px 0 rgba(31,23,14,.2); border-color:var(--rust); }
-  .gcard .em{ font-size:42px; }
-  .gcard .nm{ font-family:var(--serif); font-size:23px; font-weight:800; letter-spacing:.06em; margin-top:4px; }
-  .gcard .ds{ font-size:13px; color:var(--ink2); margin-top:7px; height:34px; line-height:1.4; }
+  .gcard .em{ font-size:34px; }
+  .gcard .nm{ font-family:var(--serif); font-size:18px; font-weight:800; letter-spacing:.02em; margin-top:3px; white-space:nowrap; }
+  .gcard .ds{ font-size:11.5px; color:var(--ink2); margin-top:5px; height:32px; line-height:1.35; }
   .gcard.done{ opacity:.5; }
   .gcard.done::after{ content:'✓ 완료'; display:block; color:var(--teal); font-weight:800; margin-top:4px; font-size:14px; }
 
@@ -170,6 +171,23 @@
     font-size:19px; letter-spacing:.05em; padding:12px 20px; line-height:1.4;
     transform:translateY(-100%); transition:transform .25s; }
   .netbar.show{ transform:translateY(0); }
+
+  /* ── TV는 스크롤을 못 하므로, 인원이 많으면 2단으로 펼쳐 모두 보이게 한다 ── */
+  .board.cols2, .rank.cols2, .feedlist.cols2, .dglist.cols2{
+    display:grid; grid-template-columns:1fr 1fr; gap:0 18px; align-content:start; }
+  .board.cols2 .brow{ font-size:22px; padding:9px 14px; }
+  .board.cols2 .brow .rk{ font-size:24px; width:46px; }
+  .rank.cols2 .rrow{ font-size:19px; padding:8px 12px; }
+  .rank.cols2 .rrow .medal{ font-size:21px; width:34px; }
+  .rank.cols2 .rrow .ms{ font-size:16px; }
+  .rank.cols2 .rrow .pt{ font-size:17px; min-width:56px; }
+  .feedlist.cols2 .feeditem, .feedlist.cols2 .bidrow{ font-size:17px; padding:6px 0; }
+  .dglist.cols2{ gap:4px 10px; }
+  .dglist.cols2 .grow{ font-size:15px; padding:4px 8px; }
+  /* 대기방 참가자가 많을 때 칩 축소 */
+  .plist.dense .pchip{ font-size:16px; padding:5px 12px 5px 6px; }
+  .plist.dense .dot{ width:20px; height:20px; }
+  .plist.dense .pchip .sc{ font-size:15px; }
   .topright{ display:flex; align-items:center; gap:14px; }
   .endbtn{ font-family:var(--serif); font-size:15px; font-weight:800; letter-spacing:.06em;
     background:var(--cream); color:var(--ink); border:2px solid var(--ink); box-shadow:3px 3px 0 var(--ink);
@@ -182,16 +200,16 @@
   .canvaswrap{ background:#fff; border:2px solid var(--ink); box-shadow:7px 7px 0 rgba(31,23,14,.2);
     overflow:hidden; display:flex; align-items:center; justify-content:center; }
   #hcanvas{ width:100%; height:100%; object-fit:contain; display:block; }
-  .drawside{ display:flex; flex-direction:column; gap:13px; min-height:0; }
-  .drawer{ font-family:var(--serif); font-size:23px; font-weight:800; background:var(--cream);
-    border:2px solid var(--ink); padding:15px; text-align:center; }
+  .drawside{ display:flex; flex-direction:column; gap:10px; min-height:0; }
+  .drawer{ font-family:var(--serif); font-size:20px; font-weight:800; background:var(--cream);
+    border:2px solid var(--ink); padding:10px; text-align:center; }
   .drawer b{ color:var(--rust); }
   .wordhint{ text-align:center; }
   .wboxes{ display:inline-flex; gap:9px; }
-  .wbox{ width:32px; height:42px; border-bottom:5px solid var(--rust); display:inline-block; }
-  .wlen{ display:block; margin-top:8px; color:var(--ink2); font-family:var(--serif); font-size:17px; }
+  .wbox{ width:26px; height:32px; border-bottom:5px solid var(--rust); display:inline-block; }
+  .wlen{ display:block; margin-top:5px; color:var(--ink2); font-family:var(--serif); font-size:15px; }
   .dcount{ text-align:center; font-family:var(--serif); color:var(--teal); font-weight:800; font-size:19px; }
-  .dglist{ flex:none; max-height:34%; overflow:auto; display:flex; flex-direction:column; gap:7px; }
+  .dglist{ flex:1 1 auto; min-height:0; overflow:auto; display:flex; flex-direction:column; gap:7px; }
   .grow{ display:flex; align-items:center; gap:10px; background:var(--cream); border:1.5px solid var(--ink);
     padding:9px 14px; font-size:19px; }
   .grow.ok{ background:var(--teal); color:var(--cream); }
@@ -215,7 +233,7 @@
   .musicmain{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; }
   .feedwrap{ background:var(--cream); border:2px solid var(--ink); box-shadow:5px 5px 0 rgba(31,23,14,.18);
     padding:12px 16px; display:flex; flex-direction:column; min-height:0; }
-  .feedwrap.tight{ flex:1; box-shadow:none; padding:10px 12px; }
+  .feedwrap.tight{ flex:0 1 auto; min-height:108px; box-shadow:none; padding:8px 12px; }
   .feedh{ font-family:var(--serif); font-size:14px; font-weight:800; letter-spacing:.28em; color:var(--ink);
     border-bottom:1px solid var(--faded); padding-bottom:8px; margin-bottom:8px; }
   .feedlist{ flex:1; overflow:auto; display:flex; flex-direction:column; }
@@ -270,10 +288,14 @@
   .aucmain{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
   .itemcard{ background:var(--cream); border:2px solid var(--ink); box-shadow:6px 6px 0 rgba(31,23,14,.2);
     padding:22px 40px; text-align:center; }
-  .itemcard.big{ margin:0 auto 12px; }
   .itemcard .iemoji{ font-size:64px; line-height:1; }
   .itemcard .iname{ font-family:var(--serif); font-size:28px; font-weight:800; margin-top:6px; letter-spacing:.06em; }
   .itemcard .ivalue{ font-family:var(--serif); font-size:34px; font-weight:900; color:var(--rust); margin-top:4px; }
+  /* 결과 화면에선 물건 카드를 가로로 눕혀 목록 공간을 확보 */
+  .itemcard.big{ margin:0 auto 10px; display:flex; align-items:center; gap:16px; padding:12px 26px; }
+  .itemcard.big .iemoji{ font-size:38px; }
+  .itemcard.big .iname{ font-size:24px; margin-top:0; }
+  .itemcard.big .ivalue{ font-size:26px; margin-top:0; }
   .lineup{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
   .lineitem{ display:flex; align-items:center; gap:8px; background:var(--cream); border:1.5px solid var(--ink);
     padding:8px 14px; font-size:18px; }
@@ -418,11 +440,11 @@ function render(v){
   // 노래 맞히기 '재생 중' 화면을 벗어나면 음악 정지
   if(!(v.screen==='game' && v.gameId==='music' && v.view && v.view.screen==='music_play')) stopSong();
   updateEndBtn(v.screen==='game');
-  if (v.screen==='briefing') return renderBriefing(v);
-  if (v.screen==='lobby') return renderLobby(v);
-  if (v.screen==='scoreboard') return renderBoard(v, false);
-  if (v.screen==='final') return renderBoard(v, true);
-  if (v.screen==='game') return renderGame(v);
+  if (v.screen==='briefing') { renderBriefing(v); fitLists(); return; }
+  if (v.screen==='lobby') { renderLobby(v); fitLists(); return; }
+  if (v.screen==='scoreboard') { renderBoard(v, false); fitLists(); return; }
+  if (v.screen==='final') { renderBoard(v, true); fitLists(); return; }
+  if (v.screen==='game') { renderGame(v); fitLists(); return; }
 }
 
 function renderLobby(v){
@@ -448,7 +470,8 @@ function renderLobby(v){
         '<div class="bigcode">'+esc(v.code||'····')+'</div>'+
       '</div>'+
       '<div class="rightcol">'+
-        '<div class="players"><h3>'+(sc?'현재 순위 · 참가자 ':'참가자 ')+'('+players.filter(p=>p.connected).length+')</h3><div class="plist">'+plist+'</div></div>'+
+        '<div class="players"><h3>'+(sc?'현재 순위 · 참가자 ':'참가자 ')+'('+players.filter(p=>p.connected).length+')</h3>'+
+          '<div class="plist'+(players.length>8?' dense':'')+'">'+plist+'</div></div>'+
         '<div class="games"><h3>게임을 골라 시작하세요 ▶</h3><div class="gcards">'+games+'</div></div>'+
       '</div>'+
     '</div>';
@@ -484,6 +507,42 @@ function renderBriefing(v){
 
 function medal(rank){ return rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':('#'+rank); }
 
+// TV는 스크롤이 안 되므로 항목이 많으면 2단으로 펼친다 (n개 초과 시)
+function cols2(n, limit){ return (n||0) > (limit||7) ? ' cols2' : ''; }
+// 제자리 갱신용 — 내용과 함께 2단 여부도 갱신
+function setList(el, html, n, limit){
+  if(!el) return;
+  el.innerHTML = html;
+  el.classList.toggle('cols2', (n||0) > (limit||7));
+  fitLists();
+}
+
+// 🛟 TV는 스크롤을 못 하므로, 목록이 넘치면 들어갈 때까지 자동 축소한다.
+//    (인원이 많아도 아무도 화면에서 잘려 사라지지 않게 하는 최후 안전장치)
+// 컨테이너 자체에 zoom을 걸면 박스도 같이 줄어 수렴하지 않는다 → '내용'만 축소한다.
+function shrinkToFit(box, targets){
+  if(!box || !targets.length) return;
+  targets.forEach(t => t.style.zoom = '');
+  box.style.rowGap = '';
+  const baseGap = parseFloat(getComputedStyle(box).rowGap) || 0;  // 간격은 zoom이 안 먹으므로 따로 축소
+  let z = 1, guard = 0;
+  while (box.scrollHeight - box.clientHeight > 2 && z > 0.42 && guard++ < 20){
+    z = Math.round((z - 0.05) * 100) / 100;
+    targets.forEach(t => t.style.zoom = z);
+    if (baseGap) box.style.rowGap = (baseGap * z).toFixed(1) + 'px';
+  }
+}
+function fitLists(){
+  document.querySelectorAll('.feedlist,.dglist,.rank,.board,.lineup').forEach(box=>{
+    shrinkToFit(box, Array.from(box.children));
+  });
+  // 로비 참가자 목록은 부모(.players)가 스크롤 주체
+  document.querySelectorAll('.players').forEach(box=>{
+    const inner = box.querySelector('.plist');
+    shrinkToFit(box, inner ? [inner] : []);
+  });
+}
+
 function renderBoard(v, final){
   const board = v.board||[];
   const rows = board.map(p=>(
@@ -496,13 +555,13 @@ function renderBoard(v, final){
     main.innerHTML = '<div class="center"><div class="confetti-em">🎊🏆🎊</div>'+
       '<div class="title-xl">우승 '+(w?esc(w.nick):'')+'!</div>'+
       '<div class="sub">오늘의 챔피언에게 상품권을 🎁</div>'+
-      '<div class="board">'+rows+'</div></div>';
+      '<div class="board'+cols2(board.length)+'">'+rows+'</div></div>';
     ctrl.innerHTML = '<button class="big ghost" id="again">처음으로</button>';
     document.getElementById('again').onclick=()=>socket.emit('host:toLobby');
   } else {
     main.innerHTML = '<div class="center"><div class="title-xl">🏅 종합 순위</div>'+
       '<div class="sub">'+(v.lastGame?esc(v.lastGame)+' 종료 · ':'')+'게임 '+v.gameIndex+'개 완료</div>'+
-      '<div class="board">'+rows+'</div></div>';
+      '<div class="board'+cols2(board.length)+'">'+rows+'</div></div>';
     ctrl.innerHTML = '<button class="big" id="next">다음 게임 ▶</button> <button class="big blue" id="fin">최종 결과 🏆</button>';
     document.getElementById('next').onclick=()=>socket.emit('host:toLobby');
     document.getElementById('fin').onclick=()=>socket.emit('host:final');
@@ -510,8 +569,10 @@ function renderBoard(v, final){
 }
 
 // 실시간 입력 현황 — 오답은 내용까지, 정답은 내용을 가리고 표시
-function feedHTML(feed){
+function feedHTML(feed, max){
   if(!feed||!feed.length) return '<div class="hint" style="padding:8px 0">아직 입력이 없어요…</div>';
+  // TV 공간이 한정적이라 최신 것만 보여준다 (feed는 최신순으로 들어옴)
+  feed = feed.slice(0, max || 8);
   return feed.map(f=>'<div class="feeditem'+(f.ok?' ok':'')+'">'+
     '<span class="fdot" style="background:'+esc(f.color||'#8b7658')+'"></span>'+
     '<span class="fn">'+esc(f.nick)+'</span>'+
@@ -573,7 +634,7 @@ function renderGame(v){
     if(hostMusicKey===key && document.getElementById('mfeed')){
       const t=document.getElementById('mtimer2'); if(t) t.outerHTML=clock(g.secLeft).replace('class="clock','id="mtimer2" class="clock');
       const c=document.getElementById('mcount'); if(c) c.innerHTML=podium(g);
-      const f=document.getElementById('mfeed'); if(f) f.innerHTML=feedHTML(g.feed);
+      setList(document.getElementById('mfeed'), feedHTML(g.feed), (g.feed||[]).length);
     } else {
       hostMusicKey=key;
       main.innerHTML='<div class="stage">'+
@@ -584,7 +645,7 @@ function renderGame(v){
           '<div class="musicmain"><div class="notebig playing">♪ ♫ ♪</div>'+
           '<div class="question" style="font-size:34px;padding:0 10px">폰에 노래 제목을<br>입력하세요!</div>'+
           '<div class="podium" id="mcount">'+podium(g)+'</div></div>'+
-          '<div class="feedwrap"><h4 class="feedh">입력 현황</h4><div class="feedlist" id="mfeed">'+feedHTML(g.feed)+'</div></div>'+
+          '<div class="feedwrap"><h4 class="feedh">입력 현황</h4><div class="feedlist'+cols2((g.feed||[]).length)+'" id="mfeed">'+feedHTML(g.feed)+'</div></div>'+
         '</div></div>';
     }
     ctrl.innerHTML='<button class="big ghost" id="replay">🔁 처음부터</button> <button class="big ghost" id="stopbtn">⏹ 정지</button> <button class="big" id="adv">정답 공개 ▶</button>';
@@ -598,11 +659,11 @@ function renderGame(v){
       '<div class="answerbig" style="margin-bottom:12px">정답: <b>'+esc(g.title)+'</b></div>'+
       '<div class="cat">'+esc(g.artist||'')+'</div>'+
       '<div class="musicrow">'+
-        '<div class="rank" style="margin:0">'+rows+'</div>'+
-        '<div class="feedwrap"><h4 class="feedh">나온 오답들</h4><div class="feedlist">'+feedHTML(g.feed)+'</div></div>'+
+        '<div class="rank'+cols2(g.scorers.length,5)+'" style="margin:0">'+rows+'</div>'+
+        '<div class="feedwrap"><h4 class="feedh">나온 오답들</h4><div class="feedlist'+cols2((g.feed||[]).length)+'">'+feedHTML(g.feed)+'</div></div>'+
       '</div></div>';
     ctrl.innerHTML='<button class="big ghost" id="replay">🔁 다시 듣기</button> <button class="big" id="adv">'+(g.isLast?'점수 집계 ▶':'다음 곡 ▶')+'</button>';
-    document.getElementById('replay').onclick=()=>playClip(g.audio);
+    document.getElementById('replay').onclick=()=>playSong(g.audio);
     document.getElementById('adv').onclick=()=>socket.emit('host:advance');
   } else if (s==='draw_drawing'){
     const boxes='<span class="wboxes">'+Array.from({length:g.wordLen}).map(()=>'<span class="wbox"></span>').join('')+'</span> <span class="wlen">'+g.wordLen+'글자</span>';
@@ -610,9 +671,9 @@ function renderGame(v){
     if(hostDrawRound===g.round && document.getElementById('hcanvas')){
       // 같은 라운드 재렌더: 캔버스 유지, 정보만 갱신
       const t=document.getElementById('dtimer'); if(t) t.outerHTML=clock(g.secLeft).replace('class="clock','id="dtimer" class="clock');
-      const gl=document.getElementById('dglist'); if(gl) gl.innerHTML=glist;
+      setList(document.getElementById('dglist'), glist, g.guessers.length, 5);
       const cc=document.getElementById('dcount'); if(cc) cc.textContent=g.correctCount+' / '+g.guessers.length+' 명 정답';
-      const df=document.getElementById('dfeed'); if(df) df.innerHTML=feedHTML(g.feed);
+      setList(document.getElementById('dfeed'), feedHTML(g.feed,5), 0, 99);  // 좁은 사이드바 → 1단 유지
     } else {
       hostDrawRound=g.round; strokeBuf=[];
       main.innerHTML='<div class="stage">'+
@@ -622,8 +683,8 @@ function renderGame(v){
         '<div class="drawside"><div class="drawer">🎨 <b>'+esc(g.drawerNick)+'</b> 님이<br>그리는 중</div>'+
         '<div class="wordhint">'+boxes+'</div>'+
         '<div class="dcount" id="dcount">'+g.correctCount+' / '+g.guessers.length+' 명 정답</div>'+
-        '<div class="dglist" id="dglist">'+glist+'</div>'+
-        '<div class="feedwrap tight"><h4 class="feedh">정답 시도</h4><div class="feedlist" id="dfeed">'+feedHTML(g.feed)+'</div></div>'+
+        '<div class="dglist'+cols2(g.guessers.length,5)+'" id="dglist">'+glist+'</div>'+
+        '<div class="feedwrap tight"><h4 class="feedh">정답 시도</h4><div class="feedlist" id="dfeed">'+feedHTML(g.feed,5)+'</div></div>'+
         '</div></div></div>';
       clearHostCanvas();
     }
@@ -634,7 +695,7 @@ function renderGame(v){
       '<div class="drawrow"><div class="canvaswrap"><canvas id="hcanvas" width="1000" height="600"></canvas></div>'+
       '<div class="drawside"><div class="answerbig">정답: <b>'+esc(g.word)+'</b></div>'+
       '<div class="drawer">🎨 '+esc(g.drawerNick)+' <span style="color:#22c55e">+'+g.drawerPts+'</span></div>'+
-      '<div class="rank" style="margin-top:8px">'+rows+'</div></div></div></div>';
+      '<div class="rank'+cols2(g.results.length,5)+'" style="margin-top:8px">'+rows+'</div></div></div></div>';
     replayHostCanvas();
     nextBtn(g.isLast?'점수 집계 ▶':'다음 그림 ▶');
   } else if (s==='type_typing'){
@@ -659,7 +720,7 @@ function renderGame(v){
       || '<div class="hint">완주한 사람이 없어요 😅</div>';
     main.innerHTML='<div class="stage">'+head(rp(g.round,g.total))+
       '<div class="typesent small">'+esc(g.sentence)+'</div>'+
-      '<div class="rank">'+rows+'</div>'+
+      '<div class="rank'+cols2((g.ranking||[]).length)+'">'+rows+'</div>'+
       ((g.failed&&g.failed.length)?'<div class="answered">⌨️ 오타가 너무 많아 0점: '+g.failed.map(f=>esc(f.nick)+'('+f.acc+'%)').join(', ')+'</div>':'')+
       '</div>';
     nextBtn(g.isLast?'점수 집계 ▶':'다음 문장 ▶');
@@ -678,7 +739,7 @@ function renderGame(v){
     if(hostAucKey===key && document.getElementById('aucbars')){
       const t=document.getElementById('atimer'); if(t) t.outerHTML=clock(g.secLeft).replace('class="clock','id="atimer" class="clock');
       const c=document.getElementById('adone'); if(c) c.innerHTML='<b>'+g.done+'</b> / '+g.connected+' 명 입찰 완료';
-      const b=document.getElementById('aucbars'); if(b) b.innerHTML=barsHTML(g.players,g.budget,true);
+      setList(document.getElementById('aucbars'), barsHTML(g.players,g.budget,true), g.players.length);
     } else {
       hostAucKey=key;
       main.innerHTML='<div class="stage">'+
@@ -688,7 +749,7 @@ function renderGame(v){
           '<div class="aucmain">'+itemCardHTML(g.item)+
             '<div class="answered" id="adone"><b>'+g.done+'</b> / '+g.connected+' 명 입찰 완료</div>'+
             '<div class="hint">입찰액은 공개되지 않습니다</div></div>'+
-          '<div class="feedwrap"><h4 class="feedh">남은 예산</h4><div class="feedlist" id="aucbars">'+barsHTML(g.players,g.budget,true)+'</div></div>'+
+          '<div class="feedwrap"><h4 class="feedh">남은 예산</h4><div class="feedlist'+cols2(g.players.length)+'" id="aucbars">'+barsHTML(g.players,g.budget,true)+'</div></div>'+
         '</div></div>';
     }
     nextBtn('입찰 마감 ▶');
@@ -707,8 +768,8 @@ function renderGame(v){
     main.innerHTML='<div class="stage">'+head(rp(g.round,g.total))+
       itemCardHTML(g.item,true)+banner+
       '<div class="aucrow" style="margin-top:14px">'+
-        '<div class="feedwrap"><h4 class="feedh">입찰 공개</h4><div class="feedlist">'+rows+'</div></div>'+
-        '<div class="feedwrap"><h4 class="feedh">남은 예산</h4><div class="feedlist">'+barsHTML(g.players,g.budget,false)+'</div></div>'+
+        '<div class="feedwrap"><h4 class="feedh">입찰 공개</h4><div class="feedlist'+cols2((r.rows||[]).length)+'">'+rows+'</div></div>'+
+        '<div class="feedwrap"><h4 class="feedh">남은 예산</h4><div class="feedlist'+cols2(g.players.length)+'">'+barsHTML(g.players,g.budget,false)+'</div></div>'+
       '</div></div>';
     nextBtn(g.isLast?'점수 집계 ▶':'다음 물건 ▶');
   } else if (s==='reaction_ready'){
@@ -723,7 +784,7 @@ function renderGame(v){
   } else if (s==='reaction_reveal'){
     const rows=g.ranking.map(r=>'<div class="rrow"><span class="medal">'+medal(r.rank)+'</span>'+esc(r.nick)+'<span class="ms">'+r.ms+'ms</span><span class="pt">+'+r.pts+'</span></div>').join('')||'<div class="hint">아무도 반응 못했어요 😴</div>';
     main.innerHTML='<div class="stage">'+head(rp(g.round,g.total))+
-      '<div class="rank">'+rows+'</div>'+
+      '<div class="rank'+cols2(g.ranking.length)+'">'+rows+'</div>'+
       (g.falseStarts.length?'<div class="answered">🚫 부정출발(0점): '+g.falseStarts.map(esc).join(', ')+'</div>':'')+'</div>';
     nextBtn(g.isLast?'점수 집계 ▶':'다음 라운드 ▶');
   } else {
