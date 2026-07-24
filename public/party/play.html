@@ -145,6 +145,14 @@
     font-family:var(--serif); font-size:13px; font-weight:800; display:flex; align-items:center; justify-content:center; margin-top:1px; }
   .blist .bul{ flex:none; color:var(--rust); font-weight:900; }
 
+  /* ── 한글 타자 ── */
+  .tytarget{ font-family:var(--serif); font-size:21px; font-weight:800; line-height:1.6; text-align:center;
+    background:var(--cream); border:2px solid var(--ink); box-shadow:4px 4px 0 rgba(31,23,14,.16);
+    padding:16px; word-break:keep-all;
+    /* 문장을 길게 눌러 복사하지 못하도록 선택 차단 */
+    user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+  #tybox{ min-height:110px; font-size:19px; line-height:1.6; }
+
   /* ── 숫자 경매 ── */
   .lbox{ width:100%; background:var(--cream); border:2px solid var(--ink); box-shadow:5px 5px 0 rgba(31,23,14,.16);
     padding:12px 16px; display:flex; flex-direction:column; }
@@ -391,6 +399,51 @@ function renderGame(g){
         ? (g.pts>0?'<div class="result-pts">'+g.rank+'등 +'+g.pts+'</div>'
                   :'<div class="muted">맞혔지만 3등 밖이라 0점 😢</div>')
         : '<div class="muted">다음 곡에서 만회해요!</div>')+'</div>';
+    return;
+  }
+  if(s==='type_typing'){
+    if(g.submitted){
+      curKey='type_done:'+g.round;
+      wrap.innerHTML='<div class="center"><div class="big-emoji">✅</div><h1>제출 완료!</h1>'+
+        '<div class="muted">'+g.cpm+'타 · 정확도 '+g.acc+'%</div>'+
+        '<div class="muted">다른 사람들을 기다려주세요</div></div>';
+      return;
+    }
+    const key='type:'+g.round;
+    if(curKey===key && document.getElementById('tybox')){
+      const t=document.getElementById('tytimer'); if(t) t.textContent='⏱ '+g.secLeft+'초';
+      return;   // 타이핑 중 화면을 다시 그리면 입력이 날아가므로 시간만 갱신
+    }
+    curKey=key;
+    wrap.innerHTML='<div class="clockbadge" id="tytimer">⏱ '+g.secLeft+'초</div>'+
+      '<div class="muted" style="text-align:center">'+g.round+' / '+g.total+' · 아래 문장을 그대로 따라 치세요</div>'+
+      '<div class="tytarget">'+esc(g.sentence)+'</div>'+
+      '<textarea id="tybox" placeholder="여기에 입력" autocomplete="off" autocorrect="off" '+
+        'autocapitalize="off" spellcheck="false"></textarea>'+
+      '<button class="btn" id="tysub">완료</button>';
+    const box=document.getElementById('tybox');
+    // 복사·붙여넣기로 치팅하는 것 방지
+    box.addEventListener('paste', e=>{ e.preventDefault(); toast('붙여넣기는 안 돼요 😉'); });
+    box.addEventListener('drop', e=>e.preventDefault());
+    document.getElementById('tysub').onclick=()=>{
+      const t=box.value.trim();
+      if(!t){ toast('문장을 입력하세요'); return; }
+      vibe(30); act({type:'submit',text:t});
+    };
+    box.focus();
+    return;
+  }
+  if(s==='type_reveal'){
+    curKey='type_rev:'+(g.rank||0);
+    const m=g.rank===1?'🥇':g.rank===2?'🥈':g.rank===3?'🥉':g.rank?'⌨️':'😅';
+    const headline = g.missed ? '시간 초과'
+                   : g.tooManyTypos ? '오타가 너무 많아요'
+                   : g.rank ? g.rank+'등!' : '결과';
+    wrap.innerHTML='<div class="center"><div class="big-emoji">'+m+'</div>'+
+      '<h1>'+headline+'</h1>'+
+      (g.missed?'':'<div class="muted">'+g.cpm+'타 · 정확도 '+g.acc+'%</div>')+
+      (g.pts>0?'<div class="result-pts">+'+g.pts+'</div>':'')+'</div>';
+    if(g.pts>0) vibe(40);
     return;
   }
   if(s==='auc_intro'){

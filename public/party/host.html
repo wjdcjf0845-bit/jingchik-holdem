@@ -253,6 +253,12 @@
   .blist .bul{ flex:none; color:var(--rust); font-weight:900; font-size:22px; line-height:1.2; }
   .blist li.sc b{ color:var(--teal); }
 
+  /* ── 한글 타자 ── */
+  .typesent{ font-family:var(--serif); font-size:52px; font-weight:800; line-height:1.5;
+    text-align:center; padding:26px 34px; background:var(--cream); border:2px solid var(--ink);
+    box-shadow:7px 7px 0 rgba(31,23,14,.2); word-break:keep-all; max-width:1100px; }
+  .typesent.small{ font-size:30px; padding:16px 24px; margin:0 auto 14px; box-shadow:4px 4px 0 rgba(31,23,14,.18); }
+
   /* ── 숫자 경매 ── */
   .aucrow{ flex:1; display:grid; grid-template-columns:1fr 420px; gap:20px; min-height:0; }
   .aucmain{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
@@ -495,7 +501,7 @@ function podium(g){
     '<span class="pleft">'+Math.max(0,(g.winners||3)-taken)+'자리 남음</span>';
 }
 // ── 숫자 경매 ──
-let hostAucKey=null;
+let hostAucKey=null, hostTypeKey=null;
 function itemCardHTML(it, big){
   const val = it.value==null ? '???' : it.value.toLocaleString()+'점';
   return '<div class="itemcard'+(big?' big':'')+'"><div class="iemoji">'+it.emoji+'</div>'+
@@ -606,6 +612,32 @@ function renderGame(v){
       '<div class="rank" style="margin-top:8px">'+rows+'</div></div></div></div>';
     replayHostCanvas();
     nextBtn(g.isLast?'점수 집계 ▶':'다음 그림 ▶');
+  } else if (s==='type_typing'){
+    const key='type:'+g.round;
+    if(hostTypeKey===key && document.getElementById('tsent')){
+      const t=document.getElementById('ttimer'); if(t) t.outerHTML=clock(g.secLeft).replace('class="clock','id="ttimer" class="clock');
+      const d=document.getElementById('tdone'); if(d) d.innerHTML='<b>'+g.done+'</b> / '+g.connected+' 명 완료';
+    } else {
+      hostTypeKey=key;
+      main.innerHTML='<div class="stage">'+
+        '<div class="stagehead"><div class="g"><span class="em">'+em+'</span>'+esc(v.gameName)+'</div>'+
+          '<div class="headright">'+rp(g.round,g.total)+clock(g.secLeft).replace('class="clock','id="ttimer" class="clock')+'</div></div>'+
+        '<div class="cat">✦ 그 대 로 따 라 치 세 요 ✦</div>'+
+        '<div class="center"><div class="typesent" id="tsent">'+esc(g.sentence)+'</div>'+
+        '<div class="answered" id="tdone"><b>'+g.done+'</b> / '+g.connected+' 명 완료</div></div></div>';
+    }
+    nextBtn('입력 마감 ▶');
+  } else if (s==='type_reveal'){
+    hostTypeKey=null;
+    const rows=(g.ranking||[]).map(r=>'<div class="rrow"><span class="medal">'+medal(r.rank)+'</span>'+esc(r.nick)+
+      '<span class="ms">'+r.cpm+'타 · 정확도 '+r.acc+'%</span><span class="pt">+'+r.pts+'</span></div>').join('')
+      || '<div class="hint">완주한 사람이 없어요 😅</div>';
+    main.innerHTML='<div class="stage">'+head(rp(g.round,g.total))+
+      '<div class="typesent small">'+esc(g.sentence)+'</div>'+
+      '<div class="rank">'+rows+'</div>'+
+      ((g.failed&&g.failed.length)?'<div class="answered">⌨️ 오타가 너무 많아 0점: '+g.failed.map(f=>esc(f.nick)+'('+f.acc+'%)').join(', ')+'</div>':'')+
+      '</div>';
+    nextBtn(g.isLast?'점수 집계 ▶':'다음 문장 ▶');
   } else if (s==='auc_intro'){
     main.innerHTML='<div class="stage">'+head('')+
       '<div class="cat">✦ 예 산 을 배 분 하 라 ✦</div>'+
