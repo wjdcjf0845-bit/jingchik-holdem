@@ -351,7 +351,7 @@ function renderGame(g){
     curKey='music_wait:'+g.qNum;
     wrap.innerHTML='<div class="center"><div class="poster-orn">✦ ✦ ✦</div>'+
       '<h1>'+g.qNum+'번째 곡</h1>'+
-      '<div class="muted">TV에서 노래가 3초 재생됩니다.<br>귀 기울여 주세요 🎧</div></div>';
+      '<div class="muted">TV에서 노래가 재생됩니다.<br>귀 기울여 주세요 🎧</div></div>';
     return;
   }
   if(s==='music_answer'){
@@ -505,11 +505,13 @@ function renderGame(g){
     if(g.won) vibe([20,40,20]);
     return;
   }
-  curKey = s;
+  // ⚠️ 여기서 curKey를 일괄로 덮어쓰면 renderDrawer/renderGuesser/reaction_tap의
+  //    '재렌더 시 상태 보존' 가드가 무력화된다. 각 화면이 스스로 curKey를 관리하게 둔다.
   if(s==='draw_draw'){
     if(g.isDrawer){ return renderDrawer(g); }
     return renderGuesser(g);
   } else if(s==='draw_reveal'){
+    curKey=s;
     const em = g.iWasDrawer ? '🎨' : g.guessedRight ? '🎉' : '🙂';
     wrap.innerHTML='<div class="center"><div class="big-emoji">'+em+'</div>'+
       '<h1>정답: '+esc(g.word)+'</h1>'+
@@ -517,6 +519,7 @@ function renderGame(g){
       (g.myPts>0?'<div class="result-pts">+'+g.myPts+'</div>':'')+'</div>';
     if(g.myPts>0) vibe(40);
   } else if(s==='reaction_wait'){
+    curKey=s;
     wrap.innerHTML='<div class="muted" style="text-align:center">라운드 '+g.round+'/'+g.total+'</div>'+
       '<div class="taparea '+(g.falseStarted?'bad':'wait')+'" id="tap">'+(g.falseStarted?'🚫 부정출발!<br>이번 라운드 0점':'✋ 아직…<br>신호를 기다려요')+'</div>';
     if(!g.falseStarted){ document.getElementById('tap').onclick=()=>{ vibe(80); act({type:'tap'}); }; }
@@ -538,12 +541,14 @@ function renderGame(g){
       act({type:'tap', ms});
     };
   } else if(s==='reaction_result'){
+    curKey=s;
     const medal=g.rank===1?'🥇':g.rank===2?'🥈':g.rank===3?'🥉':g.falseStarted?'🚫':'⚡';
     wrap.innerHTML='<div class="center"><div class="big-emoji">'+medal+'</div>'+
       '<h1>'+(g.falseStarted?'부정출발':g.rank?g.rank+'등':'미반응')+'</h1>'+
       (g.ms!=null?'<div class="muted">'+g.ms+'ms</div>':'')+
       (g.pts>0?'<div class="result-pts">+'+g.pts+'</div>':'')+'</div>';
   } else {
+    curKey=s;
     wrap.innerHTML='<div class="center"><div class="muted">잠시만요…</div></div>';
   }
 }

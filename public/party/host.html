@@ -170,6 +170,12 @@
     font-size:19px; letter-spacing:.05em; padding:12px 20px; line-height:1.4;
     transform:translateY(-100%); transition:transform .25s; }
   .netbar.show{ transform:translateY(0); }
+  .topright{ display:flex; align-items:center; gap:14px; }
+  .endbtn{ font-family:var(--serif); font-size:15px; font-weight:800; letter-spacing:.06em;
+    background:var(--cream); color:var(--ink); border:2px solid var(--ink); box-shadow:3px 3px 0 var(--ink);
+    padding:8px 14px; cursor:pointer; }
+  .endbtn:active{ transform:translate(3px,3px); box-shadow:0 0 0 var(--ink); }
+  .endbtn.arm{ background:var(--wine); color:var(--cream); }
 
   /* ── 그림 맞히기 ── */
   .drawrow{ flex:1; display:grid; grid-template-columns:1fr 330px; gap:20px; min-height:0; margin-top:6px; }
@@ -302,7 +308,10 @@
 <div id="app">
   <div class="topbar">
     <div class="brand">징칠 파티 게임 <small id="pcount"></small></div>
-    <div class="codechip" id="topcode"></div>
+    <div class="topright">
+      <button class="endbtn" id="endgame" style="display:none">⏭ 게임 종료</button>
+      <div class="codechip" id="topcode"></div>
+    </div>
   </div>
   <div class="main" id="main"></div>
   <div class="ctrlbar" id="ctrl"></div>
@@ -389,10 +398,26 @@ socket.on('host:view', (v) => {
   render(v);
 });
 
+// 진행 중 '게임 종료' 버튼 — 실수 방지로 두 번 눌러야 종료
+let endArmT=null;
+function updateEndBtn(inGame){
+  const b=document.getElementById('endgame'); if(!b) return;
+  b.style.display = inGame ? 'inline-block' : 'none';
+  if(!inGame){ b.classList.remove('arm'); b.textContent='⏭ 게임 종료'; clearTimeout(endArmT); }
+}
+(function(){
+  const b=document.getElementById('endgame');
+  if(b) b.onclick=()=>{
+    if(b.classList.contains('arm')){ clearTimeout(endArmT); b.classList.remove('arm'); b.textContent='⏭ 게임 종료'; socket.emit('host:endGame'); }
+    else { b.classList.add('arm'); b.textContent='한번 더 누르면 종료'; clearTimeout(endArmT); endArmT=setTimeout(()=>{ b.classList.remove('arm'); b.textContent='⏭ 게임 종료'; }, 3000); }
+  };
+})();
+
 function render(v){
   ctrl.innerHTML = '';
   // 노래 맞히기 '재생 중' 화면을 벗어나면 음악 정지
   if(!(v.screen==='game' && v.gameId==='music' && v.view && v.view.screen==='music_play')) stopSong();
+  updateEndBtn(v.screen==='game');
   if (v.screen==='briefing') return renderBriefing(v);
   if (v.screen==='lobby') return renderLobby(v);
   if (v.screen==='scoreboard') return renderBoard(v, false);
