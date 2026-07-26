@@ -353,6 +353,7 @@ let CODE = localStorage.getItem('party_host_code') || null;
 let joinURL = '';
 
 socket.on('connect', () => {
+  lastHostJSON = '';                 // 재연결 후엔 무조건 새로 그린다
   if (CODE) socket.emit('host:resume', { code: CODE });
   else socket.emit('host:create');
 });
@@ -414,11 +415,26 @@ function replayHostCanvas(){ clearHostCanvas(); const x=hctx(); if(!x) return; s
 socket.on('host:stroke', (seg)=>{ strokeBuf.push(seg); const x=hctx(); if(x) drawSeg(x,seg); });
 socket.on('host:strokeClear', ()=>{ strokeBuf=[]; clearHostCanvas(); });
 
+// 같은 화면이 다시 와도 재렌더하지 않는다 (주기 동기화로 인한 깜빡임 방지)
+let lastHostJSON='';
 socket.on('host:view', (v) => {
+  const j = JSON.stringify(v);
+  if (j === lastHostJSON) return;
+  lastHostJSON = j;
   topcode.innerHTML = v.code ? ('입장코드 <b>'+esc(v.code)+'</b>') : '';
   pcount.textContent = v.playerCount!=null ? ('· '+v.playerCount+'명 접속') : '';
   render(v);
 });
+
+// 🔄 TV 자가 복구 — 업데이트를 놓쳐도 새로고침 없이 현재 화면을 되찾는다
+function hostSync(){
+  if(!socket.connected){ try{ socket.connect(); }catch(e){} return; }
+  if(CODE) socket.emit('host:sync');
+}
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) hostSync(); });
+window.addEventListener('focus', hostSync);
+window.addEventListener('online', hostSync);
+setInterval(hostSync, 4000);
 
 // 진행 중 '게임 종료' 버튼 — 실수 방지로 두 번 눌러야 종료
 let endArmT=null;

@@ -230,6 +230,7 @@ socket.io.on('reconnect_attempt', (n)=> netShow('다시 연결 중… ('+n+')'))
 socket.io.on('reconnect_error', ()=> netShow('연결 재시도 중… 잠시만요'));
 
 socket.on('connect', ()=>{
+  lastViewJSON='';                   // 재연결 후엔 무조건 새로 그린다
   if(PID&&CODE) doJoin(NICK,true);   // 저장된 참가 정보로 자동 복귀
   else { netHide(); renderJoin(''); }
 });
@@ -285,10 +286,27 @@ function renderJoin(errMsg){
   document.getElementById('jbtn').onclick=submit;
   nickEl.focus();
 }
+// 같은 화면이 다시 와도 재렌더하지 않는다 (주기 동기화가 입력을 방해하지 않도록)
+let lastViewJSON='';
 socket.on('player:view', (v)=>{
+  const j=JSON.stringify(v);
+  if(j===lastViewJSON) return;
+  lastViewJSON=j;
   document.getElementById('menick').textContent = NICK||'';
   render(v);
 });
+
+// 🔄 자가 복구 — 업데이트를 놓쳤어도 새로고침 없이 현재 화면을 되찾는다.
+//    (폰 잠금/절전으로 소켓이 멈췄다 깨어나는 상황이 파티에서 매우 잦음)
+function syncNow(){
+  if(!PID || !CODE) return;
+  if(!socket.connected){ try{ socket.connect(); }catch(e){} return; }
+  socket.emit('player:sync');
+}
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) syncNow(); });
+window.addEventListener('focus', syncNow);
+window.addEventListener('online', syncNow);
+setInterval(()=>{ if(!document.hidden) syncNow(); }, 4000);
 
 function updateBar(score, color){
   bar.style.display='flex';
