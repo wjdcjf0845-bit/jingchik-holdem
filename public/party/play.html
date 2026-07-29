@@ -436,7 +436,7 @@ function renderGame(g){
     wrap.innerHTML='<div class="clockbadge" id="tytimer">⏱ '+g.secLeft+'초</div>'+
       '<div class="muted" style="text-align:center">'+g.round+' / '+g.total+' · 아래 문장을 그대로 따라 치세요</div>'+
       '<div class="tytarget">'+esc(g.sentence)+'</div>'+
-      '<textarea id="tybox" placeholder="여기에 입력" autocomplete="off" autocorrect="off" '+
+      '<textarea id="tybox" placeholder="여기에 입력" maxlength="300" autocomplete="off" autocorrect="off" '+
         'autocapitalize="off" spellcheck="false"></textarea>'+
       '<button class="btn" id="tysub">완료</button>';
     const box=document.getElementById('tybox');
