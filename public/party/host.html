@@ -283,6 +283,17 @@
     box-shadow:7px 7px 0 rgba(31,23,14,.2); word-break:keep-all; max-width:1100px; }
   .typesent.small{ font-size:30px; padding:16px 24px; margin:0 auto 14px; box-shadow:4px 4px 0 rgba(31,23,14,.18); }
 
+  /* ── 총알 피하기 ── */
+  .cddigit{ font-family:var(--serif); font-size:120px; font-weight:900; color:var(--rust); line-height:1; }
+  .dgalive{ font-family:var(--serif); font-size:40px; font-weight:900; }
+  .dgalive b{ color:var(--teal); font-size:52px; }
+  .dgchips{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-width:1050px; overflow:auto; }
+  .dgchips.cols2{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .dgchip{ display:flex; align-items:center; gap:8px; background:var(--cream); border:2px solid var(--ink);
+    padding:8px 14px; font-size:20px; font-weight:700; box-shadow:3px 3px 0 rgba(31,23,14,.18); }
+  .dgchip.dead{ opacity:.42; background:var(--paper2); box-shadow:none; text-decoration:line-through; }
+  .dgchip .ds{ color:var(--wine); font-family:var(--serif); font-size:16px; }
+
   /* ── 숫자 경매 ── */
   .aucrow{ flex:1; display:grid; grid-template-columns:1fr 420px; gap:20px; min-height:0; }
   .aucmain{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
@@ -603,7 +614,7 @@ function podium(g){
     '<span class="pleft">'+Math.max(0,(g.winners||3)-taken)+'자리 남음</span>';
 }
 // ── 숫자 경매 ──
-let hostAucKey=null, hostTypeKey=null;
+let hostAucKey=null, hostTypeKey=null, hostDodgeKey=null;
 function itemCardHTML(it, big){
   const val = it.value==null ? '???' : it.value.toLocaleString()+'점';
   return '<div class="itemcard'+(big?' big':'')+'"><div class="iemoji">'+it.emoji+'</div>'+
@@ -740,6 +751,42 @@ function renderGame(v){
       ((g.failed&&g.failed.length)?'<div class="answered">⌨️ 오타가 너무 많아 0점: '+g.failed.map(f=>esc(f.nick)+'('+f.acc+'%)').join(', ')+'</div>':'')+
       '</div>';
     nextBtn(g.isLast?'점수 집계 ▶':'다음 문장 ▶');
+  } else if (s==='dodge_countdown'){
+    main.innerHTML='<div class="stage">'+head(rp(g.round,g.total))+
+      '<div class="cat">✦ 총 알 을 피 하 라 ✦</div>'+
+      '<div class="center"><div class="notebig">🚀</div>'+
+      '<div class="question" style="font-size:40px">폰 화면을 손가락으로 끌어<br>우주선을 움직이세요!</div>'+
+      '<div class="cddigit">'+(g.count>0?g.count:'GO!')+'</div></div></div>';
+    ctrl.innerHTML='<span class="hint">잠시 후 자동으로 시작합니다…</span>';
+  } else if (s==='dodge_playing'){
+    const key='dodge:'+g.round;
+    const chips=g.players.map(p=>'<div class="dgchip'+(p.dead?' dead':'')+'">'+
+      '<span class="dot" style="background:'+esc(p.color)+'"></span>'+esc(p.nick)+
+      (p.dead?'<b class="ds">'+p.sec+'초</b>':'')+'</div>').join('');
+    if(hostDodgeKey===key && document.getElementById('dgalive')){
+      const a=document.getElementById('dgalive'); if(a) a.innerHTML='<b>'+g.living+'</b> / '+g.totalPlayers+' 생존';
+      const e=document.getElementById('dgel'); if(e) e.textContent=g.elapsed.toFixed(1)+'초';
+      setList(document.getElementById('dgchips'), chips, g.players.length);
+    } else {
+      hostDodgeKey=key;
+      main.innerHTML='<div class="stage">'+
+        '<div class="stagehead"><div class="g"><span class="em">'+em+'</span>'+esc(v.gameName)+'</div>'+
+          '<div class="headright">'+rp(g.round,g.total)+'<div class="clock" id="dgel">'+g.elapsed.toFixed(1)+'초</div></div></div>'+
+        '<div class="center" style="gap:14px">'+
+          '<div class="dgalive" id="dgalive"><b>'+g.living+'</b> / '+g.totalPlayers+' 생존</div>'+
+          '<div class="dgchips'+cols2(g.players.length)+'" id="dgchips">'+chips+'</div>'+
+        '</div></div>';
+    }
+    nextBtn('라운드 종료 ▶');
+  } else if (s==='dodge_result'){
+    hostDodgeKey=null;
+    const rows=(g.ranking||[]).map(r=>'<div class="rrow"><span class="medal">'+medal(r.rank)+'</span>'+esc(r.nick)+
+      '<span class="ms">'+(r.survived?'🏆 끝까지 생존':r.sec+'초')+'</span><span class="pt">+'+r.pts+'</span></div>').join('')
+      || '<div class="hint">참가자가 없어요</div>';
+    main.innerHTML='<div class="stage">'+head(rp(g.round,g.total))+
+      '<div class="cat">✦ 생 존 기 록 ✦</div>'+
+      '<div class="rank'+cols2((g.ranking||[]).length)+'">'+rows+'</div></div>';
+    nextBtn(g.isLast?'점수 집계 ▶':'다음 라운드 ▶');
   } else if (s==='auc_intro'){
     main.innerHTML='<div class="stage">'+head('')+
       '<div class="cat">✦ 예 산 을 배 분 하 라 ✦</div>'+

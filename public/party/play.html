@@ -153,6 +153,13 @@
     user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
   #tybox{ min-height:110px; font-size:19px; line-height:1.6; }
 
+  /* ── 총알 피하기 ── */
+  .dgtop{ display:flex; align-items:center; justify-content:space-between;
+    font-family:var(--serif); font-size:17px; font-weight:800; color:var(--ink2);
+    border-bottom:1px solid var(--faded); padding-bottom:8px; }
+  #dgcanvas{ flex:1; width:100%; min-height:0; border:2px solid var(--ink);
+    box-shadow:5px 5px 0 rgba(31,23,14,.2); touch-action:none; display:block; background:#1f170e; }
+
   /* ── 숫자 경매 ── */
   .lbox{ width:100%; background:var(--cream); border:2px solid var(--ink); box-shadow:5px 5px 0 rgba(31,23,14,.16);
     padding:12px 16px; display:flex; flex-direction:column; }
@@ -315,6 +322,8 @@ function updateBar(score, color){
 }
 
 function render(v){
+  // 총알 피하기 화면을 벗어나면 게임 루프 정지 (배터리·오작동 방지)
+  if(!(v.screen==='game' && v.gameId==='dodge')) stopDodge();
   if(v.screen==='briefing'){ return renderBriefing(v); }
   if(v.screen==='lobby'){ updateBar(v.score, v.color); return renderLobby(v); }
   if(v.screen==='scoreboard'||v.screen==='final'){ updateBar(v.myScore); return renderStanding(v); }
@@ -464,6 +473,56 @@ function renderGame(g){
     if(g.pts>0) vibe(40);
     return;
   }
+  if(s==='dodge_countdown'){
+    stopDodge();
+    const key='dodge_cd:'+g.round;
+    if(curKey===key) return;
+    curKey=key;
+    wrap.innerHTML='<div class="center"><div class="big-emoji">🚀</div>'+
+      '<h1>'+g.round+'라운드 시작!</h1>'+
+      '<div class="muted">화면을 <b>손가락으로 끌어</b> 우주선을 움직이세요<br>총알에 맞으면 탈락!</div>'+
+      '<div class="result-pts" id="dgcd">3</div></div>';
+    // 카운트다운 표시
+    const endAt=Date.now()+(g.startIn||0);
+    (function tick(){
+      const el=document.getElementById('dgcd'); if(!el) return;
+      const n=Math.max(0,Math.ceil((endAt-Date.now())/1000));
+      el.textContent=n>0?n:'GO!';
+      if(n>0) setTimeout(tick,120);
+    })();
+    return;
+  }
+  if(s==='dodge_playing'){
+    const key='dodge:'+g.round;
+    if(curKey===key && document.getElementById('dgcanvas')){
+      const l=document.getElementById('dgliving');
+      if(l) l.textContent='생존 '+g.living+'명';
+      return;   // 게임 진행 중 — 절대 다시 그리지 않는다
+    }
+    curKey=key;
+    if(g.spectator){
+      stopDodge();
+      wrap.innerHTML='<div class="center"><div class="big-emoji">👀</div><h1>다음 라운드부터 참여해요</h1>'+
+        '<div class="muted">이번 라운드는 이미 시작됐어요<br>TV로 구경하세요!</div></div>';
+      return;
+    }
+    wrap.innerHTML='<div class="dgtop"><span id="dgtime">0.0초</span><span id="dgliving">생존 '+g.living+'명</span></div>'+
+      '<canvas id="dgcanvas"></canvas>'+
+      '<div class="muted" style="text-align:center">화면을 끌어서 이동 · 총알 조심!</div>';
+    startDodge(g);
+    return;
+  }
+  if(s==='dodge_result'){
+    stopDodge();
+    curKey='dodge_res:'+g.round;
+    const m=g.survived?'🏆':g.rank===1?'🥇':g.rank===2?'🥈':g.rank===3?'🥉':'💥';
+    wrap.innerHTML='<div class="center"><div class="big-emoji">'+m+'</div>'+
+      '<h1>'+(g.survived?'끝까지 생존!':(g.rank?g.rank+'등':'탈락'))+'</h1>'+
+      (g.sec!=null?'<div class="muted">'+g.sec+'초 버팀 · '+(g.totalPlayers||0)+'명 중 '+(g.rank||'-')+'위</div>':'')+
+      (g.pts>0?'<div class="result-pts">+'+g.pts+'</div>':'')+'</div>';
+    if(g.pts>0) vibe(40);
+    return;
+  }
   if(s==='auc_intro'){
     curKey='auc_intro';
     const lines=g.lineup.map(it=>'<div class="lrow"><span>'+it.emoji+' '+esc(it.name)+'</span><b>'+(it.value==null?'???':it.value.toLocaleString()+'점')+'</b></div>').join('');
@@ -569,6 +628,146 @@ function renderGame(g){
     curKey=s;
     wrap.innerHTML='<div class="center"><div class="muted">잠시만요…</div></div>';
   }
+}
+
+// ═══════════ 🚀 총알 피하기 ═══════════
+// 서버는 씨드만 준다. 탄막은 각 폰에서 로컬로 생성·시뮬레이션 → 조작 지연 0.
+// 총알 위치를 '시간의 함수'로 계산하므로 프레임률이 달라도 패턴이 완전히 동일하다.
+const FW = 100, FH = 150;        // 가상 필드 크기 (모든 폰 공통)
+const SHIP_R = 3.2;
+
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// 씨드로 탄막 전체를 미리 생성 (t0에 등장해 직선으로 날아감)
+function buildBullets(seed, durSec){
+  const rnd = mulberry32(seed >>> 0);
+  const list = [];
+  let t = 1.2;                                    // 시작 직후 잠깐 유예
+  while (t < durSec){
+    const prog = Math.min(1, t / durSec);
+    const gap = Math.max(0.13, 0.60 - prog * 0.40);   // 갈수록 촘촘하게
+    const baseSp = 32 + prog * 44;                     // 갈수록 빠르게
+    const count = 1 + Math.floor(prog * 2.2);          // 갈수록 많이
+    for (let k = 0; k < count; k++){
+      const side = Math.floor(rnd() * 4);
+      let x0, y0;
+      if (side === 0){ x0 = rnd() * FW; y0 = -6; }
+      else if (side === 1){ x0 = rnd() * FW; y0 = FH + 6; }
+      else if (side === 2){ x0 = -6; y0 = rnd() * FH; }
+      else { x0 = FW + 6; y0 = rnd() * FH; }
+      const tx = FW * (0.12 + rnd() * 0.76);
+      const ty = FH * (0.12 + rnd() * 0.76);
+      const dx = tx - x0, dy = ty - y0;
+      const len = Math.hypot(dx, dy) || 1;
+      const sp = baseSp * (0.8 + rnd() * 0.5);
+      list.push({ t0: t, x0, y0, vx: dx / len * sp, vy: dy / len * sp, r: 1.9 + rnd() * 1.3 });
+    }
+    t += gap;
+  }
+  return list;
+}
+
+let dodgeRAF = null, dodgeKey = null;
+function stopDodge(){ if (dodgeRAF){ cancelAnimationFrame(dodgeRAF); dodgeRAF = null; } }
+
+function startDodge(g){
+  const canvas = document.getElementById('dgcanvas');
+  if (!canvas) return;
+  const durSec = (g.roundMs || 45000) / 1000;
+  const bullets = buildBullets(g.seed, durSec);
+  const LIFE = 9;                                  // 총알 최대 생존 시간(화면 통과 여유)
+  const ctx = canvas.getContext('2d');
+  const ship = { x: FW / 2, y: FH * 0.72 };
+  let dragging = false, lastX = 0, lastY = 0;
+  let dead = false, t0 = null;
+
+  function resize(){
+    const r = canvas.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(r.width * dpr);
+    canvas.height = Math.round(r.height * dpr);
+  }
+  resize();
+
+  const pos = e => { const r = canvas.getBoundingClientRect();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: cx - r.left, y: cy - r.top, w: r.width, h: r.height }; };
+
+  canvas.addEventListener('pointerdown', e => { e.preventDefault(); const p = pos(e);
+    dragging = true; lastX = p.x; lastY = p.y; });
+  canvas.addEventListener('pointermove', e => { if (!dragging || dead) return; e.preventDefault();
+    const p = pos(e);
+    const sc = Math.min(p.w / FW, p.h / FH);          // 화면↔필드 배율
+    ship.x = Math.max(SHIP_R, Math.min(FW - SHIP_R, ship.x + (p.x - lastX) / sc));
+    ship.y = Math.max(SHIP_R, Math.min(FH - SHIP_R, ship.y + (p.y - lastY) / sc));
+    lastX = p.x; lastY = p.y; });
+  const up = () => { dragging = false; };
+  canvas.addEventListener('pointerup', up);
+  canvas.addEventListener('pointercancel', up);
+  canvas.addEventListener('pointerleave', up);
+
+  function frame(now){
+    if (t0 === null) t0 = now;
+    const t = (now - t0) / 1000;
+    const r = canvas.getBoundingClientRect();
+    if (Math.abs(canvas.getBoundingClientRect().width * (window.devicePixelRatio||1) - canvas.width) > 8) resize();
+    const W = canvas.width, H = canvas.height;
+    const sc = Math.min(W / FW, H / FH);
+    const ox = (W - FW * sc) / 2, oy = (H - FH * sc) / 2;
+
+    ctx.fillStyle = '#1f170e';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#ecdec0';
+    ctx.fillRect(ox, oy, FW * sc, FH * sc);
+
+    // 총알: 위치를 시간의 함수로 직접 계산 (프레임률 무관, 완전 결정적)
+    ctx.fillStyle = '#a63d22';
+    for (let i = 0; i < bullets.length; i++){
+      const b = bullets[i];
+      const dt = t - b.t0;
+      if (dt < 0 || dt > LIFE) continue;
+      const bx = b.x0 + b.vx * dt, by = b.y0 + b.vy * dt;
+      if (bx < -10 || bx > FW + 10 || by < -10 || by > FH + 10) continue;
+      ctx.beginPath();
+      ctx.arc(ox + bx * sc, oy + by * sc, b.r * sc, 0, 6.2832);
+      ctx.fill();
+      if (!dead){
+        const dx = bx - ship.x, dy = by - ship.y;
+        if (dx * dx + dy * dy < (b.r + SHIP_R) * (b.r + SHIP_R)){
+          dead = true;
+          act({ type: 'dead', ms: Math.round(t * 1000) });
+          vibe([40, 60, 40]);
+        }
+      }
+    }
+
+    // 내 우주선
+    ctx.fillStyle = dead ? '#8b7658' : '#2c6255';
+    ctx.beginPath();
+    ctx.arc(ox + ship.x * sc, oy + ship.y * sc, SHIP_R * sc, 0, 6.2832);
+    ctx.fill();
+    if (!dead){
+      ctx.strokeStyle = '#1f170e'; ctx.lineWidth = Math.max(1, sc * 0.5);
+      ctx.stroke();
+    }
+
+    // 경과 시간
+    const hud = document.getElementById('dgtime');
+    if (hud) hud.textContent = (dead ? '💥 탈락 · ' : '') + t.toFixed(1) + '초';
+
+    if (dead || t >= durSec){ dodgeRAF = null; return; }   // 사망/라운드 종료 시 루프 정지
+    dodgeRAF = requestAnimationFrame(frame);
+  }
+  stopDodge();
+  dodgeRAF = requestAnimationFrame(frame);
 }
 
 // ── 그림 맞히기: 드로어(그리는 사람) ──
