@@ -285,8 +285,11 @@
 
   /* ── 총알 피하기 ── */
   .cddigit{ font-family:var(--serif); font-size:120px; font-weight:900; color:var(--rust); line-height:1; }
-  .dgalive{ font-family:var(--serif); font-size:40px; font-weight:900; }
-  .dgalive b{ color:var(--teal); font-size:52px; }
+  .dgalive{ font-family:var(--serif); font-size:22px; font-weight:900; }
+  .dgalive b{ color:var(--teal); font-size:28px; }
+  .arenawrap{ flex:1; min-height:0; display:flex; }
+  #arena{ flex:1; width:100%; height:100%; border:2px solid var(--ink);
+    box-shadow:7px 7px 0 rgba(31,23,14,.2); display:block; background:#1f170e; }
   .dgchips{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-width:1050px; overflow:auto; }
   .dgchips.cols2{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
   .dgchip{ display:flex; align-items:center; gap:8px; background:var(--cream); border:2px solid var(--ink);
@@ -417,6 +420,82 @@ function playSong(a){
 }
 function stopSong(){ try{ if(audioEl) audioEl.pause(); }catch(e){} }
 
+// ═══════════ 🚀 총알 피하기 — TV 아레나 렌더링 ═══════════
+// 서버가 30fps로 host:arena 를 보내면 그대로 그린다. (TV 한 대만 받는다)
+let arenaState = null, arenaRAF = null;
+socket.on('host:arena', st => { arenaState = st; });
+
+function stopArena(){ if (arenaRAF){ cancelAnimationFrame(arenaRAF); arenaRAF = null; } arenaState = null; }
+
+function startArena(){
+  const cv = document.getElementById('arena');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  function resize(){
+    const r = cv.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
+    if (cv.width !== w || cv.height !== h){ cv.width = w; cv.height = h; }
+  }
+  function frame(){
+    resize();
+    const W = cv.width, H = cv.height;
+    const st = arenaState;
+    ctx.fillStyle = '#1f170e'; ctx.fillRect(0, 0, W, H);
+    if (st && st.phase === 'playing'){
+      const FW = st.fw, FH = st.fh;
+      const sc = Math.min(W / FW, H / FH);
+      const ox = (W - FW * sc) / 2, oy = (H - FH * sc) / 2;
+      // 아레나 바닥
+      ctx.fillStyle = '#ecdec0'; ctx.fillRect(ox, oy, FW * sc, FH * sc);
+
+      // 경고선 — 발사 전 경로를 미리 보여준다 (지연 흡수 장치)
+      (st.warns || []).forEach(w => {
+        const len = Math.hypot(w.vx, w.vy) || 1;
+        const ux = w.vx / len, uy = w.vy / len;
+        ctx.strokeStyle = 'rgba(166,61,34,' + (0.18 + w.p * 0.55).toFixed(2) + ')';
+        ctx.lineWidth = Math.max(2, (2 + w.p * 5) * sc * 0.5);
+        ctx.setLineDash([12 * sc * 0.4, 8 * sc * 0.4]);
+        ctx.beginPath();
+        ctx.moveTo(ox + w.x * sc, oy + w.y * sc);
+        ctx.lineTo(ox + (w.x + ux * 320) * sc, oy + (w.y + uy * 320) * sc);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      });
+
+      // 총알
+      ctx.fillStyle = '#a63d22';
+      (st.bullets || []).forEach(b => {
+        ctx.beginPath();
+        ctx.arc(ox + b.x * sc, oy + b.y * sc, st.br * sc, 0, 6.2832);
+        ctx.fill();
+      });
+
+      // 우주선 + 닉네임
+      (st.ships || []).forEach(s => {
+        const x = ox + s.x * sc, y = oy + s.y * sc, r = st.sr * sc;
+        ctx.globalAlpha = s.d ? 0.25 : 1;
+        ctx.fillStyle = s.c || '#2c6255';
+        ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill();
+        ctx.lineWidth = Math.max(1, r * 0.22); ctx.strokeStyle = '#1f170e'; ctx.stroke();
+        ctx.globalAlpha = s.d ? 0.35 : 1;
+        ctx.fillStyle = '#1f170e';
+        ctx.font = '800 ' + Math.round(r * 1.15) + 'px Pretendard, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(s.n, x, y - r * 1.5);
+        ctx.globalAlpha = 1;
+      });
+
+      // 경과 시간
+      const el = document.getElementById('dgel');
+      if (el) el.textContent = st.t.toFixed(1) + '초';
+    }
+    arenaRAF = requestAnimationFrame(frame);
+  }
+  stopArena();
+  arenaRAF = requestAnimationFrame(frame);
+}
+
 // ── 그림 맞히기: 실시간 캔버스 ──
 let strokeBuf=[]; let hostDrawRound=null; let hostMusicKey=null;
 function hctx(){ const c=document.getElementById('hcanvas'); return c?c.getContext('2d'):null; }
@@ -466,6 +545,8 @@ function render(v){
   ctrl.innerHTML = '';
   // 노래 맞히기 '재생 중' 화면을 벗어나면 음악 정지
   if(!(v.screen==='game' && v.gameId==='music' && v.view && v.view.screen==='music_play')) stopSong();
+  // 아레나 화면을 벗어나면 렌더 루프 정지
+  if(!(v.screen==='game' && v.gameId==='dodge' && v.view && v.view.screen==='dodge_playing')) stopArena();
   updateEndBtn(v.screen==='game');
   if (v.screen==='briefing') { renderBriefing(v); fitLists(); return; }
   if (v.screen==='lobby') { renderLobby(v); fitLists(); return; }
@@ -760,26 +841,21 @@ function renderGame(v){
     ctrl.innerHTML='<span class="hint">잠시 후 자동으로 시작합니다…</span>';
   } else if (s==='dodge_playing'){
     const key='dodge:'+g.round;
-    const chips=g.players.map(p=>'<div class="dgchip'+(p.dead?' dead':'')+'">'+
-      '<span class="dot" style="background:'+esc(p.color)+'"></span>'+esc(p.nick)+
-      (p.dead?'<b class="ds">'+p.sec+'초</b>':'')+'</div>').join('');
-    if(hostDodgeKey===key && document.getElementById('dgalive')){
-      const a=document.getElementById('dgalive'); if(a) a.innerHTML='<b>'+g.living+'</b> / '+g.totalPlayers+' 생존';
-      const e=document.getElementById('dgel'); if(e) e.textContent=g.elapsed.toFixed(1)+'초';
-      setList(document.getElementById('dgchips'), chips, g.players.length);
+    if(hostDodgeKey===key && document.getElementById('arena')){
+      const a=document.getElementById('dgalive');
+      if(a) a.innerHTML='<b>'+g.living+'</b> / '+g.totalPlayers+' 생존';
     } else {
       hostDodgeKey=key;
       main.innerHTML='<div class="stage">'+
         '<div class="stagehead"><div class="g"><span class="em">'+em+'</span>'+esc(v.gameName)+'</div>'+
-          '<div class="headright">'+rp(g.round,g.total)+'<div class="clock" id="dgel">'+g.elapsed.toFixed(1)+'초</div></div></div>'+
-        '<div class="center" style="gap:14px">'+
-          '<div class="dgalive" id="dgalive"><b>'+g.living+'</b> / '+g.totalPlayers+' 생존</div>'+
-          '<div class="dgchips'+cols2(g.players.length)+'" id="dgchips">'+chips+'</div>'+
-        '</div></div>';
+          '<div class="headright"><span class="dgalive" id="dgalive"><b>'+g.living+'</b> / '+g.totalPlayers+' 생존</span>'+
+          rp(g.round,g.total)+'<div class="clock" id="dgel">0.0초</div></div></div>'+
+        '<div class="arenawrap"><canvas id="arena"></canvas></div></div>';
+      startArena();
     }
     nextBtn('라운드 종료 ▶');
   } else if (s==='dodge_result'){
-    hostDodgeKey=null;
+    hostDodgeKey=null; stopArena();
     const rows=(g.ranking||[]).map(r=>'<div class="rrow"><span class="medal">'+medal(r.rank)+'</span>'+esc(r.nick)+
       '<span class="ms">'+(r.survived?'🏆 끝까지 생존':r.sec+'초')+'</span><span class="pt">+'+r.pts+'</span></div>').join('')
       || '<div class="hint">참가자가 없어요</div>';
