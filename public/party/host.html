@@ -470,12 +470,38 @@ function startArena(){
         ctx.setLineDash([]);
       });
 
-      // 총알
-      ctx.fillStyle = '#a63d22';
+      // 총알 — 꼬리불꽃 달린 플라즈마 탄
       (st.bullets || []).forEach(b => {
+        const bx = ox + b.x * sc, by = oy + b.y * sc, br = st.br * sc;
+        const ang = (b.a == null ? 90 : b.a) * Math.PI / 180;
+        ctx.save();
+        ctx.translate(bx, by);
+        ctx.rotate(ang);                     // +x축이 진행 방향
+
+        // 꼬리 — 뒤로 길게 빠지는 반투명 불꽃
+        const tail = ctx.createLinearGradient(0, 0, -br * 4.5, 0);
+        tail.addColorStop(0, 'rgba(245,158,11,0.75)');
+        tail.addColorStop(1, 'rgba(245,158,11,0)');
+        ctx.fillStyle = tail;
         ctx.beginPath();
-        ctx.arc(ox + b.x * sc, oy + b.y * sc, st.br * sc, 0, 6.2832);
-        ctx.fill();
+        ctx.moveTo(0, -br * 0.75);
+        ctx.lineTo(-br * 4.5, 0);
+        ctx.lineTo(0, br * 0.75);
+        ctx.closePath(); ctx.fill();
+
+        // 바깥 열기
+        const glow = ctx.createRadialGradient(0, 0, br * 0.2, 0, 0, br * 1.9);
+        glow.addColorStop(0, 'rgba(166,61,34,0.55)');
+        glow.addColorStop(1, 'rgba(166,61,34,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(0, 0, br * 1.9, 0, 6.2832); ctx.fill();
+
+        // 탄심 — 진행 방향으로 살짝 늘린 타원 + 밝은 코어
+        ctx.fillStyle = '#a63d22';
+        ctx.beginPath(); ctx.ellipse(0, 0, br * 1.25, br * 0.92, 0, 0, 6.2832); ctx.fill();
+        ctx.fillStyle = '#f7c948';
+        ctx.beginPath(); ctx.arc(br * 0.22, -br * 0.14, br * 0.42, 0, 6.2832); ctx.fill();
+        ctx.restore();
       });
 
       // 우주선 + 닉네임 (기수는 진행 방향을 향한다)
@@ -502,31 +528,47 @@ function startArena(){
           ctx.closePath(); ctx.fill();
         }
 
-        // 선체 — 뾰족한 기수 + 양 날개 + 꼬리 홈
+        // 선체 — 길쭉한 기수 + 뒤로 젖힌 날개 + 깊은 꼬리 홈 (작아도 실루엣이 살도록)
         ctx.fillStyle = s.c || '#2c6255';
         ctx.strokeStyle = '#1f170e';
-        ctx.lineWidth = Math.max(1, r * 0.2);
+        ctx.lineWidth = Math.max(1, r * 0.18);
         ctx.beginPath();
-        ctx.moveTo(0, -r * 1.45);
-        ctx.lineTo(r * 1.05, r * 0.95);
-        ctx.lineTo(0, r * 0.45);
-        ctx.lineTo(-r * 1.05, r * 0.95);
+        ctx.moveTo(0, -r * 1.85);          // 기수
+        ctx.lineTo(r * 0.42, -r * 0.15);   // 몸통 오른쪽
+        ctx.lineTo(r * 1.15, r * 1.05);    // 오른 날개 끝
+        ctx.lineTo(0, r * 0.35);           // 꼬리 홈
+        ctx.lineTo(-r * 1.15, r * 1.05);   // 왼 날개 끝
+        ctx.lineTo(-r * 0.42, -r * 0.15);  // 몸통 왼쪽
         ctx.closePath();
         ctx.fill(); ctx.stroke();
 
         // 조종석
         ctx.fillStyle = '#ecdec0';
         ctx.beginPath();
-        ctx.arc(0, -r * 0.35, r * 0.34, 0, 6.2832);
+        ctx.arc(0, -r * 0.62, r * 0.3, 0, 6.2832);
         ctx.fill();
         ctx.restore();
 
-        // 닉네임
+        // 닉네임 — 우주선 색 명찰로 붙여 누가 누군지 멀리서도 보이게
         ctx.globalAlpha = s.d ? 0.4 : 1;
-        ctx.fillStyle = '#1f170e';
-        ctx.font = '800 ' + Math.round(r * 1.15) + 'px Pretendard, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(s.n, x, y - r * 2.0);
+        // 우주선이 작아도 TV 건너편에서 읽히되, 명찰이 기체보다 커 보이지 않게
+        const fs = Math.round(Math.max(r * 0.95, H * 0.030));
+        ctx.font = '800 ' + fs + 'px Pretendard, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const tw = ctx.measureText(s.n).width;
+        const pw = tw + fs * 0.6, ph = fs * 1.32, rad = ph * 0.35;
+        // 위쪽 공간이 없으면 아래에 붙인다
+        const above = (y - r * 2.2 - ph) > oy;
+        const ny = above ? y - r * 2.2 - ph / 2 : y + r * 2.2 + ph / 2;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x - pw / 2, ny - ph / 2, pw, ph, rad);
+        else ctx.rect(x - pw / 2, ny - ph / 2, pw, ph);
+        ctx.fillStyle = s.c || '#2c6255';
+        ctx.fill();
+        ctx.strokeStyle = '#1f170e'; ctx.lineWidth = Math.max(1, r * 0.14); ctx.stroke();
+        ctx.fillStyle = '#fdf6e6';
+        ctx.fillText(s.n, x, ny + fs * 0.06);
+        ctx.textBaseline = 'alphabetic';
         ctx.globalAlpha = 1;
       });
 
