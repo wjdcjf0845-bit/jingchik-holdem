@@ -426,9 +426,13 @@ function stopSong(){ try{ if(audioEl) audioEl.pause(); }catch(e){} }
 // ═══════════ 🚀 총알 피하기 — TV 아레나 렌더링 ═══════════
 // 서버가 30fps로 host:arena 를 보내면 그대로 그린다. (TV 한 대만 받는다)
 let arenaState = null, arenaRAF = null;
+const shipHeading = new Map();   // 닉네임 → 직전 위치·기수 방향 (진행 방향으로 회전시키기 위함)
 socket.on('host:arena', st => { arenaState = st; });
 
-function stopArena(){ if (arenaRAF){ cancelAnimationFrame(arenaRAF); arenaRAF = null; } arenaState = null; }
+function stopArena(){
+  if (arenaRAF){ cancelAnimationFrame(arenaRAF); arenaRAF = null; }
+  arenaState = null; shipHeading.clear();
+}
 
 function startArena(){
   const cv = document.getElementById('arena');
@@ -474,18 +478,55 @@ function startArena(){
         ctx.fill();
       });
 
-      // 우주선 + 닉네임
+      // 우주선 + 닉네임 (기수는 진행 방향을 향한다)
       (st.ships || []).forEach(s => {
         const x = ox + s.x * sc, y = oy + s.y * sc, r = st.sr * sc;
-        ctx.globalAlpha = s.d ? 0.25 : 1;
+        const prev = shipHeading.get(s.n) || { x: s.x, y: s.y, ang: -Math.PI / 2, spd: 0 };
+        const dx = s.x - prev.x, dy = s.y - prev.y;
+        const spd = Math.hypot(dx, dy);
+        const ang = spd > 0.12 ? Math.atan2(dy, dx) + Math.PI / 2 : prev.ang;  // 움직일 때만 방향 갱신
+        shipHeading.set(s.n, { x: s.x, y: s.y, ang, spd });
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(ang);
+        ctx.globalAlpha = s.d ? 0.28 : 1;
+
+        // 엔진 불꽃 (움직이는 동안만)
+        if (!s.d && spd > 0.2){
+          ctx.fillStyle = '#f59e0b';
+          ctx.beginPath();
+          ctx.moveTo(-r * 0.42, r * 0.95);
+          ctx.lineTo(0, r * (1.5 + Math.min(1.1, spd * 0.5)));
+          ctx.lineTo(r * 0.42, r * 0.95);
+          ctx.closePath(); ctx.fill();
+        }
+
+        // 선체 — 뾰족한 기수 + 양 날개 + 꼬리 홈
         ctx.fillStyle = s.c || '#2c6255';
-        ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill();
-        ctx.lineWidth = Math.max(1, r * 0.22); ctx.strokeStyle = '#1f170e'; ctx.stroke();
-        ctx.globalAlpha = s.d ? 0.35 : 1;
+        ctx.strokeStyle = '#1f170e';
+        ctx.lineWidth = Math.max(1, r * 0.2);
+        ctx.beginPath();
+        ctx.moveTo(0, -r * 1.45);
+        ctx.lineTo(r * 1.05, r * 0.95);
+        ctx.lineTo(0, r * 0.45);
+        ctx.lineTo(-r * 1.05, r * 0.95);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+
+        // 조종석
+        ctx.fillStyle = '#ecdec0';
+        ctx.beginPath();
+        ctx.arc(0, -r * 0.35, r * 0.34, 0, 6.2832);
+        ctx.fill();
+        ctx.restore();
+
+        // 닉네임
+        ctx.globalAlpha = s.d ? 0.4 : 1;
         ctx.fillStyle = '#1f170e';
         ctx.font = '800 ' + Math.round(r * 1.15) + 'px Pretendard, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(s.n, x, y - r * 1.5);
+        ctx.fillText(s.n, x, y - r * 2.0);
         ctx.globalAlpha = 1;
       });
 
