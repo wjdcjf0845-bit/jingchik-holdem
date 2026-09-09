@@ -35,6 +35,10 @@ const io = new Server(server);
 // 🩺 헬스체크 / 킵얼라이브 — UptimeRobot가 5분마다 가볍게 노크해 무료 인스턴스가 잠들지 않게 (271KB HTML 대신 "ok"만 응답)
 app.get('/healthz', (req, res) => res.status(200).send('ok'));
 
+// 🛗 승강설비 현장조회 — /manual 만 Basic 인증 (MANUAL_USER / MANUAL_PASS).
+//    환경변수 미설정 시 503으로 막히고 포커 게임(/)은 그대로 인증 없이 열린다.
+app.use('/manual', require('./manual'));
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─────────────────────────────────────────────
