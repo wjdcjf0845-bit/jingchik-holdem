@@ -1840,6 +1840,26 @@
         .chop-nick { font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .chop-chips { font-family: var(--font-num); color: var(--txt-dim); }
         .chop-won { font-family: var(--font-num); font-weight: 900; color: var(--verm); }
+        /* 14. 결과 모달 카드(토너먼트 우승·합의 종료·나가기 선택·MTT 순위)를 빈티지 종이 카드로 —
+               남색 카드·금색 발광·형광 초록 부제목·빨간 버튼이 테마 적용에서 빠져 있었다. */
+        #result-modal { background: rgba(34,29,21,0.55); }
+        #result-modal .result-pot-card {
+            background: var(--paper-hi); color: var(--ink);
+            border: 2px solid var(--ink); border-radius: 18px;
+            box-shadow: 6px 6px 0 rgba(200,80,31,0.9), 0 20px 44px rgba(34,29,21,0.35);
+            max-width: min(92vw, 420px); box-sizing: border-box;
+        }
+        #result-modal .rw-card { text-align: center; padding: 30px 26px; min-width: min(86vw, 320px); }
+        #result-modal .rw-trophy { filter: none; }
+        #result-modal .rw-name { background: none; -webkit-background-clip: border-box; background-clip: border-box; color: var(--ink); -webkit-text-fill-color: var(--ink); font-size: 30px; word-break: keep-all; }
+        #result-modal .rw-sub { color: var(--verm); word-break: keep-all; }
+        #result-modal .rw-chips { color: var(--txt-dim); word-break: keep-all; line-height: 1.5; }
+        #result-modal .btn-close-modal { background: var(--ink); color: var(--paper-hi); border: 2px solid var(--ink); box-shadow: 4px 4px 0 rgba(200,80,31,0.9); text-shadow: none; }
+        #result-modal .btn-close-modal:hover { filter: none; transform: translate(-1px, -1px); box-shadow: 5px 5px 0 rgba(200,80,31,0.9); }
+        #result-modal .rw-ranking { text-align: left; max-height: 240px; overflow-y: auto; margin: 12px 0 4px; display: flex; flex-direction: column; gap: 5px; }
+        #result-modal .rw-rank { display: flex; gap: 10px; padding: 6px 12px; border: 1.5px solid var(--ink); border-radius: 10px; background: var(--paper); font-size: 13px; }
+        #result-modal .rw-rank span:first-child { font-family: var(--font-num); font-weight: 900; color: var(--verm); min-width: 36px; }
+        #result-modal .rw-rank.me { background: var(--paper-hi); box-shadow: 2px 2px 0 rgba(200,80,31,0.85); font-weight: 900; }
 
         /* 🎲 런잇트와이스 — 로비 토글 + 결과창 런별 보드 */
         .rit-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--ink); font-weight: 700; }
@@ -3598,10 +3618,12 @@
         if (inner && modal) {
             const medal = d.place === 1 ? '🥇' : d.place === 2 ? '🥈' : d.place === 3 ? '🥉' : '💀';
             inner.innerHTML = `
-                <div style="font-size:48px; margin-bottom:6px;">${medal}</div>
-                <div style="font-size:26px; font-weight:900; color:var(--gold); margin-bottom:6px;">${d.place}위</div>
-                <div style="font-size:14px; color:var(--txt-dim); margin-bottom:18px;">총 ${d.total}명 참가 멀티테이블 토너먼트에서<br>${d.place}위로 마감했습니데이!</div>
-                <button class="btn-close-modal" onclick="mttBackToLobby()" style="width:100%;">🏛️ 로비로 돌아가기</button>`;
+                <div class="result-pot-card rw-card">
+                    <div class="rw-trophy">${medal}</div>
+                    <div class="rw-name">${d.place}위</div>
+                    <div class="rw-chips">총 ${d.total}명 참가 멀티테이블 토너먼트에서<br>${d.place}위로 마감했습니데이!</div>
+                    <button class="btn-close-modal" onclick="mttBackToLobby()" style="width:100%;">🏛️ 로비로 돌아가기</button>
+                </div>`;
             modal.classList.add('show');
         } else {
             showCenterMessage(`💀 ${d.place}위로 탈락! (총 ${d.total}명 중)`);
@@ -3611,16 +3633,19 @@
         const bar = document.getElementById('mtt-status-bar');
         if (bar) bar.style.display = 'none';
         const isMe = d.champion === myNickname;
-        let rankHtml = d.ranking.map(r => `<div style="padding:3px 0; ${r.nick===myNickname?'color:var(--gold);font-weight:900;':''}">${r.place}위 — ${esc(r.nick)}</div>`).join('');
+        let rankHtml = d.ranking.map(r => `<div class="rw-rank${r.nick === myNickname ? ' me' : ''}"><span>${r.place}위</span><span>${esc(r.nick)}</span></div>`).join('');
         // 결과 모달 + 로비 복귀 버튼
         const modal = document.getElementById('result-modal');
         const body = document.getElementById('result-inner');
         if (body) {
             body.innerHTML = `
-                <div style="font-size:22px; font-weight:900; margin-bottom:10px; color:${isMe?'var(--gold)':'#fff'};">${isMe ? '🎉 MTT 우승! 🎉' : `🏆 ${esc(d.champion)} 우승`}</div>
-                <div style="font-size:14px; color:var(--txt-dim); margin-bottom:12px;">${d.totalEntrants}명 참가 멀티테이블 토너먼트</div>
-                <div style="text-align:left; max-height:240px; overflow-y:auto; margin-bottom:16px;">${rankHtml}</div>
-                <button class="btn-close-modal" onclick="mttBackToLobby()" style="width:100%;">🏛️ 로비로 돌아가기</button>`;
+                <div class="result-pot-card rw-card">
+                    <div class="rw-trophy">${isMe ? '🎉' : '🏆'}</div>
+                    <div class="rw-name">${isMe ? 'MTT 우승!' : `${esc(d.champion)} 우승`}</div>
+                    <div class="rw-chips">${d.totalEntrants}명 참가 멀티테이블 토너먼트</div>
+                    <div class="rw-ranking">${rankHtml}</div>
+                    <button class="btn-close-modal" onclick="mttBackToLobby()" style="width:100%;">🏛️ 로비로 돌아가기</button>
+                </div>`;
             modal.classList.add('show');
         }
         myMtt = null;
