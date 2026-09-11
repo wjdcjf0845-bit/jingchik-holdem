@@ -1782,6 +1782,30 @@
         .pf-name { color: var(--ink) !important; }
         /* 7. 플레잉카드 하트/다이아 → 버밀리언 통일 */
         .card-red { color: var(--verm) !important; }
+        /* 8. 빈 커뮤니티 트레이(프리플랍)는 받침을 숨긴다 — 폭이 패딩만 남아 펠트 중앙에 검은 막대로 보임 */
+        .community-area:empty { background: transparent; border-color: transparent; box-shadow: none; }
+        /* 9. 한글 제목이 음절 중간에서 끊기지 않게 ("포지션 레/인지" → "포지션/레인지") */
+        .lrp-head { word-break: keep-all; }
+        /* 10. 짧은 데스크톱 화면(노트북+브라우저 창, 윈도우 125% 배율 등)에서 내 턴 콘솔이 잘리지 않게.
+               기본 레이아웃 세로 예산 779px = 상단바60 + 여백80 + 테이블330 + 여백82 + 콘솔(내 턴)227.
+               779 미만이면 여백부터 줄이고(80/82→40/42, ~699px), 다음에 테이블을 줄인다(330→280, ~649px;
+               더 줄이면 옆 좌석끼리 겹침). clamp 값이 779에서 기본값과 같아 경계에서 레이아웃이 튀지 않는다.
+               961px부터인 이유: 그 이하 가로모드는 flex-direction:row 인 별도 레이아웃. */
+        @media screen and (min-width: 961px) and (max-height: 778px) {
+            .poker-table { margin-top: clamp(40px, calc(50vh - 309.5px), 80px); height: clamp(280px, calc(100vh - 369px), 330px); }
+            .controls { margin-top: clamp(42px, calc(50vh - 307.5px), 82px); }
+        }
+        /* 그보다 더 짧으면 최후 안전망 — 버튼이 화면 밖으로 밀려 누를 수 없게 되는 것만은 막는다 */
+        @media screen and (min-width: 961px) and (max-height: 648px) {
+            #game-container { overflow-y: auto; }
+        }
+        /* 11. 테이블이 304px 밑으로 줄면(뷰포트 673px 미만) 양옆에 위아래로 쌓인 좌석(pos-1/2, pos-4/5)이
+               겹친다(실측: 296px 4px, 288px 10px, 280px 17px). 옆 좌석을 테이블 위/아래 가장자리 쪽으로
+               연속적으로 벌린다(8%→최소 2%). 673px에서 정확히 8%라 경계에서 좌석이 튀지 않는다. */
+        @media screen and (min-width: 961px) and (max-height: 672px) {
+            .pos-2, .pos-4 { top: max(2%, calc(8% - (673px - 100vh) * 0.9)); }
+            .pos-1, .pos-5 { bottom: max(2%, calc(8% - (673px - 100vh) * 0.9)); }
+        }
 
         /* 🎲 런잇트와이스 — 로비 토글 + 결과창 런별 보드 */
         .rit-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--ink); font-weight: 700; }
@@ -1949,7 +1973,7 @@
         <button id="btn-invite" onclick="copyInvite(this)">🔗 초대</button>
         <div id="hud-center">
             <div id="tournament-header" class="tournament-info" style="display:none;">
-                🏆 Lv.<span id="blind-level">1</span> · <span id="blind-amounts">50/100</span> · <span class="timer">⏱<span id="time-left">10:00</span></span>
+                <span class="th-lv">🏆 Lv.<span id="blind-level">1</span> · </span><span id="blind-amounts">50/100</span><span class="timer"> · ⏱<span id="time-left">10:00</span></span>
             </div>
             <div id="mtt-status-bar" class="tournament-info" style="display:none; background:linear-gradient(180deg,#5f4a2c,#2c1f0e); color:#ffd97a;">
                 🏆 MTT · 생존 <span id="mtt-alive">0</span>/<span id="mtt-total">0</span> · 테이블 <span id="mtt-tables">0</span>
@@ -2739,14 +2763,18 @@
             lastBB = data.tournamentInfo.bb || lastBB;
             document.getElementById('tournament-header').style.display = 'inline-block';
             const isCash = data.gameMode === 'cash';
+            const thLv = document.querySelector('#tournament-header .th-lv');
             if (isCash) {
-                document.getElementById('blind-level').innerText = '💵';
-                document.getElementById('blind-amounts').innerText = `${data.tournamentInfo.sb.toLocaleString()}/${data.tournamentInfo.bb.toLocaleString()} 캐시`;
+                // 캐시엔 레벨·블라인드 타이머가 없다 — "💵 50/100"만 남겨 모바일 좁은 칸에도 들어가게
+                if (thLv) thLv.style.display = 'none';
+                document.getElementById('blind-amounts').innerText = `💵 ${data.tournamentInfo.sb.toLocaleString()}/${data.tournamentInfo.bb.toLocaleString()}`;
                 document.querySelector('#tournament-header .timer').style.display = 'none';
             } else {
+                if (thLv) thLv.style.display = '';
                 document.querySelector('#tournament-header .timer').style.display = '';
                 document.getElementById('blind-level').innerText = data.tournamentInfo.level;
-                document.getElementById('blind-amounts').innerText = `${data.tournamentInfo.sb.toLocaleString()}/${data.tournamentInfo.bb.toLocaleString()} (Ante ${data.tournamentInfo.ante.toLocaleString()})`;
+                const ante = data.tournamentInfo.ante || 0;
+                document.getElementById('blind-amounts').innerText = `${data.tournamentInfo.sb.toLocaleString()}/${data.tournamentInfo.bb.toLocaleString()}` + (ante > 0 ? ` (Ante ${ante.toLocaleString()})` : '');
                 document.getElementById('time-left').innerText = `${String(Math.floor(data.timeRemaining/60)).padStart(2,'0')}:${String(data.timeRemaining%60).padStart(2,'0')}`;
             }
         } else {
@@ -4045,12 +4073,6 @@
     socket.on('missionsRefresh', missions => {
         if (_dailyData) { _dailyData.missions = missions; renderDaily(); updateDailyBadge(); }
     });
-    socket.on('bankrollUpdate', bk => {
-        // 뱅크롤 표시 갱신 (있으면)
-        const el = document.getElementById('lobby-bankroll');
-        if (el && typeof bk === 'number') el.innerText = bk.toLocaleString();
-    });
-
     // 📖 족보·규칙 도움말
     let _helpTab = 'ranks';
     function openHelp() {

@@ -1459,6 +1459,8 @@ class GameRoom {
     }
 
     startNextHand() {
+        // 방이 파기된 뒤 늦게 도착한 호출(결과창 8초 타이머 등)은 무시 — 죽은 방에서 딜·타이머가 다시 돌지 않게
+        if (!rooms.has(this.roomId)) return;
         this.stopTurnTimer();
 
 
@@ -3802,14 +3804,14 @@ io.on('connection', (socket) => {
         if (!socket.nickname) return;
         const res = await MockDB.checkIn(socket.nickname);
         if (res) socket.emit('checkInResult', res);
-        if (res && res.claimed) socket.emit('bankrollUpdate', res.bankroll);
+        if (res && res.claimed) socket.emit('bankrollUpdate', { bankroll: res.bankroll || 0 });
     });
     socket.on('claimMission', async (data) => {
         if (!socket.nickname || !data || !data.id) return;
         const res = await MockDB.claimMission(socket.nickname, data.id);
         socket.emit('missionResult', { id: data.id, ...res });
         if (res.ok) {
-            socket.emit('bankrollUpdate', res.bankroll);
+            socket.emit('bankrollUpdate', { bankroll: res.bankroll || 0 });
             const missions = await MockDB.getMissions(socket.nickname);
             socket.emit('missionsRefresh', missions);
         }
