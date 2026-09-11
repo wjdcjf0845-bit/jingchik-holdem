@@ -27,6 +27,8 @@ const HandRead = require('./lib/handread'); // 🔍 상대 레인지 추정 (핸
 const Defense = require('./lib/defense'); // 🛡️ 벳 직면 시 콜 문턱 (임플라이드 오즈 + 상대 익스플로잇)
 const Blockers = require('./lib/blockers'); // 🃏 블로커 기반 블러프 선택 (넛 차단 시 블러프 ↑)
 const Showdown = require('./lib/showdown'); // 💰 쇼다운 팟 분배 파이프라인 (돈 로직 — 시나리오 테스트로 방어)
+const { chipChop } = require('./lib/chop'); // 🤝 토너먼트 합의 종료 칩 찹 분배 (돈 로직 — 보존성 테스트로 방어)
+const END_VOTE_MS = 30000; // 🗳️ 합의 종료 투표 제한시간
 
 const app = express();
 const server = http.createServer(app);
@@ -766,6 +768,8 @@ class GameRoom {
                     turnRaiseLocked: (() => { const tn = this.turnIndex !== -1 ? this.playerOrder[this.turnIndex] : null; return !!(tn && this.players[tn] && this.players[tn].hasActed); })(),
                     tournamentInfo: (this.tournamentStarted || this.mode === 'cash') ? this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)] : null,
                     gameMode: this.mode,
+                    canEndVote: this.endVoteEligible(), // 🗳️ 합의 종료 투표 가능 여부 (나가기 메뉴 노출용)
+                    endVote: this.endVoteSnapshot(),
                     timeRemaining: this.timeRemaining,
                     turnEndTime: this.turnEndTime,
                     turnTimeLimit: this.turnTimeLimit, // 💡 [수정 #4] 클라이언트 타임바 동기화용
@@ -1432,6 +1436,7 @@ class GameRoom {
 
     stopAllTimers() {
         this.stopTurnTimer();
+        this.clearEndVote();
         if (this.tournamentTimer) clearInterval(this.tournamentTimer);
         if (this.pendingStageTimeout) clearTimeout(this.pendingStageTimeout);
         if (this._autoResumeTimer) clearTimeout(this._autoResumeTimer);
@@ -1461,6 +1466,8 @@ class GameRoom {
     startNextHand() {
         // 방이 파기된 뒤 늦게 도착한 호출(결과창 8초 타이머 등)은 무시 — 죽은 방에서 딜·타이머가 다시 돌지 않게
         if (!rooms.has(this.roomId)) return;
+        // 🗳️ 합의 종료가 확정됐으면 새 핸드 대신 정산 — 직전 핸드의 팟이 칩으로 정리된 뒤라 정확
+        if (this._endAgreed) { this.settleAgreedEnd(); return; }
         this.stopTurnTimer();
 
 
@@ -1628,24 +1635,7 @@ class GameRoom {
                 });
                 io.to(this.roomId).emit('gameMessage', `🏆 토너먼트 우승: ${winner} (${this.players[winner].chips.toLocaleString()} 칩)`);
 
-                Object.keys(this.players).forEach(nick => {
-                    this.players[nick].chips = this.startingChips;
-                    this.players[nick].currentBet = 0;
-                    this.players[nick].totalInvested = 0;
-                    this.players[nick].isFolded = false;
-                    this.players[nick].isAllIn = false;
-                    this.players[nick].isMucked = false;
-                    this.players[nick].hasActed = false;
-                    this.players[nick].hand = [];
-                    this.players[nick].role = '';
-                    this.players[nick].isSpectator = false;
-                });
-
-                this.pot = 0;
-                this.communityCards = [];
-                this.playerOrder = Object.keys(this.players).filter(nick => !this.players[nick].isDisconnected);
-
-                this.sendState();
+                this.resetForNewTournament();
                 return;
             } else {
                 this.gameStage = 0;
@@ -1903,6 +1893,9 @@ class GameRoom {
 
     // 💡 [신규] 사람·봇 공유 액션 적용 — 검증 통과 시 베팅 반영 후 nextTurn
     applyAction(nick, type, amount) {
+        // 베팅은 스트리트(1~4) 진행 중에만. 쇼다운 뒤(5)·대기(0)에 들어온 액션을 받으면
+        // 이미 지급이 끝난 팟에 칩이 들어가 다음 핸드 초기화 때 통째로 사라진다.
+        if (this.gameStage < 1 || this.gameStage > 4) return false;
         if (this.playerOrder[this.turnIndex] !== nick) return false;
         if (!['fold', 'check', 'call', 'raise', 'allin'].includes(type)) return false;
 
@@ -2079,6 +2072,7 @@ class GameRoom {
 
     evaluateWinner() {
         this.stopTurnTimer();
+        this.turnIndex = -1; // 핸드 종료 — 결과창 동안 "내 턴" 표시·봇 행동이 이어지지 않게
         const active = this.playerOrder.filter(n => !this.players[n].isFolded);
         if (active.length === 1) { this.handleWin(active[0]); return; }
 
@@ -2207,6 +2201,140 @@ class GameRoom {
         setTimeout(() => {
             this.startNextHand();
         }, 8000);
+    }
+
+    // ═══ 🗳️ 합의 종료 투표 ═══════════════════════════════════════════
+    //  모두 동의하면 토너먼트를 도중에 끝내고 상금풀을 칩 비율대로 나눈다(lib/chop.js).
+    //  대상: 단일 테이블 토너먼트 진행 중 — MTT(매니저가 우승 처리)·캐시(원래 자유 퇴장)·학습모드 제외.
+    endVoteEligible() {
+        return this.mode === 'tournament' && this.tournamentStarted && !this._mtt && !this._mttFreeChips && !this._learnMode;
+    }
+
+    // 투표자: 칩이 남아 있고 접속 중인 사람. 봇은 투표하지 않는다.
+    //  playerOrder엔 방금 끝난 핸드에서 탈락한 사람(칩 0)이 다음 핸드 전까지 남아 있으므로 칩으로 거른다.
+    //  단, 핸드 진행 중(1~4) 올인한 사람은 칩이 0이어도 팟에 몫이 걸려 있어 투표권이 있다.
+    endVoteVoters() {
+        const live = this.gameStage >= 1 && this.gameStage <= 4;
+        return this.playerOrder.filter(n => {
+            const p = this.players[n];
+            if (!p || p.isBot || p.isDisconnected) return false;
+            return p.chips > 0 || (live && p.isAllIn && !p.isFolded);
+        });
+    }
+
+    endVoteSnapshot() {
+        const v = this._endVote;
+        if (!v) return { active: false };
+        return { active: true, proposer: v.proposer, voters: [...v.voters], yes: [...v.yes], deadline: v.deadline };
+    }
+
+    clearEndVote() {
+        if (this._endVote && this._endVote.timer) clearTimeout(this._endVote.timer);
+        this._endVote = null;
+    }
+
+    proposeEndVote(nick) {
+        const me = this.players[nick];
+        const tell = msg => { if (me && me.socketId) io.to(me.socketId).emit('gameMessage', msg); };
+        if (!this.endVoteEligible()) return tell('🗳️ 진행 중인 토너먼트에서만 종료 투표를 할 수 있습니데이.');
+        if (this._endAgreed) return tell('🗳️ 이미 종료가 합의됐습니데이. 곧 정산합니데이.');
+        if (this._endVote) return tell('🗳️ 이미 종료 투표가 진행 중입니데이.');
+        const voters = this.endVoteVoters();
+        if (!voters.includes(nick)) return tell('🗳️ 칩이 남아 있는 참가자만 제안할 수 있습니데이.');
+        if (Date.now() < (this._endVoteCooldownUntil || 0)) return tell('🗳️ 방금 부결됐습니데이. 잠시 후 다시 제안해 주이소.');
+
+        this._endVote = { proposer: nick, voters: new Set(voters), yes: new Set([nick]), deadline: Date.now() + END_VOTE_MS, timer: null };
+        this._endVote.timer = setTimeout(() => this.finishEndVote(false, '시간 초과'), END_VOTE_MS);
+        io.to(this.roomId).emit('gameMessage', `🗳️ ${nick} 님이 토너먼트를 지금 끝내자고 제안했습니데이 (칩 비율대로 상금 분배).`);
+        this.checkEndVote();
+    }
+
+    castEndVote(nick, agree) {
+        const v = this._endVote;
+        if (!v || !v.voters.has(nick) || v.yes.has(nick)) return;
+        if (!agree) return this.finishEndVote(false, `${nick} 님 반대`);
+        v.yes.add(nick);
+        this.checkEndVote();
+    }
+
+    checkEndVote() {
+        const v = this._endVote;
+        if (!v) return;
+        if (v.yes.size >= v.voters.size) return this.finishEndVote(true);
+        io.to(this.roomId).emit('endVote', this.endVoteSnapshot());
+    }
+
+    finishEndVote(passed, reason) {
+        if (!this._endVote) return;
+        this.clearEndVote();
+        io.to(this.roomId).emit('endVote', { active: false });
+        if (!passed) {
+            this._endVoteCooldownUntil = Date.now() + 15000;
+            io.to(this.roomId).emit('gameMessage', `🗳️ 종료 투표 부결 (${reason}) — 토너먼트를 계속합니데이.`);
+            return;
+        }
+        this._endAgreed = true;
+        if (this.gameStage >= 1 && this.gameStage <= 4) {
+            io.to(this.roomId).emit('gameMessage', '🤝 전원 동의! 이번 핸드가 끝나면 칩 비율대로 정산하고 토너먼트를 마칩니데이.');
+        } else {
+            io.to(this.roomId).emit('gameMessage', '🤝 전원 동의! 칩 비율대로 정산합니데이.');
+            // 결과창(5)이면 대기 중인 다음 핸드 타이머가 startNextHand에서 정산한다. 대기(0)면 지금.
+            if (this.gameStage === 0) this.settleAgreedEnd();
+        }
+    }
+
+    settleAgreedEnd() {
+        this._endAgreed = false;
+        this.clearEndVote();
+        this.stopTurnTimer();
+        if (this.pendingStageTimeout) clearTimeout(this.pendingStageTimeout);
+        this.gameStage = 0;
+        this.tournamentStarted = false;
+        if (this.tournamentTimer) clearInterval(this.tournamentTimer);
+
+        const stacks = Object.keys(this.players).map(n => ({ nick: n, chips: this.players[n].chips || 0, isBot: !!this.players[n].isBot }));
+        const tableChips = stacks.reduce((s, x) => s + Math.max(0, x.chips), 0);
+        const pool = this.prizePool || tableChips;
+        const rows = chipChop(pool, stacks);
+        rows.forEach(r => {
+            if (r.isBot || r.share <= 0) return; // 봇 몫은 소멸 — 봇 우승 시 상금 소멸과 같은 규칙
+            MockDB.adjustBankroll(r.nick, r.share).then(nb => {
+                const sock = this.players[r.nick] && this.players[r.nick].socketId;
+                if (sock) io.to(sock).emit('bankrollUpdate', { bankroll: nb || 0 });
+            });
+        });
+        this.prizePool = 0;
+
+        io.to(this.roomId).emit('tournamentEnd', { chop: true, pool, payouts: rows });
+        const paid = rows.filter(r => !r.isBot).map(r => `${r.nick} +${r.share.toLocaleString()}`).join(', ');
+        io.to(this.roomId).emit('gameMessage', `🤝 합의 종료 — 상금풀 ${pool.toLocaleString()} 칩 분배: ${paid || '사람 참가자 없음'}`);
+        this.resetForNewTournament();
+    }
+
+    // 토너먼트가 끝난 뒤 테이블 초기화 — 다음 토너먼트 준비 (정상 우승·합의 종료 공통)
+    resetForNewTournament() {
+        this.turnIndex = -1;
+        if (this._endVote) io.to(this.roomId).emit('endVote', { active: false });
+        this.clearEndVote();
+        this._endAgreed = false;
+        Object.keys(this.players).forEach(nick => {
+            this.players[nick].chips = this.startingChips;
+            this.players[nick].currentBet = 0;
+            this.players[nick].totalInvested = 0;
+            this.players[nick].isFolded = false;
+            this.players[nick].isAllIn = false;
+            this.players[nick].isMucked = false;
+            this.players[nick].hasActed = false;
+            this.players[nick].hand = [];
+            this.players[nick].role = '';
+            this.players[nick].isSpectator = false;
+        });
+
+        this.pot = 0;
+        this.communityCards = [];
+        this.playerOrder = Object.keys(this.players).filter(nick => !this.players[nick].isDisconnected);
+
+        this.sendState();
     }
 
     // 💡 [신규] 리바이 — 블라인드 레벨 2(인덱스 1)까지, 방 설정 횟수만큼 재구매 허용
@@ -2645,6 +2773,7 @@ class GameRoom {
 
     handleWin(winnerId) {
         this.stopTurnTimer();
+        this.turnIndex = -1; // 핸드 종료 — 결과창 동안 "내 턴" 표시·봇 행동이 이어지지 않게
         const winner = this.players[winnerId];
 
         let secondHighestBet = 0;
@@ -3523,6 +3652,16 @@ io.on('connection', (socket) => {
         room.sendState();
         room._cashStarted = true;
         setTimeout(() => { if (rooms.has(roomId)) room.startNextHand(); }, 1200);
+    });
+
+    // 🗳️ 토너먼트 합의 종료 투표 — 제안 / 찬반 (투표자 자격은 방에서 검증)
+    socket.on('proposeEndVote', () => {
+        const room = rooms.get(socket.currentRoom);
+        if (room && socket.nickname && room.players[socket.nickname]) room.proposeEndVote(socket.nickname);
+    });
+    socket.on('castEndVote', (data) => {
+        const room = rooms.get(socket.currentRoom);
+        if (room && socket.nickname) room.castEndVote(socket.nickname, !!(data && data.agree));
     });
 
     socket.on('startFirstHand', async () => {

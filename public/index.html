@@ -1806,6 +1806,40 @@
             .pos-2, .pos-4 { top: max(2%, calc(8% - (673px - 100vh) * 0.9)); }
             .pos-1, .pos-5 { bottom: max(2%, calc(8% - (673px - 100vh) * 0.9)); }
         }
+        /* 12. 📱 모바일: 상단바 가운데 칸(~70px)엔 토너먼트 정보(레벨·블라인드·타이머, 100px+)가 들어가지 않아
+               잘려 보였다 → 모바일에선 팟 아래 펠트에 표시하고 상단바 라벨은 숨긴다. */
+        .felt-blinds { display: none; }
+        @media screen and (max-width: 900px) {
+            #tournament-header { display: none !important; }
+            .felt-blinds:not(:empty) {
+                display: table; margin: 6px auto 0; padding: 3px 12px; border-radius: 999px;
+                background: rgba(247,240,224,0.94); border: 1.5px solid var(--ink); color: var(--ink);
+                font-family: var(--font-num); font-size: 11px; font-weight: 700; letter-spacing: 0.3px; white-space: nowrap;
+            }
+        }
+        /* 13. 🗳️ 합의 종료 투표 바 · 나가기 선택지 · 분배표 */
+        .end-vote-bar { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); z-index: 3500; width: min(92vw, 420px); box-sizing: border-box; padding: 10px 14px; text-align: center; background: var(--paper-hi); color: var(--ink); border: 2px solid var(--ink); border-radius: 14px; box-shadow: 4px 4px 0 rgba(200,80,31,0.85); }
+        .end-vote-bar[hidden] { display: none; }
+        .end-vote-bar .ev-title { font-weight: 900; font-size: 14px; word-break: keep-all; }
+        .end-vote-bar .ev-sub { font-size: 12px; color: var(--txt-dim); margin-top: 3px; word-break: keep-all; }
+        .end-vote-bar .ev-actions { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
+        .end-vote-bar button { padding: 7px 20px; border-radius: 10px; border: 2px solid var(--ink); font-weight: 900; font-size: 14px; cursor: pointer; }
+        .end-vote-bar .ev-yes { background: var(--ink); color: var(--paper-hi); }
+        .end-vote-bar .ev-no { background: var(--paper); color: var(--ink); }
+        .leave-card { text-align: center; padding: 28px 24px !important; max-width: 380px; }
+        .leave-card .rw-sub { font-size: 18px; }
+        .leave-choice { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
+        .leave-choice button { padding: 12px 16px; border-radius: 12px; border: 2px solid var(--ink); background: var(--paper); color: var(--ink); font-weight: 900; font-size: 14px; cursor: pointer; }
+        .leave-choice button small { display: block; margin-top: 3px; font-size: 11px; font-weight: 600; opacity: 0.8; word-break: keep-all; }
+        .leave-choice .lc-vote { background: var(--ink); color: var(--paper-hi); box-shadow: 3px 3px 0 rgba(200,80,31,0.85); }
+        .leave-choice .lc-quit { color: var(--verm); }
+        .chop-note { font-size: 12px; color: var(--txt-dim); margin: 6px 0 12px; word-break: keep-all; }
+        .chop-list { display: flex; flex-direction: column; gap: 6px; text-align: left; }
+        .chop-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 8px 12px; border: 1.5px solid var(--ink); border-radius: 10px; background: var(--paper); font-size: 13px; }
+        .chop-row.me { background: var(--paper-hi); box-shadow: 2px 2px 0 rgba(200,80,31,0.85); }
+        .chop-nick { font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .chop-chips { font-family: var(--font-num); color: var(--txt-dim); }
+        .chop-won { font-family: var(--font-num); font-weight: 900; color: var(--verm); }
 
         /* 🎲 런잇트와이스 — 로비 토글 + 결과창 런별 보드 */
         .rit-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--ink); font-weight: 700; }
@@ -1994,11 +2028,13 @@
     </div>
 
     <div id="center-message"></div>
+    <div id="end-vote-bar" class="end-vote-bar" hidden></div>
 
     <div class="poker-table">
         <div>
             <div class="pot-area"><span class="pot-chip"></span><span class="pot-label">POT</span><span id="pot-amount">0</span></div>
             <div id="sidepot-area"></div>
+            <div id="felt-blinds" class="felt-blinds"></div>
         </div>
         <div id="community-area" class="community-area"></div>
         <div id="players-area" class="players-area"></div>
@@ -2422,6 +2458,8 @@
 
     // 💡 [수정 #9] 방 나가기 → 로비 복귀
     function requestLeave() {
+        // 🗳️ 진행 중인 토너먼트면 바로 나가는 대신 선택지(합의 종료 투표 / 계속 / 기권)
+        if (window._canEndVote) { openLeaveChoice(); return; }
         const isCash = (window._lastGameMode === 'cash');
         const inHand = (window._lastGameStage > 0 && window._lastGameStage < 5);
         let msg = '방을 나가고 로비로 돌아가겠습니까?';
@@ -2431,8 +2469,93 @@
         }
     }
 
+    // ═══ 🗳️ 토너먼트 합의 종료 투표 + 📱 모바일 펠트 블라인드 표시 ═══
+    function fmtClock(t) { return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; }
+    function renderFeltBlinds(data) {
+        const ti = data.tournamentInfo;
+        window._feltInfo = ti ? { isCash: data.gameMode === 'cash', level: ti.level, sb: ti.sb, bb: ti.bb, ante: ti.ante || 0, time: data.timeRemaining || 0 } : null;
+        paintFeltBlinds();
+    }
+    function paintFeltBlinds() {
+        const el = document.getElementById('felt-blinds');
+        if (!el) return;
+        const f = window._feltInfo;
+        if (!f) { el.textContent = ''; return; }
+        el.textContent = f.isCash
+            ? `💵 블라인드 ${f.sb.toLocaleString()}/${f.bb.toLocaleString()}`
+            : `🏆 Lv.${f.level} · ${f.sb.toLocaleString()}/${f.bb.toLocaleString()}${f.ante > 0 ? ` · 앤티 ${f.ante.toLocaleString()}` : ''} · ⏱ ${fmtClock(f.time)}`;
+    }
+
+    let _endVoteSig = '', _endVoteTick = null;
+    function renderEndVote(v) {
+        const bar = document.getElementById('end-vote-bar');
+        if (!bar) return;
+        if (!v || !v.active) {
+            bar.hidden = true; _endVoteSig = '';
+            if (_endVoteTick) { clearInterval(_endVoteTick); _endVoteTick = null; }
+            return;
+        }
+        window._endVote = v;
+        // 상태가 바뀔 때만 다시 그린다 — 테이블 갱신마다 버튼을 새로 만들면 누르는 순간 사라질 수 있다
+        const sig = JSON.stringify([v.proposer, v.voters, v.yes, v.deadline]);
+        if (sig !== _endVoteSig) {
+            _endVoteSig = sig;
+            const iVote = v.voters.includes(myNickname), agreed = v.yes.includes(myNickname);
+            bar.innerHTML = `<div class="ev-title">🗳️ ${esc(v.proposer)} 님이 토너먼트를 지금 끝내자고 합니데이</div>`
+                + `<div class="ev-sub">칩 비율대로 상금 분배 · 동의 ${v.yes.length}/${v.voters.length} · <span class="ev-sec"></span>초</div>`
+                + (iVote && !agreed
+                    ? `<div class="ev-actions"><button class="ev-yes" onclick="voteEnd(true)">찬성</button><button class="ev-no" onclick="voteEnd(false)">반대</button></div>`
+                    : `<div class="ev-sub">${agreed ? '✅ 찬성했습니데이 — 다른 참가자를 기다리는 중' : '투표권 없음 (관전·탈락)'}</div>`);
+            bar.hidden = false;
+        }
+        const paintSec = () => {
+            const s = bar.querySelector('.ev-sec');
+            if (s && window._endVote) s.textContent = Math.max(0, Math.ceil((window._endVote.deadline - Date.now()) / 1000));
+        };
+        paintSec();
+        if (!_endVoteTick) _endVoteTick = setInterval(paintSec, 500);
+    }
+    socket.on('endVote', renderEndVote);
+    function voteEnd(agree) { socket.emit('castEndVote', { agree }); }
+    function proposeEndVote() { hideResultModal(); socket.emit('proposeEndVote'); }
+    function hideResultModal() { document.getElementById('result-modal').classList.remove('show'); }
+
+    function openLeaveChoice() {
+        document.getElementById('result-inner').innerHTML = `
+            <div class="result-pot-card leave-card">
+                <div class="rw-sub">토너먼트 진행 중입니데이</div>
+                <div class="leave-choice">
+                    <button class="lc-vote" onclick="proposeEndVote()">🗳️ 모두 동의로 끝내기<small>전원 찬성하면 지금 칩 비율대로 상금을 나눕니데이</small></button>
+                    <button onclick="hideResultModal()">계속하기</button>
+                    <button class="lc-quit" onclick="hideResultModal(); socket.emit('leaveRoom');">나가기 (기권)</button>
+                </div>
+            </div>`;
+        document.getElementById('result-modal').classList.add('show');
+    }
+
+    function showChopResult(d) {
+        const rows = (d.payouts || []).slice().sort((a, b) => b.chips - a.chips);
+        const list = rows.map(r => `<div class="chop-row${r.nick === myNickname ? ' me' : ''}">`
+            + `<span class="chop-nick">${esc(r.nick)}</span>`
+            + `<span class="chop-chips">${r.chips.toLocaleString()} 칩</span>`
+            + `<span class="chop-won">${r.isBot ? '봇 · 소멸' : '+' + r.share.toLocaleString()}</span></div>`).join('');
+        document.getElementById('result-inner').innerHTML = `
+            <div class="result-pot-card leave-card">
+                <div class="rw-trophy">🤝</div>
+                <div class="rw-sub">합의 종료</div>
+                <div class="chop-note">상금풀 ${Number(d.pool || 0).toLocaleString()} 칩을 칩 비율대로 나눴습니데이</div>
+                <div class="chop-list">${list}</div>
+                <div class="result-close-bar" style="margin-top:18px;">
+                    <button class="btn-close-modal" onclick="hideResultModal()">테이블에 남아 새 토너먼트 준비하기</button>
+                </div>
+            </div>`;
+        document.getElementById('result-modal').classList.add('show');
+    }
+
     socket.on('leftRoom', () => {
         currentRoomId = null;
+        renderEndVote(null);
+        window._canEndVote = false;
         _learnMode = false;
         document.body.classList.remove('learn-mode');
         _lrpMyCode = null;
@@ -2708,6 +2831,9 @@
     socket.on('updateTable', (data) => {
         window._lastGameMode = data.gameMode;
         window._lastGameStage = data.gameStage;
+        window._canEndVote = !!data.canEndVote;
+        renderFeltBlinds(data);
+        renderEndVote(data.endVote);
         if (data.handId !== lastHandId) {
             playedAnimations.clear();
             pendingBest5 = null;
@@ -2985,6 +3111,7 @@
     });
 
     socket.on('tournamentEnd', data => {
+        if (data && data.chop) { showChopResult(data); return; } // 🤝 합의 종료 — 우승자 대신 분배표
         confetti({ particleCount: 200, spread: 100, origin: { y: 0.5 }, zIndex: 4000 });
 
         const modal = document.getElementById('result-modal');
@@ -3005,6 +3132,7 @@
     socket.on('updateTimer', t => {
         const el = document.getElementById('time-left');
         if (el) el.innerText = `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+        if (window._feltInfo) { window._feltInfo.time = t; paintFeltBlinds(); }
     });
     socket.on('updateTurnTimer', endTime => { serverTurnEndTime = endTime; });
 
