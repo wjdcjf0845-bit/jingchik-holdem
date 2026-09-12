@@ -30,6 +30,8 @@ const Showdown = require('./lib/showdown'); // 💰 쇼다운 팟 분배 파이�
 const { chipChop } = require('./lib/chop'); // 🤝 토너먼트 합의 종료 칩 찹 분배 (돈 로직 — 보존성 테스트로 방어)
 const Postflop = require('./lib/postflop'); // 🎯 레인지 기반 포스트플랍 전략 (C벳·MDF·블러프캐치·SPR)
 const RangeEq = require('./lib/rangeeq'); // 🎯 "벳하는 상대의 레인지" 대비 내 핸드 강도
+const SHOWDOWN_REVEAL_MS = 3000; // 🃏 올인 쇼다운 — 카드 한 장을 보고 나서 다음 장까지의 간격
+const MUCK_CHOICE_MS = 6000;     // 🃏 진 사람이 패를 공개할지 정하는 시간
 const END_VOTE_MS = 30000; // 🗳️ 합의 종료 투표 제한시간
 
 const app = express();
@@ -1310,6 +1312,41 @@ class GameRoom {
         return { type: 'call' };
     }
 
+    // 🃏 쇼다운 공개 순서 (정식 규칙).
+    //    마지막 스트리트에 벳/레이즈가 있었으면 그 마지막 공격자가 먼저 깐다.
+    //    없었으면(체크로 끝났으면) 딜러 다음 자리의 생존자부터. 이후 시계방향.
+    showdownOrder() {
+        const n = this.playerOrder.length;
+        if (n === 0) return [];
+        const live = this.playerOrder.filter(x => this.players[x] && !this.players[x].isFolded);
+        if (live.length === 0) return [];
+        const liveSet = new Set(live);
+
+        let startIdx = -1;
+        const log = this.actionLog || [];
+        for (let i = log.length - 1; i >= 0; i--) {
+            const a = log[i];
+            if (a && (a.type === 'raise' || a.type === 'allin') && liveSet.has(a.nick)) {
+                startIdx = this.playerOrder.indexOf(a.nick);
+                break;
+            }
+        }
+        if (startIdx < 0) {
+            for (let i = 0; i < n; i++) {
+                const idx = (this.dealerIndex + 1 + i) % n;
+                if (liveSet.has(this.playerOrder[idx])) { startIdx = idx; break; }
+            }
+        }
+        if (startIdx < 0) startIdx = 0;
+
+        const order = [];
+        for (let i = 0; i < n; i++) {
+            const nick = this.playerOrder[(startIdx + i) % n];
+            if (liveSet.has(nick)) order.push(nick);
+        }
+        return order;
+    }
+
     // 🎯 [벳 레인지 대비 강도] 상대가 벳을 했다면 아무 패나 들고 있는 게 아니다.
     //    이 보드에서 벳할 만한 패(상위 N%)만 상대로 내 핸드가 몇 %를 이기는지 센다.
     //    몬테카를로(랜덤 상대 가정)는 7-8-2 보드의 AK 하이를 52.7%로 평가한다 — 그래서
@@ -2111,8 +2148,9 @@ class GameRoom {
         } else {
             if (this.pendingStageTimeout) clearTimeout(this.pendingStageTimeout);
             this.emitEquity();
-            // 🃏 올인 성립 → 홀카드 먼저 공개, 2초 뒤 플랍부터 런아웃 시작
-            this.pendingStageTimeout = setTimeout(() => this.nextStage(), 2000);
+            // 🃏 올인 성립 → 홀카드와 승률을 먼저 보여주고, 3초 뒤에 플랍을 깐다
+            //    (예전엔 카드가 곧바로 깔려서 홀카드를 확인할 틈이 없었다)
+            this.pendingStageTimeout = setTimeout(() => this.nextStage(), SHOWDOWN_REVEAL_MS);
         }
     }
 
@@ -2150,8 +2188,8 @@ class GameRoom {
             this.sendState();
             this.emitEquity();
             if (this.pendingStageTimeout) clearTimeout(this.pendingStageTimeout);
-            // 🃏 [#2] 올인 쇼다운 런아웃 — 다음 카드 오픈을 3초 간격으로 (긴장감)
-            this.pendingStageTimeout = setTimeout(() => this.nextStage(), 3000);
+            // 🃏 올인 쇼다운 런아웃 — 방금 깔린 카드를 보고 나서 다음 장까지 3초
+            this.pendingStageTimeout = setTimeout(() => this.nextStage(), SHOWDOWN_REVEAL_MS);
             return;
         }
 
@@ -2359,18 +2397,34 @@ class GameRoom {
         const allMatched = active.every(n => this.players[n].currentBet === this.currentHighestBet || this.players[n].isAllIn);
         const allActed = actioners.every(n => this.players[n].hasActed);
 
-        if (allMatched && allActed) { this.nextStage(); return; }
+        if (allMatched && allActed) {
+            // 🃏 [쇼다운 연출] 더 이상 벳할 사람이 없으면(= 올인 승부 확정) 곧바로 카드를 깔지 않는다.
+            //    홀카드와 승률을 먼저 띄우고 3초 뒤에 다음 카드를 깐다.
+            //    (예전엔 마지막 콜과 동시에 플랍이 떠서 상대 패를 확인할 틈이 없었다 — 실측)
+            if (actioners.length <= 1 && active.length >= 2 && this.gameStage >= 1 && this.gameStage <= 3) {
+                this.turnIndex = -1;
+                this.sendState();
+                this.emitEquity();
+                if (this.pendingStageTimeout) clearTimeout(this.pendingStageTimeout);
+                this.pendingStageTimeout = setTimeout(() => this.nextStage(), SHOWDOWN_REVEAL_MS);
+                return;
+            }
+            this.nextStage();
+            return;
+        }
 
         if (actioners.length > 0) {
             const nextIdx = this.findNextActiveIndex(this.turnIndex + 1);
             if (nextIdx === -1) { this.nextStage(); return; }
             this.turnIndex = nextIdx;
         } else {
+            // 더 이상 벳할 사람이 없다 = 올인 쇼다운. 홀카드가 공개되는 순간이므로
+            // 다음 카드를 깔기 전에 3초를 준다 (승률 배지를 보고 상황을 파악할 시간).
             this.turnIndex = -1;
             this.sendState();
-            if (this.pendingStageTimeout) clearTimeout(this.pendingStageTimeout);
-            this.pendingStageTimeout = setTimeout(() => this.nextStage(), 1800);
             this.emitEquity();
+            if (this.pendingStageTimeout) clearTimeout(this.pendingStageTimeout);
+            this.pendingStageTimeout = setTimeout(() => this.nextStage(), SHOWDOWN_REVEAL_MS);
             return;
         }
 
@@ -2443,9 +2497,24 @@ class GameRoom {
             messages.push(`💰 ${label} ${res.amount.toLocaleString()} 칩${boardStr}\n${winnerStrs.join('\n')}`);
         }
 
+        // 🃏 [공개 규칙] 먼저 까는 사람(앞순서)과 팟을 먹은 사람은 무조건 공개한다.
+        //    그 뒤 순서에서 진 사람만 "공개할지 머크할지" 고를 수 있다 (정식 규칙).
+        //    봇과 연결이 끊긴 사람은 기본값인 머크로 둔다.
+        const _order = this.showdownOrder();
+        const _firstShower = _order[0] || null;
+        this._muckDeadline = Date.now() + MUCK_CHOICE_MS;
         this.playerOrder.forEach(nick => {
-            if (!allWinnerIds.has(nick)) {
-                this.players[nick].isMucked = true;
+            const pl = this.players[nick];
+            if (!pl || pl.isFolded) return;
+            pl._muckChoice = false;
+            if (allWinnerIds.has(nick) || nick === _firstShower) {
+                pl.isMucked = false; // 앞순서·승자는 무조건 공개
+                return;
+            }
+            pl.isMucked = true;      // 기본은 머크
+            if (!pl.isBot && !pl.isDisconnected && pl.socketId) {
+                pl._muckChoice = true;
+                io.to(pl.socketId).emit('muckChoice', { deadline: this._muckDeadline });
             }
         });
 
@@ -4160,6 +4229,31 @@ io.on('connection', (socket) => {
         socket.emit('mttCreated', { mttId, name });
         mtt.broadcastLobby();
         io.emit('mttList', mttListArray());
+    });
+
+    // 🃏 진 사람이 자기 패를 공개하기로 선택 (앞순서·승자는 애초에 선택지가 없다)
+    socket.on('revealHand', () => {
+        const room = rooms.get(socket.currentRoom);
+        if (!room || !socket.nickname) return;
+        const p = room.players[socket.nickname];
+        if (!p || !p._muckChoice) return;                       // 선택 권한 없음
+        if (room.gameStage !== 5) return;                       // 쇼다운 중에만
+        if (Date.now() > (room._muckDeadline || 0) + 1500) return; // 시간 초과
+        p._muckChoice = false;
+        p.isMucked = false;
+        io.to(room.roomId).emit('gameMessage', `🃏 ${socket.nickname} 님이 패를 공개했습니데이.`);
+        room.sendState();
+    });
+
+    // 🃏 그냥 접겠다 (기본값과 같지만 선택창을 즉시 닫기 위해)
+    socket.on('muckHand', () => {
+        const room = rooms.get(socket.currentRoom);
+        if (!room || !socket.nickname) return;
+        const p = room.players[socket.nickname];
+        if (!p || !p._muckChoice) return;
+        p._muckChoice = false;
+        p.isMucked = true;
+        room.sendState();
     });
 
     // 🏆 [MTT] 참가

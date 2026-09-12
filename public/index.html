@@ -982,6 +982,24 @@
         #net-banner.ok { background: linear-gradient(180deg, #27ae60, #1b7a43); }
 
         /* ── 리바이 프롬프트 ── */
+        /* 🃏 쇼다운 — 진 사람이 패를 공개할지 고르는 창 */
+        #muck-prompt {
+            display: none; position: fixed; left: 50%; bottom: 220px; transform: translateX(-50%);
+            z-index: 3600; width: 320px; max-width: 90%;
+            background: var(--paper-hi); color: var(--ink);
+            border: 2px solid var(--ink); border-radius: 16px; padding: 14px 16px;
+            box-shadow: 6px 6px 0 rgba(200,80,31,0.9), 0 18px 44px rgba(34,29,21,0.45);
+            text-align: center; box-sizing: border-box;
+        }
+        #muck-prompt .mk-title { font-family: var(--font-disp); font-size: 17px; letter-spacing: 0.5px; color: var(--ink); }
+        #muck-prompt .mk-sub { font-size: 12.5px; color: var(--verm); margin: 5px 0 11px; word-break: keep-all; }
+        #muck-prompt .mk-btns { display: flex; gap: 8px; }
+        #muck-prompt button { flex: 1; border-radius: 11px; padding: 11px 0; font-weight: 800; font-size: 13.5px; cursor: pointer; font-family: inherit; }
+        #muck-prompt .mk-show { background: var(--ink); color: var(--paper-hi); border: 2px solid var(--ink); box-shadow: 3px 3px 0 rgba(200,80,31,0.9); }
+        #muck-prompt .mk-muck { background: transparent; color: var(--ink); border: 2px solid var(--ink); }
+        #muck-prompt button:active { transform: translate(1px, 1px); box-shadow: none; }
+        @media (max-width: 900px) { #muck-prompt { bottom: 190px; width: 88vw; } }
+
         #rebuy-prompt {
             display: none; position: fixed; left: 50%; bottom: 220px; transform: translateX(-50%);
             z-index: 3500; width: 320px; max-width: 90%;
@@ -1892,6 +1910,15 @@
         <div id="pf-adv-wrap"></div>
         <div id="pf-ach-wrap" class="pf-ach-wrap"></div>
         <button class="btn-close-modal" style="margin-top:18px;" onclick="document.getElementById('profile-modal').classList.remove('show')">닫기</button>
+    </div>
+</div>
+
+<div id="muck-prompt">
+    <div class="mk-title">🃏 패를 공개할까예?</div>
+    <div class="mk-sub">안 보여줘도 됩니데이 (<span id="mk-left">6</span>초 뒤 자동으로 덮습니더)</div>
+    <div class="mk-btns">
+        <button class="mk-show" onclick="revealMyHand()">패 공개</button>
+        <button class="mk-muck" onclick="muckMyHand()">덮기</button>
     </div>
 </div>
 
@@ -2855,6 +2882,7 @@
         renderFeltBlinds(data);
         renderEndVote(data.endVote);
         if (data.handId !== lastHandId) {
+            hideMuckPrompt(); // 🃏 이전 핸드의 패 공개 선택창 정리
             playedAnimations.clear();
             pendingBest5 = null;
             liveEquities = null;
@@ -3470,6 +3498,32 @@
             setTimeout(() => chip.remove(), 700 + (i * 80));
         }
     }
+
+    // 🃏 [쇼다운] 뒷순서에서 진 사람만 패 공개 여부를 고른다.
+    //    앞순서(먼저 까는 사람)와 팟을 먹은 사람은 규칙상 무조건 공개되므로 이 창이 뜨지 않는다.
+    let _muckTimer = null;
+    function hideMuckPrompt() {
+        if (_muckTimer) { clearInterval(_muckTimer); _muckTimer = null; }
+        const el = document.getElementById('muck-prompt');
+        if (el) el.style.display = 'none';
+    }
+    function revealMyHand() { socket.emit('revealHand'); hideMuckPrompt(); }
+    function muckMyHand() { socket.emit('muckHand'); hideMuckPrompt(); }
+    socket.on('muckChoice', d => {
+        hideMuckPrompt();
+        const el = document.getElementById('muck-prompt');
+        const left = document.getElementById('mk-left');
+        if (!el) return;
+        el.style.display = 'block';
+        const tick = () => {
+            const s = Math.ceil(((d && d.deadline ? d.deadline : Date.now()) - Date.now()) / 1000);
+            if (left) left.innerText = Math.max(0, s);
+            if (s <= 0) hideMuckPrompt();   // 시간 초과 → 그냥 덮음 (서버 기본값과 동일)
+        };
+        tick();
+        _muckTimer = setInterval(tick, 250);
+        try { SFX.myturn(); } catch (e) {}
+    });
 
     // 🔄 리바이
     let rebuyKind = 'rebuy'; // 'rebuy' | 'cash'
