@@ -2887,14 +2887,17 @@
         document.getElementById('pot-amount').innerText = (data.pot + totalCurrentBets).toLocaleString();
 
         const sidepotArea = document.getElementById('sidepot-area');
-        const allInPlayers = Object.values(data.players).filter(p => p.isAllIn && !p.isFolded);
+        // 💡 [버그픽스] 사이드팟은 "올인한 사람들끼리 투자액이 다를 때"가 아니라
+        //    "올인한 사람보다 더 많이 넣은 사람이 있을 때" 생긴다. 예전 조건은 올인이 1명이면
+        //    무조건 '올인 1명 참여'로만 떠서, 정작 사이드팟이 걸린 판을 알려주지 못했다.
+        const contenders = Object.values(data.players).filter(p => !p.isFolded && (p.totalInvested || 0) > 0);
+        const allInPlayers = contenders.filter(p => p.isAllIn);
         if (allInPlayers.length > 0) {
-            const uniqueBets = [...new Set(allInPlayers.map(p => p.totalInvested))].sort((a,b)=>a-b);
-            if (uniqueBets.length > 1) {
-                sidepotArea.innerText = `⚡ 사이드팟 발생 (올인 ${allInPlayers.length}명)`;
-            } else {
-                sidepotArea.innerText = `⚡ 올인 ${allInPlayers.length}명 참여`;
-            }
+            const maxInvested = Math.max(...contenders.map(p => p.totalInvested || 0));
+            const hasSidePot = allInPlayers.some(p => (p.totalInvested || 0) < maxInvested);
+            sidepotArea.innerText = hasSidePot
+                ? `⚡ 사이드팟 발생 (올인 ${allInPlayers.length}명)`
+                : `⚡ 올인 ${allInPlayers.length}명 참여`;
         } else {
             sidepotArea.innerText = '';
         }

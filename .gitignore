@@ -15,3 +15,4 @@ public/*.bak-*
 
 # Claude Code 로컬 툴링 (배포와 무관)
 .claude/
+scratch/

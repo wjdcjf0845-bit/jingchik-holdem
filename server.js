@@ -559,7 +559,10 @@ const BOT_LINES = {
         bluff: ['내 패 궁금하나? ㅋㅋ', '믿거나 말거나~', '느낌이 쎄하지?'],
         win: ['거봐 내가 먹는댔지 😎', '칩 잘 받았다 🤑', '이게 실력이다', '또 줍줍'],
         lose: ['에이 한 끗 차이네', '운 좋았다 인정', '다음 판 두고보자'],
-        fold: ['이번엔 양보한다', '쓰레기패라 접는다 ㅋ']
+        fold: ['이번엔 양보한다', '쓰레기패라 접는다 ㅋ', '오냐 가져가라'],
+        tank: ['어허... 이거 애매한데', '너 뭐 들었냐', '재밌네 진짜 ㅋㅋ', '가? 말어?'],
+        call: ['안 믿는다 콜', '그래 까봐', '뻥이지? 콜'],
+        taunt: ['{nick} 뭐하노 빨리 좀', '고민 길다 ㅋㅋ 티 난다', '타이머 다 간다', '그거 접을 패다 그냥 접어라']
     },
     '루즈-어그레시브': {
         join: ['반갑다 잘 부탁한데이~', '오늘 운 좀 따라줘봐라', '재밌게 쳐보자'],
@@ -567,7 +570,10 @@ const BOT_LINES = {
         bluff: ['진짜일까 뻥일까~ 😏', '한번 따라와봐라', '감으로 가는기다'],
         win: ['굿굿 잘 들어왔다 😁', '읽기 성공이네', '이 맛에 친다'],
         lose: ['아쉽다 잘 쳤다', '그 패를 콜하네 ㄷㄷ', '복수하러 온다'],
-        fold: ['음 이건 접자', '다음 기회에']
+        fold: ['음 이건 접자', '다음 기회에', '여기까지 하자'],
+        tank: ['흐음~ 어렵네 이거', '느낌이 좀 이상한데', '한 대 맞은 건가', '잠깐만 생각 좀'],
+        call: ['궁금해서 콜', '따라가본다', '한번 믿어보지 뭐'],
+        taunt: ['{nick} 오래 걸리네~', '좋은 패면 빨리 치지 ㅋ', '천천히 해라 기다려줄게', '표정 다 읽힌다']
     },
     '타이트-어그레시브': {
         join: ['정석대로 가보겠습니다', '잘 부탁드립니다', '깔끔하게 쳐봅시다'],
@@ -575,7 +581,10 @@ const BOT_LINES = {
         bluff: ['...', '블록 베팅입니다', '레인지상 베팅이에요'],
         win: ['잘 짜였네요 👍', '계산대로입니다', '좋은 핸드였습니다'],
         lose: ['좋은 콜이었어요', '어쩔 수 없죠', '분산이네요'],
-        fold: ['폴드가 맞네요', '여기선 접습니다']
+        fold: ['폴드가 맞네요', '여기선 접습니다', '레인지상 접습니다'],
+        tank: ['...잠시만요', '경계선이네요', '오즈가 빠듯합니다', '레인지를 좀 더 봐야겠네요'],
+        call: ['오즈상 콜합니다', '받아보겠습니다', '블러프 빈도를 보면 콜이죠'],
+        taunt: ['{nick} 님 시간 많이 쓰시네요', '어려운 스팟인가 보네요', '타이밍 텔 나옵니다', '천천히 하셔도 됩니다']
     },
     '콜링스테이션': {
         join: ['콜이 제맛이지~', '난 잘 안 접는다 ㅋㅋ', '끝까지 봐야제'],
@@ -583,7 +592,10 @@ const BOT_LINES = {
         bluff: ['음... 콜할까말까', '난 못 접어~'],
         win: ['콜이 답이었네 ㅋㅋ', '거봐 봐야된다니까', '럭키~'],
         lose: ['아 그래도 봤어야지', '미련 없다', '한번 더!'],
-        fold: ['이건 진짜 못 가겠다', '오늘 처음 접는다 ㅋ']
+        fold: ['이건 진짜 못 가겠다', '오늘 처음 접는다 ㅋ'],
+        tank: ['어... 이거 콜인가', '접을까... 아니 못 접겠다', '아 모르겠다 진짜', '심장 떨리네 ㅋㅋ'],
+        call: ['콜! 봐야제', '못 참는다 콜', '어차피 볼 거 콜'],
+        taunt: ['{nick} 빨리 치라~ 궁금해 죽겠다', '뭘 그리 고민하노 ㅋㅋ', '나 같으면 벌써 콜했다']
     },
     '초타이트': {
         join: ['신중하게 가겠습니다', '...', '조용히 칩니다'],
@@ -591,7 +603,10 @@ const BOT_LINES = {
         bluff: ['...', '믿으셔도 됩니다'],
         win: ['기다린 보람이 있네요', '프리미엄 핸드였습니다'],
         lose: ['드물게 졌네요', '그럴 수 있죠'],
-        fold: ['접습니다', '아닌 건 아니죠', '쉽게 폴드']
+        fold: ['접습니다', '아닌 건 아니죠', '쉽게 폴드'],
+        tank: ['...', '음.', '조금만 더 생각하겠습니다', '미묘하군요'],
+        call: ['받겠습니다', '여기선 콜이죠'],
+        taunt: ['...', '{nick} 님, 천천히 하세요', '긴 고민이네요']
     }
 };
 
@@ -840,6 +855,20 @@ class GameRoom {
 
         this.maybeScheduleBot(expectedNick); // 🤖 현재 턴이 봇이면 자동 행동 예약
 
+        // 💬 [심리전] 사람이 한참 고민하면 봇이 슬쩍 찔러본다 (제한시간이 넉넉할 때만)
+        if (this._tauntTimer) clearTimeout(this._tauntTimer);
+        if (_tp && !_tp.isBot && !_tp.isDisconnected && msLimit >= 12000) {
+            this._tauntTimer = setTimeout(() => {
+                if (this.turnIndex === -1 || this.playerOrder[this.turnIndex] !== expectedNick) return;
+                const bots = this.playerOrder.filter(n => {
+                    const b = this.players[n];
+                    return b && b.isBot && !b.isFolded && !b.isAllIn;
+                });
+                if (!bots.length) return;
+                this.botSay(bots[Math.floor(Math.random() * bots.length)], 'taunt', { nick: expectedNick });
+            }, Math.floor(msLimit * 0.5));
+        }
+
         // 🎓 [학습모드] 사람 차례면 GTO 권장 액션 분석을 본인에게만 전송
         if (this._learnMode) {
             const cp = this.players[expectedNick];
@@ -853,32 +882,90 @@ class GameRoom {
     }
 
     // 🤖 [신규] 봇 두뇌 — 핸드 강도 + 팟 오즈 기반 의사결정
+    // 🤖 사람처럼 "고민하는" 시간. 아슬아슬한 결정일수록, 걸린 칩이 클수록 오래 끈다.
+    //    (예전엔 어떤 상황이든 0.9~2.0초 고정이라 전부 스냅콜·즉시폴드처럼 보였다)
+    botThinkTime(nick, decision, toCall, potNow) {
+        if (process.env.BOT_FAST) return 1;
+        const p = this.players[nick];
+        const persona = p._persona || (p._persona = this.assignPersona(nick, p.difficulty));
+        const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+        const facing = toCall > 0;
+
+        let ms = 700 + Math.random() * 700; // 기본 리듬 0.7~1.4초
+
+        // 1) 승률이 콜 문턱에 딱 붙어 있을수록 = 진짜 고민되는 스팟 (최대 +3.6초)
+        const edge = this._lastBotEdge;
+        if (facing && edge != null) {
+            const closeness = Math.max(0, 1 - Math.min(1, Math.abs(edge) / 0.12));
+            ms += closeness * (1400 + Math.random() * 2200);
+        }
+        // 2) 내 스택에서 차지하는 비중이 클수록 신중해진다 (최대 +2.4초)
+        const stack = p.chips + (p.currentBet || 0);
+        if (stack > 0) ms += Math.min(1, toCall / stack) * (800 + Math.random() * 1600);
+        // 3) 팟 대비 큰 벳을 맞았을 때
+        if (potNow > 0 && toCall > potNow * 0.5) ms += 300 + Math.random() * 700;
+        // 4) 명백한 스팟은 툭툭 — 체크, 프리플랍 쓰레기패 폴드
+        if (!facing && decision && decision.type === 'check') ms *= 0.55;
+        if (decision && decision.type === 'fold' && this.gameStage === 1 && toCall <= bb) ms *= 0.45;
+        // 5) 성격 — 광폭은 즉흥적, 초타이트는 돌다리도 두들긴다
+        ms *= ({ '광폭': 0.7, '루즈-어그레시브': 0.85, '콜링스테이션': 0.95, '타이트-어그레시브': 1.15, '초타이트': 1.3 }[persona.label] || 1);
+        // 6) 사람다운 변덕 — 쉬운 패에 괜히 뜸을 들이기도, 어려운 패를 툭 던지기도 한다
+        const r = Math.random();
+        if (r < 0.08) ms += 1500 + Math.random() * 2000;
+        else if (r > 0.93) ms = 400 + Math.random() * 300;
+
+        // 턴 제한시간에 걸려 자동 폴드당하지 않게 여유를 둔다
+        const cap = Math.max(900, this.turnTimeLimit * 1000 * 0.55);
+        return Math.round(Math.max(350, Math.min(cap, ms)));
+    }
+
     maybeScheduleBot(nick) {
         const p = this.players[nick];
         if (!p || !p.isBot || p.isFolded || p.isAllIn) return;
         const expectedNick = nick;
-        // 사람처럼 0.9~2.0초 생각 후 행동
-        const thinkMs = process.env.BOT_FAST ? 1 : 900 + Math.floor(Math.random() * 1100);
+
+        // 결정을 먼저 내린다 — "얼마나 어려운 결정이었는지"를 알아야 그만큼 뜸을 들일 수 있다.
+        // 봇 차례엔 다른 누구도 액션할 수 없으므로, 미리 계산해도 그 사이 상태가 바뀌지 않는다.
+        let decision = null;
+        try { decision = this.botDecide(expectedNick); } catch (e) { decision = null; }
+        const toCall = Math.max(0, this.currentHighestBet - (p.currentBet || 0));
+        const potNow = this.pot + Object.values(this.players).reduce((s, x) => s + (x.currentBet || 0), 0);
+        const thinkMs = this.botThinkTime(expectedNick, decision, toCall, potNow);
+
         if (p._botTimer) clearTimeout(p._botTimer);
+        if (p._botTankTimer) clearTimeout(p._botTankTimer);
+
+        // 💬 오래 고민할 땐 도중에 한마디 — 사람이 장고하며 흘리는 혼잣말
+        if (thinkMs > 2600) {
+            p._botTankTimer = setTimeout(() => {
+                if (this.turnIndex === -1 || this.playerOrder[this.turnIndex] !== expectedNick) return;
+                this.botSay(expectedNick, 'tank');
+            }, Math.floor(thinkMs * 0.35));
+        }
+
         p._botTimer = setTimeout(() => {
             // 그 사이 턴이 바뀌었으면 취소
             if (this.turnIndex === -1 || this.playerOrder[this.turnIndex] !== expectedNick) return;
-            const decision = this.botDecide(expectedNick);
-            // 💬 큰 베팅/올인/레이즈면 도발 멘트
-            const pp = this.players[expectedNick];
-            const potNow = this.pot + Object.values(this.players).reduce((s, x) => s + (x.currentBet || 0), 0);
-            if (decision.type === 'allin' || (decision.type === 'raise' && decision.amount > potNow * 0.6)) {
+            const d = decision || { type: toCall > 0 ? 'call' : 'check' };
+
+            // 💬 상황별 한마디 — 큰 벳은 도발/블러프, 큰 콜은 "안 믿는다", 큰 레이다운은 폴드 멘트
+            if (d.type === 'allin' || (d.type === 'raise' && d.amount > potNow * 0.6)) {
                 // 약한 핸드로 큰 베팅 = 블러프 멘트, 강하면 빅벳 멘트
                 const eqGuess = this._lastBotEquity != null ? this._lastBotEquity : 0.5;
                 this.botSay(expectedNick, eqGuess < 0.45 ? 'bluff' : 'bigbet');
+            } else if (d.type === 'call' && toCall > potNow * 0.45) {
+                this.botSay(expectedNick, 'call');
+            } else if (d.type === 'fold' && toCall > potNow * 0.35) {
+                this.botSay(expectedNick, 'fold');
             }
-            const ok = this.applyAction(expectedNick, decision.type, decision.amount);
+
+            const ok = this.applyAction(expectedNick, d.type, d.amount);
             // 🛡️ 무효 결정 방어 — 봇이 잘못된 레이즈 등으로 막히면 안전 액션으로 폴백 (테이블 멈춤 방지)
             if (ok === false) {
                 const pl = this.players[expectedNick];
                 if (pl && !pl.isFolded && !pl.isAllIn && this.playerOrder[this.turnIndex] === expectedNick) {
-                    const toCall = this.currentHighestBet - pl.currentBet;
-                    this.applyAction(expectedNick, toCall > 0 ? 'call' : 'check');
+                    const tc = this.currentHighestBet - pl.currentBet;
+                    this.applyAction(expectedNick, tc > 0 ? 'call' : 'check');
                 }
             }
         }, thinkMs);
@@ -904,6 +991,8 @@ class GameRoom {
 
         const callable = toCall <= p.chips;
         const potOdds = toCall > 0 ? toCall / (totalPot + toCall) : 0.0;
+        // 🤖 [생각 시간] 이 결정이 얼마나 아슬아슬한지 — 아래 콜 판단부에서 더 정밀한 값으로 덮어쓴다
+        this._lastBotEdge = toCall > 0 ? (equity - potOdds) : null;
         const street = this.gameStage; // 1=preflop, 2=flop, 3=turn, 4=river
         const r = Math.random();
         const boardCount = this.communityCards.length;
@@ -1068,6 +1157,7 @@ class GameRoom {
         const isDraw = Defense.looksLikeDraw(board, equity, street);
         const oppAggr = oppRead && oppRead.aggression != null ? oppRead.aggression : null;
         const callThresh = Defense.requiredEquity({ potOdds, isDraw, sprBehind, oppAggression: oppAggr, skill });
+        this._lastBotEdge = equity - callThresh; // 🤖 콜 문턱과의 거리 = 고민의 깊이 (생각 시간에 반영)
 
         // 🎯 [GTO 올인 콜] 콜 비용이 내 스택의 큰 비중(올인성)이면 팟오즈 기준 엄격 판단
         //    토너먼트 생존이 걸린 콜이므로, equity가 팟오즈를 충분히 상회할 때만 콜
@@ -1282,17 +1372,22 @@ class GameRoom {
         const arche = persona.label; // 성격 라벨로 말투 분기
         // 빈도 제한 (너무 수다스럽지 않게)
         const now = Date.now();
-        if (event !== 'join' && now - (p._lastChat || 0) < 8000) return;
+        if (event !== 'join' && now - (p._lastChat || 0) < 6000) return;
         // 성격별 발화 확률
         const chatChance = { '광폭': 0.6, '루즈-어그레시브': 0.45, '타이트-어그레시브': 0.25, '콜링스테이션': 0.3, '초타이트': 0.15 }[arche] || 0.3;
+        // 장고 혼잣말·도발은 심리전의 핵심이라 조금 더 자주 나오게
+        const evChance = (event === 'tank' || event === 'taunt') ? Math.min(0.75, chatChance + 0.25) : chatChance;
         // 입장 멘트는 60%만 발화(여러 봇 추가 시 도배 방지), 승리/그 외는 확률 적용
         if (event === 'join') { if (Math.random() > 0.6) return; }
-        else if (event !== 'win' && Math.random() > chatChance) return;
+        else if (event !== 'win' && Math.random() > evChance) return;
 
         const L = BOT_LINES[arche] || BOT_LINES['타이트-어그레시브'];
         const pool = L[event];
         if (!pool || pool.length === 0) return;
         let msg = pool[Math.floor(Math.random() * pool.length)];
+        // 직전과 같은 줄이면 한 번 다시 뽑는다 (똑같은 말 반복 = 봇 티)
+        if (pool.length > 1 && msg === p._lastLine) msg = pool[Math.floor(Math.random() * pool.length)];
+        p._lastLine = msg;
         if (extra) Object.keys(extra).forEach(k => { msg = msg.replace('{' + k + '}', extra[k]); });
         p._lastChat = now;
         // 입장은 더 넓게 분산(0.4~2.4초), 그 외는 0.4~1.2초 지연 후 발화
@@ -1430,6 +1525,7 @@ class GameRoom {
 
     stopTurnTimer() {
         if (this.turnTimeout) clearTimeout(this.turnTimeout);
+        if (this._tauntTimer) { clearTimeout(this._tauntTimer); this._tauntTimer = null; }
         this.turnTimeout = null;
         this.turnEndTime = 0;
     }
@@ -1440,9 +1536,11 @@ class GameRoom {
         if (this.tournamentTimer) clearInterval(this.tournamentTimer);
         if (this.pendingStageTimeout) clearTimeout(this.pendingStageTimeout);
         if (this._autoResumeTimer) clearTimeout(this._autoResumeTimer);
+        if (this._nextHandTimer) { clearTimeout(this._nextHandTimer); this._nextHandTimer = null; }
         Object.values(this.players).forEach(p => {
             if (p._disconnectTimer) clearTimeout(p._disconnectTimer);
             if (p._botTimer) clearTimeout(p._botTimer);
+            if (p._botTankTimer) clearTimeout(p._botTankTimer);
         });
     }
 
@@ -1463,9 +1561,27 @@ class GameRoom {
         return Pots.calculateSidePots(contributions);
     }
 
+    // ⏭️ 다음 핸드 예약 — 중복 예약 금지. 여러 경로(결과창 타이머 / MTT 재가동 / 좌석배정)가
+    //    각자 setTimeout을 걸어 두면, 늦게 도착한 쪽이 이미 시작된 판을 덮어써 버린다.
+    scheduleNextHand(ms) {
+        if (!rooms.has(this.roomId)) return false;
+        if (this._nextHandTimer) return false; // 이미 누가 예약함
+        this._nextHandTimer = setTimeout(() => {
+            this._nextHandTimer = null;
+            this.startNextHand();
+        }, ms);
+        return true;
+    }
+
     startNextHand() {
         // 방이 파기된 뒤 늦게 도착한 호출(결과창 8초 타이머 등)은 무시 — 죽은 방에서 딜·타이머가 다시 돌지 않게
         if (!rooms.has(this.roomId)) return;
+        // 🛡️ [버그픽스] 이미 핸드가 진행 중이면 새로 딜하지 않는다.
+        //    MTT에서 결과창 8초 타이머와 매니저의 테이블 재가동(1.5초)이 겹쳐,
+        //    늦게 온 쪽이 진행 중이던 판을 통째로 날리고 새 핸드를 돌렸다.
+        //    (실측: 스트리트 1~3 진행 중에 결과 없이 handId가 바뀜 — 그 판의 블라인드·베팅 칩은 소멸)
+        if (this.gameStage >= 1 && this.gameStage <= 4) return;
+        if (this._nextHandTimer) { clearTimeout(this._nextHandTimer); this._nextHandTimer = null; }
         // 🗳️ 합의 종료가 확정됐으면 새 핸드 대신 정산 — 직전 핸드의 팟이 칩으로 정리된 뒤라 정확
         if (this._endAgreed) { this.settleAgreedEnd(); return; }
         this.stopTurnTimer();
@@ -1670,24 +1786,33 @@ class GameRoom {
 
         if (!this.tournamentStarted) {
             this.tournamentStarted = true;
-            this.blindLevel = 0;
-            if (this.mode !== 'cash') { // 💵 캐시는 블라인드업 없음
-                this.timeRemaining = this.blindUpInterval;
-                this.startTournamentTimer();
-                // 🏆 [MTT] 테이블은 뱅크롤 차감/상금풀 없이 진행 (MTT 매니저가 우승 처리)
-                if (!this._mttFreeChips) {
-                    // 💰 토너먼트 바이인: 사람 참가자 뱅크롤에서 시작칩 차감 → 상금풀 적립
-                    this.prizePool = 0;
-                    this.playerOrder.forEach(nick => {
-                        const p = this.players[nick];
-                        if (p && !p.isBot) {
-                            MockDB.adjustBankroll(nick, -this.startingChips).then(newBankroll => {
-                                if (p.socketId) io.to(p.socketId).emit('bankrollUpdate', { bankroll: newBankroll || 0 });
-                            });
-                        }
-                        this.prizePool += this.startingChips;
-                    });
-                    io.to(this.roomId).emit('gameMessage', `💰 토너먼트 시작! 상금풀 ${this.prizePool.toLocaleString()} 칩 (바이인 ${this.startingChips.toLocaleString()})`);
+            // 🏆 [MTT 버그픽스] 블라인드 레벨·시계는 MTT 매니저가 단독으로 소유한다.
+            //    테이블마다 제 시계를 돌리면, 밸런싱으로 테이블이 새로 만들어질 때마다
+            //    블라인드가 레벨 1로 되돌아가 토너먼트가 끝나지 않았다(실측: 8명 4분 31핸드에 2명만 탈락).
+            //    테이블별로 레벨이 제각각이 되는 불공정도 함께 사라진다.
+            if (this._mtt) {
+                this.blindLevel = this._mtt.blindLevel || 0;
+                this.timeRemaining = (this._mtt.timeRemaining != null) ? this._mtt.timeRemaining : this.blindUpInterval;
+            } else {
+                this.blindLevel = 0;
+                if (this.mode !== 'cash') { // 💵 캐시는 블라인드업 없음
+                    this.timeRemaining = this.blindUpInterval;
+                    this.startTournamentTimer();
+                    // 🎓 학습모드 등 "자유 칩" 방은 뱅크롤 차감·상금풀 없이 진행
+                    if (!this._mttFreeChips) {
+                        // 💰 토너먼트 바이인: 사람 참가자 뱅크롤에서 시작칩 차감 → 상금풀 적립
+                        this.prizePool = 0;
+                        this.playerOrder.forEach(nick => {
+                            const p = this.players[nick];
+                            if (p && !p.isBot) {
+                                MockDB.adjustBankroll(nick, -this.startingChips).then(newBankroll => {
+                                    if (p.socketId) io.to(p.socketId).emit('bankrollUpdate', { bankroll: newBankroll || 0 });
+                                });
+                            }
+                            this.prizePool += this.startingChips;
+                        });
+                        io.to(this.roomId).emit('gameMessage', `💰 토너먼트 시작! 상금풀 ${this.prizePool.toLocaleString()} 칩 (바이인 ${this.startingChips.toLocaleString()})`);
+                    }
                 }
             }
         }
@@ -2043,6 +2168,15 @@ class GameRoom {
 
     nextTurn() {
         this.stopTurnTimer();
+        // 🛡️ [안전망] 이번 핸드의 카드를 받지 않은 좌석은 액션 대상에서 제외한다.
+        //    어떤 경로로든 핸드 도중 좌석이 끼어들면 턴이 그쪽으로 넘어가 게임이 멈추거나,
+        //    카드 없이 베팅하고 쇼다운에서 보드만으로 팟을 가져갈 수 있다.
+        if (this.gameStage >= 1 && this.gameStage <= 4) {
+            this.playerOrder.forEach(n => {
+                const pl = this.players[n];
+                if (pl && !pl.isFolded && (pl.hand || []).length !== 2) { pl.isFolded = true; pl.hasActed = true; }
+            });
+        }
         const active = this.playerOrder.filter(n => !this.players[n].isFolded);
         const actioners = active.filter(n => !this.players[n].isAllIn);
 
@@ -2073,6 +2207,7 @@ class GameRoom {
     evaluateWinner() {
         this.stopTurnTimer();
         this.turnIndex = -1; // 핸드 종료 — 결과창 동안 "내 턴" 표시·봇 행동이 이어지지 않게
+        this._handEndedAt = Date.now(); // 🏆 [MTT] 결과창을 볼 시간을 확보하려고 기록 (테이블 재배치 판단용)
         const active = this.playerOrder.filter(n => !this.players[n].isFolded);
         if (active.length === 1) { this.handleWin(active[0]); return; }
 
@@ -2198,9 +2333,7 @@ class GameRoom {
 
         this.sendState();
 
-        setTimeout(() => {
-            this.startNextHand();
-        }, 8000);
+        this.scheduleNextHand(8000);
     }
 
     // ═══ 🗳️ 합의 종료 투표 ═══════════════════════════════════════════
@@ -2369,6 +2502,9 @@ class GameRoom {
         if (!this.canRebuy(nick)) return false;
         const p = this.players[nick];
         if (p.chips > 0) return false;
+        // 🛡️ 올인 중인 좌석은 chips===0 이라 파산으로 오인돼 핸드 도중 리바이가 됐다.
+        //    보드를 다 보고 재구매를 결정할 수 있는 셈이라 반칙 — 핸드가 끝난 뒤에만 허용.
+        if (this.gameStage >= 1 && this.gameStage <= 4 && this.playerOrder.includes(nick)) return false;
         p.chips = this.startingChips;
         p.rebuysUsed = (p.rebuysUsed || 0) + 1;
         p.isSpectator = false;
@@ -2397,13 +2533,18 @@ class GameRoom {
         if (this.mode !== 'cash') return false;
         const p = this.players[nick];
         if (!p || p.chips > 0) return false;
+        // 🛡️ 올인 중인 좌석(chips===0)이 핸드 도중 재바이인하는 것 차단 — 보드를 보고 결정하는 반칙.
+        if (this.gameStage >= 1 && this.gameStage <= 4 && this.playerOrder.includes(nick)) return false;
         p.chips = this.startingChips;
         p.isSpectator = false;
         p.totalBuyins = (p.totalBuyins || 1) + 1; // 첫 입장이 1회
         MockDB.recordCashNet(nick, -this.startingChips); // 💵 바이인 = 순익 -
         MockDB.adjustBankroll(nick, -this.startingChips); // 💰 뱅크롤에서 차감
         io.to(this.roomId).emit('gameMessage', `💵 ${nick} 님이 ${this.startingChips.toLocaleString()} 칩 바이인! (재입장)`);
-        if (!this.playerOrder.includes(nick)) this.playerOrder.push(nick);
+        // 좌석 배정은 대기 상태에서만. 핸드 진행 중이면 startNextHand가 다음 핸드에 앉힌다
+        // (진행 중에 밀어넣으면 카드 없는 좌석이 턴을 받는다 — B1과 같은 결함).
+        if (this.gameStage === 0 && !this.playerOrder.includes(nick)) this.playerOrder.push(nick);
+        else if (this.gameStage !== 0 && p.socketId) io.to(p.socketId).emit('gameMessage', '🪑 다음 핸드부터 합류합니데이.');
         this.sendState();
         this.tryAutoResume(); // 💵 조건 충족 시 자동 재개
         return true;
@@ -2774,6 +2915,7 @@ class GameRoom {
     handleWin(winnerId) {
         this.stopTurnTimer();
         this.turnIndex = -1; // 핸드 종료 — 결과창 동안 "내 턴" 표시·봇 행동이 이어지지 않게
+        this._handEndedAt = Date.now(); // 🏆 [MTT] 결과창을 볼 시간을 확보하려고 기록 (테이블 재배치 판단용)
         const winner = this.players[winnerId];
 
         let secondHighestBet = 0;
@@ -2830,9 +2972,7 @@ class GameRoom {
         });
         this.sendState();
 
-        setTimeout(() => {
-            this.startNextHand();
-        }, 6000);
+        this.scheduleNextHand(6000);
     }
 }
 
@@ -2918,6 +3058,39 @@ class MTTManager {
         this.tableCounter = 0;
         this._tickBusy = false;
         this._noHumanTicks = 0;
+        // 🏆 블라인드 레벨·남은 시간은 여기서만 관리하고 모든 테이블에 밀어넣는다
+        this.blindLevel = 0;
+        this.timeRemaining = this.blindUpInterval;
+        this._blindTimer = null;
+    }
+
+    // 토너먼트 전체가 공유하는 블라인드 시계 (테이블이 새로 만들어져도 이어진다)
+    startBlindClock() {
+        if (this._blindTimer) clearInterval(this._blindTimer);
+        this._blindTimer = setInterval(() => {
+            if (this.finished) return;
+            const live = this.tables.map(rid => rooms.get(rid)).filter(Boolean);
+            if (this.timeRemaining > 0) {
+                this.timeRemaining--;
+            } else {
+                const maxLv = live.length ? live[0].blindStructure.length - 1 : 0;
+                if (this.blindLevel < maxLv) this.blindLevel++;
+                this.timeRemaining = this.blindUpInterval;
+                live.forEach(r => {
+                    r.blindLevel = this.blindLevel;
+                    r.timeRemaining = this.timeRemaining;
+                    const bl = r.blindStructure[Math.min(this.blindLevel, r.blindStructure.length - 1)];
+                    io.to(r.roomId).emit('gameMessage', `🚨 블라인드 레벨 업! (${bl.sb}/${bl.bb})`);
+                    r.sendState(); // 블라인드 표시를 기다리지 않고 바로 갱신
+                });
+            }
+            // 모든 테이블이 같은 레벨·같은 시계를 보게 동기화
+            live.forEach(r => {
+                r.blindLevel = this.blindLevel;
+                r.timeRemaining = this.timeRemaining;
+                io.to(r.roomId).emit('updateTimer', this.timeRemaining);
+            });
+        }, 1000);
     }
 
     addEntrant(nick, socketId, isBot) {
@@ -2968,6 +3141,7 @@ class MTTManager {
 
         this.entrants.forEach(e => { if (e.socketId) io.to(e.socketId).emit('mttStarted', { mttId: this.mttId, name: this.name }); });
         this.broadcastStatus();
+        this.startBlindClock();
         this.startHeartbeat();
         return true;
     }
@@ -3012,6 +3186,9 @@ class MTTManager {
         });
         room._mtt = this;
         room._mttFreeChips = true;
+        // 재배치로 만들어진 테이블도 토너먼트의 현재 블라인드 레벨을 그대로 이어받는다
+        room.blindLevel = this.blindLevel;
+        room.timeRemaining = this.timeRemaining;
         if (isFinal) room._isFinalTable = true;
         rooms.set(roomId, room);
         this.tables.push(roomId);
@@ -3037,7 +3214,7 @@ class MTTManager {
         room._cashStarted = false;
         if (isFinal) io.to(roomId).emit('gameMessage', '🏆 파이널 테이블! 마지막 승부입니데이!');
         // 첫 핸드 시작
-        if (group.length >= 2) setTimeout(() => { if (rooms.has(roomId)) room.startNextHand(); }, isFinal ? 2500 : 2000);
+        if (group.length >= 2) room.scheduleNextHand(isFinal ? 2500 : 2000);
         return room;
     }
 
@@ -3100,9 +3277,13 @@ class MTTManager {
         // 1) 빈 테이블 제거
         this.tables.forEach(rid => {
             const r = rooms.get(rid);
-            if (!r || r.playerOrder.filter(n => r.players[n] && r.players[n].chips > 0).length === 0) {
-                if (rooms.has(rid)) destroyRoom(rid);
-            }
+            if (!r) return;
+            // 🛡️ [버그픽스] 핸드가 진행 중인 테이블은 절대 건드리지 않는다.
+            //    올인 쇼다운 런아웃 동안에는 남은 전원의 chips가 0이라 "빈 테이블"로 오판됐다.
+            //    하트비트가 4초마다 도는데 런아웃은 그보다 길어서, 팟이 지급되기 전에 테이블이
+            //    통째로 삭제되며 그 칩과 참가자가 토너먼트에서 통째로 사라졌다.
+            if (r.gameStage >= 1 && r.gameStage < 5) return;
+            if (r.playerOrder.filter(n => r.players[n] && r.players[n].chips > 0).length === 0) destroyRoom(rid);
         });
         this.tables = this.tables.filter(rid => rooms.has(rid));
 
@@ -3182,23 +3363,27 @@ class MTTManager {
         if (!r) return;
         const aliveN = r.playerOrder.filter(n => r.players[n] && r.players[n].chips > 0).length;
         if (aliveN < 2) return;
-        // 핸드종료(5) 상태면 쇼다운 결과 표시 시간 확보 후, 대기(0)면 짧게 재가동
-        if (r.gameStage === 5) {
-            const delay = 1500;
-            setTimeout(() => { if (rooms.has(rid) && (r.gameStage === 5 || r.gameStage === 0)) r.startNextHand(); }, delay);
-        } else if (r.gameStage === 0) {
-            setTimeout(() => { if (rooms.has(rid) && r.gameStage === 0) r.startNextHand(); }, 1200);
-        }
+        // 🛡️ [버그픽스] 이미 다음 핸드가 예약돼 있으면 손대지 않는다.
+        //    예전엔 결과창 8초 타이머를 무시하고 1.5초 뒤 재가동을 따로 걸어서,
+        //    (1) 쇼다운 결과를 1.5초밖에 못 보고 (2) 뒤늦게 온 8초 타이머가 새 판을 덮어썼다.
+        if (r._nextHandTimer) return;
+        if (r.gameStage === 5) r.scheduleNextHand(6000);
+        else if (r.gameStage === 0) r.scheduleNextHand(1200);
     }
 
     // 전체 생존자를 적정 테이블 수로 재배치 (칩 유지). isFinal이면 단일 파이널.
     consolidate(live, isFinal) {
         // 진행 중인 핸드가 있는 테이블이면 끝날 때까지 대기 (다음 tick에서 처리)
-        const midHand = this.tables.some(rid => {
+        //    쇼다운 직후(결과창 3초)도 "진행 중"으로 본다 — 누가 이겼는지 보기도 전에
+        //    테이블이 통째로 재배치되면 판이 섞인 것처럼 보인다.
+        const RESULT_GRACE_MS = 3000;
+        const busy = this.tables.some(rid => {
             const r = rooms.get(rid);
-            return r && r.gameStage >= 1 && r.gameStage < 5;
+            if (!r) return false;
+            if (r.gameStage >= 1 && r.gameStage < 5) return true;
+            return r.gameStage === 5 && (Date.now() - (r._handEndedAt || 0)) < RESULT_GRACE_MS;
         });
-        if (midHand) { this.broadcastStatus(); return; }
+        if (busy) { this.broadcastStatus(); return; }
 
         // 칩 스냅샷 (현재 시점 재조회) + 이전 테이블 기록
         const fresh = this.livePlayers();
@@ -3222,6 +3407,7 @@ class MTTManager {
         if (this.finished) return;
         this.finished = true;
         if (this._heartbeat) clearInterval(this._heartbeat);
+        if (this._blindTimer) { clearInterval(this._blindTimer); this._blindTimer = null; }
         const champion = winner.nick;
         if (!winner.isBot) MockDB.addMttWin(champion, this.totalEntrants);
 
@@ -3254,6 +3440,7 @@ class MTTManager {
         if (this.finished) return;
         this.finished = true;
         if (this._heartbeat) clearInterval(this._heartbeat);
+        if (this._blindTimer) { clearInterval(this._blindTimer); this._blindTimer = null; }
         this.tables.forEach(rid => { if (rooms.has(rid)) destroyRoom(rid); });
         mtts.delete(this.mttId);
     }
@@ -3531,9 +3718,11 @@ io.on('connection', (socket) => {
             } else {
                 io.to(roomId).emit('gameMessage', `👋 ${nick} 님이 방에 입장하셨습니다.`);
                 if (room.mode === 'cash') { MockDB.recordCashNet(nick, -room.startingChips); MockDB.adjustBankroll(nick, -room.startingChips); } // 💵 최초 바이인
-                // 캐시 진행 중 입장이면 다음 핸드부터 합류
-                if (room.mode === 'cash' && room.gameStage !== 0 && !room.playerOrder.includes(nick)) {
-                    room.playerOrder.push(nick);
+                // 💡 [버그픽스] 캐시 진행 중 입장은 "다음 핸드부터" 합류 — 여기서 playerOrder에 바로 넣으면
+                //    카드를 받지 않은 좌석이 진행 중인 핸드의 턴을 받아 베팅까지 하고, 쇼다운에선 보드만으로
+                //    족보가 평가돼 팟을 가져갈 수도 있었다. 좌석 배정은 startNextHand가 핸드 경계에서 처리한다.
+                if (room.mode === 'cash' && room.gameStage !== 0) {
+                    socket.emit('gameMessage', '🪑 지금 핸드가 진행 중입니데이 — 다음 핸드부터 합류합니더.');
                 }
             }
         } else {
@@ -3565,6 +3754,16 @@ io.on('connection', (socket) => {
         const p = room.players[nick];
         if (!p) return;
 
+        // 🛡️ [버그픽스] 진행 중인 핸드에 칩이 걸려 있으면(특히 올인) 즉시 이탈 금지.
+        //    올인한 사람은 chips===0 이라 아래 "생존자 이탈 차단"을 통과해 좌석이 통째로 삭제됐고,
+        //    아직 팟에 쓸어담기지 않은 currentBet이 사라져 테이블 총칩이 줄었다(실측 30,000→20,000).
+        //    쇼다운 참가 자격도 함께 사라져 올인한 칩을 그냥 몰수당했다.
+        //    캐시는 아래 "나가기 예약" 경로가 핸드 종료 후 정산해 주므로 예외.
+        if (room.mode !== 'cash' && room.gameStage >= 1 && room.gameStage <= 4 && !p.isSpectator && !p.isFolded && (p.isAllIn || (p.totalInvested || 0) > 0)) {
+            socket.emit('gameMessage', '🚨 이번 핸드에 칩이 걸려 있습니데이! 핸드가 끝난 뒤에 나갈 수 있어예.');
+            return;
+        }
+
         // 토너먼트 생존자(칩 보유)는 게임 붕괴 방지를 위해 이탈 차단 (캐시는 상시 이탈 허용)
         if (room.mode === 'tournament' && room.tournamentStarted && p.chips > 0 && !p.isSpectator) {
             socket.emit('gameMessage', '🚨 토너먼트 진행 중에는 나갈 수 없습니데이! (파산/관전 시에만 가능)');
@@ -3574,7 +3773,10 @@ io.on('connection', (socket) => {
         // 💵 [#3] 캐시 진행 중 나가기 → 이번 핸드까지 보고 나가기 예약 (폴드 후 핸드 종료 시 캐시아웃)
         if (room.mode === 'cash' && room.gameStage > 0 && room.gameStage < 5 && !p.isFolded && !p.isSpectator) {
             const wasMyTurn = (room.playerOrder[room.turnIndex] === nick);
-            p.isFolded = true; p.hasActed = true;
+            // 💡 [버그픽스] 올인한 사람을 폴드 처리하면 이미 팟에 넣은 칩의 권리를 통째로 잃는다
+            //    (실측: 10,000 올인 → 0 칩 정산). 올인은 더 이상 액션이 없으니 그대로 쇼다운까지 가고,
+            //    핸드가 끝난 뒤 딴 칩까지 합쳐 정산한다.
+            if (!p.isAllIn) { p.isFolded = true; p.hasActed = true; }
             p._pendingLeave = true; // 핸드 종료 시 자동 캐시아웃 이탈
             socket.emit('gameMessage', '🚪 이번 핸드가 끝나면 보유 칩을 정산하고 나갑니데이...');
             if (wasMyTurn) { io.to(roomId).emit('actionSound', { nick, type: 'fold' }); room.nextTurn(); }
