@@ -28,6 +28,7 @@ const Defense = require('./lib/defense'); // 🛡️ 벳 직면 시 콜 문턱 (
 const Blockers = require('./lib/blockers'); // 🃏 블로커 기반 블러프 선택 (넛 차단 시 블러프 ↑)
 const Showdown = require('./lib/showdown'); // 💰 쇼다운 팟 분배 파이프라인 (돈 로직 — 시나리오 테스트로 방어)
 const { chipChop } = require('./lib/chop'); // 🤝 토너먼트 합의 종료 칩 찹 분배 (돈 로직 — 보존성 테스트로 방어)
+const Postflop = require('./lib/postflop'); // 🎯 레인지 기반 포스트플랍 전략 (C벳·MDF·블러프캐치·SPR)
 const END_VOTE_MS = 30000; // 🗳️ 합의 종료 투표 제한시간
 
 const app = express();
@@ -1036,11 +1037,25 @@ class GameRoom {
                     }
                 } else if (facingRaise) {
                     // ── 레이즈 직면 — 3벳/콜/폴드 ──
+                    //    3벳은 프리미엄(밸류)과 블로커 좋은 마지널(블러프)로 양극화하는 게 정석.
+                    //    예전엔 equity만 살짝 올려 아래 로직에 맡겨서 3벳 빈도가 4%에 그쳤다(프로 6~10%).
+                    const _late = (p.position === 'BTN' || p.position === 'CO' || p.position === 'SB');
+                    const threeBetTo = () => {
+                        const mult = _late ? 3.0 : 3.6; // 포지션 있으면 작게, 없으면 크게 (정석)
+                        const want = Math.round(this.currentHighestBet * mult);
+                        const minRaiseTo = this.currentHighestBet + (this.lastFullRaiseAmount || bb);
+                        const target = Math.min(p.currentBet + p.chips, Math.max(want, minRaiseTo));
+                        return (target > this.currentHighestBet) ? { type: 'raise', amount: target } : { type: 'call' };
+                    };
+                    const _singleRaise = (this.raiseCountThisStreet || 0) <= 1 && persona.proStrategy;
                     if (rt.tier === 'fold') {
                         if (!(isBB && toCall <= bb * 0.5) && r < 0.88 * skill + 0.1) return { type: 'fold' };
                         equity *= 0.78;
                     } else if (rt.tier === 'raise') {
-                        equity = Math.min(1, equity * 1.10); // 프리미엄 — 3벳 경향 강화
+                        if (_singleRaise && r < 0.55 * skill + 0.15) return threeBetTo(); // 밸류 3벳
+                        equity = Math.min(1, equity * 1.10);
+                    } else if (_singleRaise && _late && r < 0.13 * skill) {
+                        return threeBetTo(); // 🃏 블러프 3벳 — 늦은 포지션 마지널 일부를 섞어 레인지를 숨긴다
                     }
                     // rt.tier === 'call' 이면 통과 (아래 로직에서 콜/가끔 3벳)
                 } else {
@@ -1114,6 +1129,8 @@ class GameRoom {
                     p._plan = { betStreet: street, type: classifyBetPlan({ isValue: true }), eqAtBet: equity };
                     return { type: 'raise', amount: target };
                 }
+                const _rb = this.planRangeBet(nick, { equity, board, persona, skill, street, totalPot, bb, oppRead });
+                if (_rb) return _rb;
                 return { type: 'check' };
             }
             // ── 약~중 핸드: 블러프/세미블러프 + 🧠 스트리트 플랜 배럴(연속 벳) ──
@@ -1139,13 +1156,15 @@ class GameRoom {
                     return { type: 'raise', amount: target };
                 }
             }
+            // 🎯 기존 로직이 체크로 끝났어도, 레인지가 유리한 보드면 고수는 친다
+            const _rb2 = this.planRangeBet(nick, { equity, board, persona, skill, street, totalPot, bb, oppRead });
+            if (_rb2) return _rb2;
             // 배럴 안 함 → 공격 플랜 종료(손절), 체크
             if (p._plan && p._plan.betStreet === street - 1) p._plan = null;
             return { type: 'check' };
         }
 
         // ─── 콜 비용이 있는 상황 ───
-        const margin = equity - potOdds;
 
         // 🛡️ [방어] 콜에 필요한 최소 승률 — 임플라이드 오즈(드로우+딥스택) + 상대 성향 익스플로잇.
         //    유효 스택(콜 후 남는 내/상대 중 작은 쪽)으로 임플라이드 크기를 잡는다.
@@ -1156,8 +1175,25 @@ class GameRoom {
         const sprBehind = totalPot + toCall > 0 ? effBehind / (totalPot + toCall) : 0;
         const isDraw = Defense.looksLikeDraw(board, equity, street);
         const oppAggr = oppRead && oppRead.aggression != null ? oppRead.aggression : null;
-        const callThresh = Defense.requiredEquity({ potOdds, isDraw, sprBehind, oppAggression: oppAggr, skill });
-        this._lastBotEdge = equity - callThresh; // 🤖 콜 문턱과의 거리 = 고민의 깊이 (생각 시간에 반영)
+        let callThresh = Defense.requiredEquity({ potOdds, isDraw, sprBehind, oppAggression: oppAggr, skill });
+        // 🛡️ [최소 방어 빈도 MDF] 작은 벳에 과하게 접으면 상대가 아무 패로나 블러프해서 공짜로 번다.
+        //    하프팟 벳엔 67%, 1/3팟 벳엔 75%를 방어해야 한다. 벳이 작을수록 요구 승률을 낮춰 넓게 받는다.
+        if (persona.proStrategy && street >= 2 && toCall > 0) {
+            const potBefore = Math.max(bb, totalPot - toCall);
+            const relaxed = Postflop.defendThreshold({ potOdds, betFrac: toCall / potBefore, skill });
+            callThresh = Math.min(callThresh, relaxed);
+        }
+        // 🎯 [에퀴티 실현율] 승률 30%라고 그 30%를 다 가져가는 게 아니다.
+        //    포지션이 없으면 다음 스트리트에 또 벳을 맞아 접게 되고, 멀티웨이면 더 깎인다.
+        //    이걸 무시했더니 봇이 벳에 9%밖에 안 접는 호구가 됐다(실측). 리버·올인은 100% 실현.
+        //    ※ 실현율은 "콜할까 접을까"에만 쓴다. 레이즈 판단은 패 자체의 강도(raw equity)로 한다.
+        const _nOppLive = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded && !this.players[n].isAllIn).length;
+        const eqReal = persona.proStrategy ? equity * Postflop.realizationFactor({
+            street, inPosition: this.isInPosition(nick), nOpp: _nOppLive,
+            hasDraw: isDraw, allIn: toCall >= p.chips
+        }) : equity;
+        const margin = eqReal - potOdds;
+        this._lastBotEdge = eqReal - callThresh; // 🤖 콜 문턱과의 거리 = 고민의 깊이 (생각 시간에 반영)
 
         // 🎯 [GTO 올인 콜] 콜 비용이 내 스택의 큰 비중(올인성)이면 팟오즈 기준 엄격 판단
         //    토너먼트 생존이 걸린 콜이므로, equity가 팟오즈를 충분히 상회할 때만 콜
@@ -1170,7 +1206,7 @@ class GameRoom {
             // 🛡️ 방어 문턱(상대 성향 반영) + ICM 여유. 올인이라 유효스택≈0 → 임플라이드는 자동 0.
             if (equity >= callThresh + requiredEdge) {
                 // 매우 강하면 레이즈(재올인), 아니면 콜
-                if (equity > 0.72 && p.chips > toCall) {
+                if (equity > (persona.proStrategy ? Postflop.stackOffThreshold(sprBehind) : 0.72) && p.chips > toCall) {
                     const target = Math.min(p.currentBet + p.chips, this.currentHighestBet + sizeBet(1.1));
                     if (target >= this.currentHighestBet + this.lastFullRaiseAmount && target > this.currentHighestBet) {
                         return { type: 'raise', amount: target };
@@ -1221,7 +1257,17 @@ class GameRoom {
             }
             // 🛡️ [방어] 팟오즈엔 못 미쳐도 방어 문턱(임플라이드 오즈/블러프 캐치)을 넘으면 콜.
             //    딥스택 드로우 추격, 공격적 상대의 벳 콜다운이 여기서 살아난다.
-            if (callable && equity >= callThresh) return { type: 'call' };
+            if (callable && eqReal >= callThresh) return { type: 'call' };
+            // 🃏 [리버 블러프캐치] 리버엔 드로우가 없다 — 이겼거나 졌거나다.
+            //    상대가 공격적일수록 블러프 비중이 높고, 내가 넛을 막고 있으면 상대 밸류가 적다.
+            //    고수의 콜다운이 여기서 나온다.
+            if (street >= 4 && callable && persona.proStrategy) {
+                const need = Postflop.bluffCatch({
+                    potOdds, oppAggression: oppAggr, skill,
+                    blockerMult: Blockers.bluffBlockerMult(p.hand, this.communityCards, skill)
+                });
+                if (equity >= need) return { type: 'call' };
+            }
             // 콜링스테이션 성격이면 여전히 끈적하게 콜(성격 반영)
             if (persona.callSticky && margin > -0.14 && r < 0.5) return { type: 'call' };
             return { type: 'fold' };
@@ -1237,7 +1283,7 @@ class GameRoom {
             }
             // 🛡️ [익스플로잇] 좀처럼 안 치는 정직한 상대가 큰 벳을 하면 방어 문턱이 올라간다 —
             //    승률이 그에 못 미치면 마진이 양수여도 폴드. 고수 봇일수록 이 절제를 잘 한다.
-            if (callable && equity < callThresh - 0.02 && r < 0.7 * skill) return { type: 'fold' };
+            if (callable && eqReal < callThresh - 0.02 && r < 0.7 * skill) return { type: 'fold' };
             return { type: 'call' };
         }
 
@@ -1249,6 +1295,86 @@ class GameRoom {
             }
         }
         return { type: 'call' };
+    }
+
+    // 🎯 포스트플랍에서 내가 마지막에 행동하는가(포지션). 액션은 딜러 다음 자리부터 시작하므로
+    //    딜러에 가까울수록 늦게 친다. 포지션은 고수 전략의 핵심 입력이다.
+    isInPosition(nick) {
+        const n = this.playerOrder.length;
+        if (n < 2) return true;
+        const rel = seat => (seat - this.dealerIndex - 1 + n) % n; // 클수록 늦게 행동
+        const me = this.playerOrder.indexOf(nick);
+        if (me < 0) return false;
+        const myRel = rel(me);
+        for (let i = 0; i < n; i++) {
+            const other = this.playerOrder[i];
+            if (other === nick) continue;
+            const p = this.players[other];
+            if (!p || p.isFolded || p.isAllIn) continue;
+            if (rel(i) > myRel) return false;
+        }
+        return true;
+    }
+
+    // 🎯 직전 스트리트까지의 마지막 공격자 = 이번 스트리트의 주도권자.
+    //    플랍이 체크로 넘어갔으면 프리플랍 레이저가 계속 주도권을 갖는다(정석).
+    lastAggressorBefore(street) {
+        const log = this.actionLog || [];
+        for (let i = log.length - 1; i >= 0; i--) {
+            const a = log[i];
+            if (!a || a.street >= street) continue;
+            if (a.type === 'raise' || a.type === 'allin') return a.nick;
+        }
+        return null;
+    }
+
+    // 🎯 [고수 전략] 레인지 기반 C벳/배럴.
+    //    "내 패가 센가"가 아니라 "이 보드가 내 레인지에 유리한가"로 친다.
+    //    A 하이 마른 보드에서 프리플랍 레이저는 상대보다 AA/AK를 훨씬 많이 들고 있으므로
+    //    패와 무관하게 작게 전부 친다. 낮은 연결 보드는 콜러에게 유리해 체크가 많다.
+    //    양극화: 강한 패 + 승산 없지만 폴드에퀴티 있는 패를 치고, 어중간한 패는 체크해 쇼다운을 본다.
+    //    벳하기로 결정했을 때만 액션을 반환하고, 아니면 null(기존 로직으로 폴백)이다.
+    planRangeBet(nick, ctx) {
+        const p = this.players[nick];
+        const { equity, board, persona, skill, street, totalPot, bb } = ctx;
+        if (!p || street < 2 || p.chips <= bb * 2) return null;
+        if (!persona.proStrategy) return null;              // 초·중수는 이 정석을 모른다
+        if (this.lastAggressorBefore(street) !== nick) return null; // 주도권 없으면 C벳 아님
+
+        const nOpp = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded && !this.players[n].isAllIn).length;
+        if (nOpp < 1) return null;
+
+        const adv = Postflop.rangeAdvantage(this.communityCards);
+        const inPosition = this.isInPosition(nick);
+        const freq = Postflop.cbetFrequency({ street, adv, nOpp, inPosition, skill });
+
+        const hasDraw = !!(board && (board.wet || board.flushDraw)) && equity >= 0.26;
+        const kind = Postflop.classifyForBet({ equity, valueLine: persona.valueThresh, hasDraw });
+
+        // 사이즈를 먼저 정한다 — 블러프를 얼마나 섞을지는 사이즈가 결정한다
+        const thin = (kind === 'value' && equity < persona.valueThresh + 0.12);
+        const frac = Postflop.cbetSize({ adv, board, street, kind: thin ? 'thin' : null, overbet: street >= 4 && kind === 'value' && Math.random() < 0.12 });
+
+        // 🃏 블러프 빈도 = 벳 레인지 중 s/(1+s) 까지 × 상대·인원수 보정 × 블로커.
+        //    예전엔 쓰레기 패의 58%를 블러프해서(이론값 17~25%) 맞대결에서 칩을 크게 잃었다.
+        //    안 접는 상대·멀티웨이에선 순수 블러프를 접고 밸류만 친다 — 그게 고수다.
+        const oppFold = ctx.oppRead && ctx.oppRead.foldToBet != null ? ctx.oppRead.foldToBet : null;
+        const bluffTake = freq
+            * Postflop.bluffShareForSize(frac)
+            * Postflop.bluffAdjust({ nOpp, oppFoldToBet: oppFold, skill })
+            * Blockers.bluffBlockerMult(p.hand, this.communityCards, skill);
+
+        let take;
+        if (kind === 'value') take = Math.min(0.92, freq + 0.20);
+        else if (kind === 'semibluff') take = Math.min(0.75, freq * 0.8); // 드로우는 에퀴티가 있어 더 자주
+        else if (kind === 'airbluff') take = bluffTake;
+        else take = freq * 0.15;                            // 어중간 — 대부분 체크다운
+        if (Math.random() >= take) return null;
+        const amount = Math.max(bb, Math.round(totalPot * frac));
+        const target = Math.min(p.currentBet + p.chips, p.currentBet + amount);
+        if (target <= this.currentHighestBet) return null;
+        p._plan = { betStreet: street, type: classifyBetPlan({ isValue: kind === 'value', equity, board }), eqAtBet: equity };
+        return { type: 'raise', amount: target };
     }
 
     // 🌊 [#2] 보드 텍스처 분석 — 드로우/페어/하이카드 구조 파악
@@ -1332,6 +1458,9 @@ class GameRoom {
 
         // 🎚️ [난이도] 실력 보정
         persona.difficulty = diff;
+        // 🎯 레인지 기반 고급 전략(C벳 정책·MDF·에퀴티 실현율·블러프캐치·SPR 스택오프)은
+        //    고수 봇 전용. 초·중수는 예전의 "내 패 강도" 판단을 그대로 써서 난이도 차이를 만든다.
+        persona.proStrategy = (diff === 'hard');
         if (diff === 'easy') {
             // 초보: 승률 판단 오차 큼(noisy), 손해보는 콜 잦음, 익스플로잇/상대읽기 약함
             persona.equityNoise = 0.18;      // 승률 추정에 ±18% 노이즈
