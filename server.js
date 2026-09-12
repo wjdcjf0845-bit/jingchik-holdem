@@ -29,6 +29,7 @@ const Blockers = require('./lib/blockers'); // 🃏 블로커 기반 블러프 �
 const Showdown = require('./lib/showdown'); // 💰 쇼다운 팟 분배 파이프라인 (돈 로직 — 시나리오 테스트로 방어)
 const { chipChop } = require('./lib/chop'); // 🤝 토너먼트 합의 종료 칩 찹 분배 (돈 로직 — 보존성 테스트로 방어)
 const Postflop = require('./lib/postflop'); // 🎯 레인지 기반 포스트플랍 전략 (C벳·MDF·블러프캐치·SPR)
+const RangeEq = require('./lib/rangeeq'); // 🎯 "벳하는 상대의 레인지" 대비 내 핸드 강도
 const END_VOTE_MS = 30000; // 🗳️ 합의 종료 투표 제한시간
 
 const app = express();
@@ -1188,10 +1189,22 @@ class GameRoom {
         //    이걸 무시했더니 봇이 벳에 9%밖에 안 접는 호구가 됐다(실측). 리버·올인은 100% 실현.
         //    ※ 실현율은 "콜할까 접을까"에만 쓴다. 레이즈 판단은 패 자체의 강도(raw equity)로 한다.
         const _nOppLive = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded && !this.players[n].isAllIn).length;
-        const eqReal = persona.proStrategy ? equity * Postflop.realizationFactor({
+        let eqReal = persona.proStrategy ? equity * Postflop.realizationFactor({
             street, inPosition: this.isInPosition(nick), nOpp: _nOppLive,
             hasDraw: isDraw, allIn: toCall >= p.chips
         }) : equity;
+
+        // 🎯 [벳 레인지 대비] 상대가 벳을 했으면 그 레인지 대비로 다시 잰다.
+        //    몬테카를로는 "상대가 아무 패나 들고, 카드를 공짜로 다 본다"를 가정해 과하게 낙관적이다.
+        //    플랍·턴은 드로우 몫을 남기려 몬테카를로와 섞고, 리버는 레인지 강도를 그대로 쓴다.
+        if (persona.proStrategy && street >= 2 && toCall > 0 && this.communityCards.length >= 3) {
+            try {
+                const _bf = toCall / Math.max(bb, totalPot - toCall);
+                const _ag = HandRead.summarizeVillain(this.actionLog, this.lastAggressorBefore(street + 1) || '').aggroStreets || 1;
+                const share = this.equityVsBettingRange(nick, _bf, _ag);
+                if (share != null) eqReal = RangeEq.blendWithDraws(share, eqReal, street);
+            } catch (e) {}
+        }
         const margin = eqReal - potOdds;
         this._lastBotEdge = eqReal - callThresh; // 🤖 콜 문턱과의 거리 = 고민의 깊이 (생각 시간에 반영)
 
@@ -1295,6 +1308,38 @@ class GameRoom {
             }
         }
         return { type: 'call' };
+    }
+
+    // 🎯 [벳 레인지 대비 강도] 상대가 벳을 했다면 아무 패나 들고 있는 게 아니다.
+    //    이 보드에서 벳할 만한 패(상위 N%)만 상대로 내 핸드가 몇 %를 이기는지 센다.
+    //    몬테카를로(랜덤 상대 가정)는 7-8-2 보드의 AK 하이를 52.7%로 평가한다 — 그래서
+    //    봇이 벳에 5~13%밖에 안 접었다. 벳 레인지 대비로 재면 24%로 떨어진다.
+    //    반환: 0~1, 계산 불가(보드 없음 등)면 null.
+    equityVsBettingRange(nick, betFrac, aggroStreets) {
+        const p = this.players[nick];
+        const cc = this.communityCards;
+        if (!p || !p.hand || p.hand.length !== 2 || !cc || cc.length < 3) return null;
+        const known = new Set([...cc, ...p.hand]);
+        const pool = FULL_DECK.filter(c => !known.has(c));
+        const ORDER = '23456789TJQKA';
+        const score = cards => {
+            const h = Hand.solve(cards);
+            return RangeEq.handScore(h.rank, h.cards.map(c => ORDER.indexOf(c.value === '10' ? 'T' : c.value)));
+        };
+        let mine;
+        try { mine = score(p.hand.concat(cc)); } catch (e) { return null; }
+        // 후보 조합 표본 (전수는 990개라 비싸다 — 무작위 220개면 충분히 안정적)
+        const SAMPLES = 220;
+        const opp = [];
+        for (let i = 0; i < SAMPLES; i++) {
+            const a = pool[Math.floor(Math.random() * pool.length)];
+            let b = pool[Math.floor(Math.random() * pool.length)];
+            if (a === b) continue;
+            try { opp.push(score([a, b].concat(cc))); } catch (e) {}
+        }
+        if (opp.length < 40) return null;
+        const top = RangeEq.bettingRangeTop({ street: this.gameStage, betFrac, aggroStreets });
+        return RangeEq.shareBeaten(mine, opp, top);
     }
 
     // 🎯 포스트플랍에서 내가 마지막에 행동하는가(포지션). 액션은 딜러 다음 자리부터 시작하므로
