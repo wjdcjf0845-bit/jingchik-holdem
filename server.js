@@ -30,6 +30,7 @@ const Showdown = require('./lib/showdown'); // 💰 쇼다운 팟 분배 파이�
 const { chipChop } = require('./lib/chop'); // 🤝 토너먼트 합의 종료 칩 찹 분배 (돈 로직 — 보존성 테스트로 방어)
 const Postflop = require('./lib/postflop'); // 🎯 레인지 기반 포스트플랍 전략 (C벳·MDF·블러프캐치·SPR)
 const RangeEq = require('./lib/rangeeq'); // 🎯 "벳하는 상대의 레인지" 대비 내 핸드 강도
+const TABLE_SEATS = 6;           // 🪑 테이블 정원 — 클라이언트 좌석 레이아웃(pos-0~pos-5)과 반드시 일치
 const SHOWDOWN_REVEAL_MS = 3000; // 🃏 올인 쇼다운 — 카드 한 장을 보고 나서 다음 장까지의 간격
 const MUCK_CHOICE_MS = 6000;     // 🃏 진 사람이 패를 공개할지 정하는 시간
 const END_VOTE_MS = 30000; // 🗳️ 합의 종료 투표 제한시간
@@ -1855,7 +1856,10 @@ class GameRoom {
         }
 
         this.playerOrder = this.playerOrder.filter(nick => this.players[nick] && this.players[nick].chips > 0);
+        // 🪑 [버그픽스] 예전엔 정원 제한이 없어, 풀방 관전자가 재바이인하면 7번째로 앉았다(실측).
+        //    클라이언트 좌석은 6개(pos-0~pos-5)뿐이라 7번째는 화면에 그려지지도 않는다.
         Object.keys(this.players).forEach(nick => {
+            if (this.playerOrder.length >= TABLE_SEATS) return;
             if (this.players[nick].chips > 0 && !this.playerOrder.includes(nick)) this.playerOrder.push(nick);
         });
 
@@ -1864,8 +1868,7 @@ class GameRoom {
         //    "자리가 나면 다음 핸드부터 참여" 안내가 실제로는 지켜지지 않았다.
         //    진행 중 토너먼트는 중간에 풀스택으로 합류하면 공정성이 깨지므로 제외(캐시/미시작 방만).
         if (!this._mtt && !(this.mode === 'tournament' && this.tournamentStarted)) {
-            const TABLE_SIZE = 6;
-            let openSeats = TABLE_SIZE - this.playerOrder.length;
+            let openSeats = TABLE_SEATS - this.playerOrder.length;
             if (openSeats > 0) {
                 const waiting = Object.keys(this.players).filter(n => {
                     const p = this.players[n];
@@ -2769,6 +2772,9 @@ class GameRoom {
     offerCashBuyin(nick) {
         const p = this.players[nick];
         if (!p || p.socketId == null) return; // 봇/연결없음 제외
+        // 자리가 없으면 권하지 않는다 (권해봐야 doCashBuyin 이 거절한다)
+        const withChips = Object.keys(this.players).filter(n => (this.players[n].chips || 0) > 0).length;
+        if (withChips >= TABLE_SEATS) return;
         io.to(p.socketId).emit('cashBuyinOffer', { stack: this.startingChips });
     }
 
@@ -2778,11 +2784,20 @@ class GameRoom {
         if (!p || p.chips > 0) return false;
         // 🛡️ 올인 중인 좌석(chips===0)이 핸드 도중 재바이인하는 것 차단 — 보드를 보고 결정하는 반칙.
         if (this.gameStage >= 1 && this.gameStage <= 4 && this.playerOrder.includes(nick)) return false;
+        // 🪑 자리가 없으면 받지 않는다 — 뱅크롤만 빠지고 앉지 못하는 상황을 막는다
+        const _withChips = Object.keys(this.players).filter(n => (this.players[n].chips || 0) > 0).length;
+        if (_withChips >= TABLE_SEATS) {
+            if (p.socketId) io.to(p.socketId).emit('gameMessage', '🪑 자리가 가득 찼습니데이 — 자리가 나면 바이인할 수 있어예.');
+            return false;
+        }
         p.chips = this.startingChips;
         p.isSpectator = false;
         p.totalBuyins = (p.totalBuyins || 1) + 1; // 첫 입장이 1회
         MockDB.recordCashNet(nick, -this.startingChips); // 💵 바이인 = 순익 -
-        MockDB.adjustBankroll(nick, -this.startingChips); // 💰 뱅크롤에서 차감
+        // 💰 뱅크롤에서 차감 + 본인 화면 반영
+        MockDB.adjustBankroll(nick, -this.startingChips).then(nb => {
+            if (p.socketId) io.to(p.socketId).emit('bankrollUpdate', { bankroll: nb || 0 });
+        });
         io.to(this.roomId).emit('gameMessage', `💵 ${nick} 님이 ${this.startingChips.toLocaleString()} 칩 바이인! (재입장)`);
         // 좌석 배정은 대기 상태에서만. 핸드 진행 중이면 startNextHand가 다음 핸드에 앉힌다
         // (진행 중에 밀어넣으면 카드 없는 좌석이 턴을 받는다 — B1과 같은 결함).
@@ -3960,7 +3975,11 @@ io.on('connection', (socket) => {
                 if (joinAsSpectatorFull) socket.emit('gameMessage', '👀 자리가 가득 차 관전자로 입장했습니데이. 자리가 나면 다음 핸드부터 참여할 수 있어예.');
             } else {
                 io.to(roomId).emit('gameMessage', `👋 ${nick} 님이 방에 입장하셨습니다.`);
-                if (room.mode === 'cash') { MockDB.recordCashNet(nick, -room.startingChips); MockDB.adjustBankroll(nick, -room.startingChips); } // 💵 최초 바이인
+                if (room.mode === 'cash') {
+                    // 💵 최초 바이인 — 차감 후 본인 화면에도 반영 (예전엔 UI가 옛 금액 그대로였다)
+                    MockDB.recordCashNet(nick, -room.startingChips);
+                    MockDB.adjustBankroll(nick, -room.startingChips).then(nb => socket.emit('bankrollUpdate', { bankroll: nb || 0 }));
+                }
                 // 💡 [버그픽스] 캐시 진행 중 입장은 "다음 핸드부터" 합류 — 여기서 playerOrder에 바로 넣으면
                 //    카드를 받지 않은 좌석이 진행 중인 핸드의 턴을 받아 베팅까지 하고, 쇼다운에선 보드만으로
                 //    족보가 평가돼 팟을 가져갈 수도 있었다. 좌석 배정은 startNextHand가 핸드 경계에서 처리한다.
@@ -4028,7 +4047,11 @@ io.on('connection', (socket) => {
         }
 
         if (p._disconnectTimer) clearTimeout(p._disconnectTimer);
-        if (room.mode === 'cash' && p.chips > 0) { MockDB.recordCashNet(nick, p.chips); MockDB.adjustBankroll(nick, p.chips); } // 💵 캐시아웃 → 뱅크롤 환수
+        if (room.mode === 'cash' && p.chips > 0) {
+            // 💵 캐시아웃 → 뱅크롤 환수. 환수액을 본인 화면에도 즉시 반영한다.
+            MockDB.recordCashNet(nick, p.chips);
+            MockDB.adjustBankroll(nick, p.chips).then(nb => socket.emit('bankrollUpdate', { bankroll: nb || 0 }));
+        }
         delete room.players[nick];
         room.playerOrder = room.playerOrder.filter(n => n !== nick);
         socket.leave(roomId);
