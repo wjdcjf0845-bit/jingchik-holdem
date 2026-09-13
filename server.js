@@ -2503,6 +2503,13 @@ class GameRoom {
         // 🃏 [공개 규칙] 먼저 까는 사람(앞순서)과 팟을 먹은 사람은 무조건 공개한다.
         //    그 뒤 순서에서 진 사람만 "공개할지 머크할지" 고를 수 있다 (정식 규칙).
         //    봇과 연결이 끊긴 사람은 기본값인 머크로 둔다.
+        //    🚨 단, 올인으로 승부가 결정된 판은 예외 — 규칙상 올인 상황에선 남은 전원이
+        //    카드를 깐 채로 런아웃을 본다. 그렇게 이미 공개된 패를 결과창에서 다시 덮으면
+        //    "왜 자꾸 자동으로 머크되냐"가 된다 (실측: 올인 5핸드 중 4건에서 도로 덮였다).
+        //    한 번 보여준 패는 끝까지 보여준다.
+        const _contenders = this.playerOrder.filter(n => this.players[n] && !this.players[n].isFolded);
+        const _allInShowdown = _contenders.filter(n => !this.players[n].isAllIn).length <= 1 && _contenders.length >= 2;
+
         const _order = this.showdownOrder();
         const _firstShower = _order[0] || null;
         this._muckDeadline = Date.now() + MUCK_CHOICE_MS;
@@ -2510,8 +2517,8 @@ class GameRoom {
             const pl = this.players[nick];
             if (!pl || pl.isFolded) return;
             pl._muckChoice = false;
-            if (allWinnerIds.has(nick) || nick === _firstShower) {
-                pl.isMucked = false; // 앞순서·승자는 무조건 공개
+            if (_allInShowdown || allWinnerIds.has(nick) || nick === _firstShower) {
+                pl.isMucked = false; // 올인 쇼다운·승자·앞순서는 무조건 공개
                 return;
             }
             pl.isMucked = true;      // 기본은 머크
