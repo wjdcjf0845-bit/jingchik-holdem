@@ -1074,6 +1074,51 @@
             82%  { opacity: 1; }
             100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.72); opacity: 0; }
         }
+        /* 🎯 딜러 버튼이 다음 자리로 굴러간다 */
+        .dealer-fly {
+            position: fixed; z-index: 3300; pointer-events: none; will-change: transform;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 50%; font-weight: 900; font-family: var(--font-num); font-size: 11px;
+            background: radial-gradient(circle at 34% 28%, #ffffff, #e8ecf5 70%); color: #1b2233;
+            border: 2px solid rgba(0,0,0,0.4);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6), inset 0 -3px 5px rgba(0,0,0,0.18);
+            transform: translate(-50%, -50%);
+            animation: dealerMove var(--dur, 620ms) cubic-bezier(0.55, 0.02, 0.3, 1) forwards;
+        }
+        @keyframes dealerMove {
+            0%   { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
+            35%  { transform: translate(calc(-50% + var(--dx) * 0.42), calc(-50% + var(--dy) * 0.42 - 14px)) rotate(220deg) scale(1.18); }
+            100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(540deg) scale(1); }
+        }
+        /* 이동이 끝날 때까지 도착지 배지는 숨긴다 (두 개로 보이지 않게) */
+        .role-badge.dealer-hidden { opacity: 0; }
+        .role-badge.dealer-pop { animation: dealerPop 320ms cubic-bezier(0.2, 1.7, 0.4, 1); }
+        @keyframes dealerPop { 0% { transform: scale(0.5); } 60% { transform: scale(1.22); } 100% { transform: scale(1); } }
+
+        /* 🚨 블라인드 레벨 업 배너 */
+        #blind-banner {
+            display: none; position: fixed; left: 50%; top: 22%; transform: translateX(-50%);
+            z-index: 4650; pointer-events: none; text-align: center;
+            background: var(--paper-hi); color: var(--ink);
+            border: 2px solid var(--ink); border-radius: 16px;
+            padding: 14px 26px; box-sizing: border-box;
+            box-shadow: 7px 7px 0 rgba(200,80,31,0.9), 0 20px 44px rgba(34,29,21,0.45);
+        }
+        #blind-banner.go { display: block; animation: blindIn 2.8s cubic-bezier(0.2, 0.9, 0.3, 1) forwards; }
+        #blind-banner .bb-t { font-family: var(--font-disp); font-size: 15px; letter-spacing: 2px; color: var(--verm); }
+        #blind-banner .bb-v { font-family: var(--font-num); font-size: 30px; font-weight: 800; margin-top: 2px; white-space: nowrap; }
+        #blind-banner .bb-v .bb-old { font-size: 17px; color: var(--txt-dim); text-decoration: line-through; margin-right: 8px; }
+        #blind-banner .bb-a { font-size: 12.5px; color: var(--verm); margin-top: 3px; }
+        @keyframes blindIn {
+            0%   { opacity: 0; transform: translateX(-50%) translateY(-18px) scale(0.86); }
+            10%  { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.04); }
+            16%  { transform: translateX(-50%) translateY(0) scale(1); }
+            80%  { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateX(-50%) translateY(-12px) scale(0.96); }
+        }
+        @media (max-width: 900px) { #blind-banner { padding: 11px 18px; } #blind-banner .bb-v { font-size: 24px; } }
+        @media screen and (max-width: 960px) and (orientation: landscape) { #blind-banner { top: 14%; padding: 9px 16px; } #blind-banner .bb-v { font-size: 21px; } #blind-banner .bb-t { font-size: 12px; } }
+
         /* 숫자가 바뀔 때 살짝 튀는 강조 */
         .num-bump { animation: numBump 420ms cubic-bezier(0.2, 1.6, 0.4, 1); }
         @keyframes numBump { 0% { transform: scale(1); } 38% { transform: scale(1.16); } 100% { transform: scale(1); } }
@@ -1992,6 +2037,12 @@
         <div id="pf-ach-wrap" class="pf-ach-wrap"></div>
         <button class="btn-close-modal" style="margin-top:18px;" onclick="document.getElementById('profile-modal').classList.remove('show')">닫기</button>
     </div>
+</div>
+
+<div id="blind-banner">
+    <div class="bb-t">🚨 블라인드 상승</div>
+    <div class="bb-v"><span class="bb-old"></span><span class="bb-new"></span></div>
+    <div class="bb-a"></div>
 </div>
 
 <div id="rotate-hint">
@@ -2941,6 +2992,60 @@
         }
     }
 
+    // 🎯 딜러 버튼이 이전 자리에서 새 자리로 굴러간다.
+    //    좌석은 매 프레임 다시 그려지므로, 직전 위치를 기억해 뒀다가 독립 요소로 날린다.
+    function moveDealerButton(fromRect, toEl, label) {
+        if (!toEl) return;
+        if (_noMotion() || !fromRect || !fromRect.width) return;
+        const b = toEl.getBoundingClientRect();
+        if (!b.width) return;
+        const sx = fromRect.left + fromRect.width / 2, sy = fromRect.top + fromRect.height / 2;
+        const tx = b.left + b.width / 2, ty = b.top + b.height / 2;
+        if (Math.abs(tx - sx) < 2 && Math.abs(ty - sy) < 2) return; // 같은 자리면 생략
+
+        const DUR = 620;
+        const fly = document.createElement('div');
+        fly.className = 'dealer-fly';
+        fly.textContent = label || 'D';
+        fly.style.width = b.width + 'px';
+        fly.style.height = b.height + 'px';
+        fly.style.fontSize = getComputedStyle(toEl).fontSize;
+        fly.style.left = sx + 'px';
+        fly.style.top = sy + 'px';
+        fly.style.setProperty('--dx', (tx - sx) + 'px');
+        fly.style.setProperty('--dy', (ty - sy) + 'px');
+        fly.style.setProperty('--dur', DUR + 'ms');
+        document.body.appendChild(fly);
+
+        toEl.classList.add('dealer-hidden');
+        setTimeout(() => {
+            fly.remove();
+            toEl.classList.remove('dealer-hidden');
+            toEl.classList.add('dealer-pop');
+            setTimeout(() => toEl.classList.remove('dealer-pop'), 340);
+        }, DUR);
+    }
+
+    // 🚨 블라인드가 올라가면 배너로 알린다 (토너먼트·MTT 공통)
+    function showBlindBanner(oldInfo, info) {
+        const el = document.getElementById('blind-banner');
+        if (!el || !info) return;
+        const fmt = v => Number(v || 0).toLocaleString();
+        el.querySelector('.bb-old').innerText = oldInfo ? `${fmt(oldInfo.sb)}/${fmt(oldInfo.bb)}` : '';
+        el.querySelector('.bb-new').innerText = `${fmt(info.sb)}/${fmt(info.bb)}`;
+        const ante = info.ante || 0;
+        const aEl = el.querySelector('.bb-a');
+        aEl.innerText = ante > 0 ? `앤티 ${fmt(ante)} · 레벨 ${info.level}` : `레벨 ${info.level}`;
+        if (_noMotion()) {
+            el.style.display = 'block';
+            setTimeout(() => { el.style.display = 'none'; }, 2200);
+            return;
+        }
+        el.classList.remove('go'); void el.offsetWidth; el.classList.add('go');
+        setTimeout(() => el.classList.remove('go'), 2900);
+        try { SFX.myturn(); } catch (e) {}
+    }
+
     // 숫자를 목표치까지 굴린다 (요소가 유지되는 #pot-amount 전용)
     const _count = { el: null, cur: 0, target: 0, raf: 0 };
     function setPotAmount(v) {
@@ -2972,6 +3077,8 @@
 
     let _prevBets = {}, _prevBetRects = {}, _prevBetHand = null;
     const _cardWasHidden = new Set(), _cardRevealed = new Set(); // 🃏 카드 공개 뒤집기 추적
+    let _prevDealer = null, _prevDealerRect = null;               // 🎯 딜러 버튼 이동 추적
+    let _prevBlind = null;                                        // 🚨 블라인드 레벨 추적
     let playedAnimations = new Set();
     function getCard(cardStr, isHidden, animKey, squeeze) {
         let isNew = false;
@@ -3095,6 +3202,15 @@
         for (let di = 0; di < newDealt; di++) SFX.deal(di * 0.12);
 
         if (data.tournamentInfo) {
+            // 🚨 [블라인드 상승] 레벨이 올라간 순간을 잡아 배너를 띄운다.
+            //    메시지 문자열 대신 레벨 값을 보므로 토너먼트·MTT 모두에서 동일하게 동작한다.
+            if (data.gameMode !== 'cash') {
+                const ti = data.tournamentInfo;
+                if (_prevBlind && ti.level > _prevBlind.level) showBlindBanner(_prevBlind, ti);
+                if (!_prevBlind || ti.level !== _prevBlind.level) _prevBlind = { level: ti.level, sb: ti.sb, bb: ti.bb, ante: ti.ante };
+            } else {
+                _prevBlind = null;
+            }
             lastBB = data.tournamentInfo.bb || lastBB;
             document.getElementById('tournament-header').style.display = 'inline-block';
             const isCash = data.gameMode === 'cash';
@@ -3256,6 +3372,27 @@
                 }
             }
         });
+
+        // 🎯 [딜러 버튼] 핸드가 바뀌어 버튼이 다음 사람에게 넘어가면, 굴러가는 연출을 준다.
+        try {
+            let dealerNick = null;
+            Object.keys(data.players || {}).forEach(n => {
+                const r = data.players[n].role || '';
+                if (r === 'Dealer' || r.includes('D /')) dealerNick = n;
+            });
+            const dSeat = dealerNick ? document.getElementById('player-' + dealerNick.replace(/\s/g, '_')) : null;
+            const dBadge = dSeat ? dSeat.querySelector('.role-badge') : null;
+            if (dealerNick && dBadge) {
+                if (_prevDealer && _prevDealer !== dealerNick && _prevDealerRect) {
+                    moveDealerButton(_prevDealerRect, dBadge, dBadge.innerText);
+                }
+                _prevDealer = dealerNick;
+                const br = dBadge.getBoundingClientRect();
+                if (br.width) _prevDealerRect = br;
+            } else if (!dealerNick) {
+                _prevDealer = null; _prevDealerRect = null;
+            }
+        } catch (e) {}
 
         // 🃏 [쇼다운 뒤집기] 이번 프레임에 처음 공개된 카드를 다음 프레임에 돌린다
         if (document.querySelector('.card-inner.reveal-pending')) {
