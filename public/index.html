@@ -1055,6 +1055,39 @@
         #chat-log { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; scrollbar-width: thin; scrollbar-color: #2c3548 transparent; }
         .chat-msg { max-width: 100%; word-break: break-word; font-size: 13px; line-height: 1.4; animation: msgIn 0.2s ease-out; }
         @keyframes msgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* ════════ 💰 칩 이동 연출 ════════
+           좌석과 팟은 매 프레임 다시 그려지므로, 칩은 body 에 붙인 독립 요소로 날린다.
+           transform/opacity 만 써서 폰에서도 부드럽게 돈다. */
+        .fly-chip {
+            position: fixed; width: 15px; height: 15px; border-radius: 50%;
+            z-index: 3200; pointer-events: none; will-change: transform, opacity;
+            background: radial-gradient(circle at 34% 30%, #ffe9a8 0%, #f0b62a 42%, #b07c0a 100%);
+            box-shadow: 0 0 0 2px rgba(34,29,21,0.55), 0 3px 7px rgba(0,0,0,0.45);
+            transform: translate(-50%, -50%) scale(0.6); opacity: 0;
+            animation: chipFly var(--dur, 560ms) cubic-bezier(0.34, 0.02, 0.28, 1) forwards;
+        }
+        .fly-chip.win { background: radial-gradient(circle at 34% 30%, #fff2cf 0%, #f5c947 45%, #c8901a 100%); }
+        @keyframes chipFly {
+            0%   { transform: translate(-50%, -50%) scale(0.55); opacity: 0; }
+            14%  { transform: translate(calc(-50% + var(--dx) * 0.13), calc(-50% + var(--dy) * 0.13 - 10px)) scale(1); opacity: 1; }
+            82%  { opacity: 1; }
+            100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.72); opacity: 0; }
+        }
+        /* 숫자가 바뀔 때 살짝 튀는 강조 */
+        .num-bump { animation: numBump 420ms cubic-bezier(0.2, 1.6, 0.4, 1); }
+        @keyframes numBump { 0% { transform: scale(1); } 38% { transform: scale(1.16); } 100% { transform: scale(1); } }
+        /* 팟이 커질 때 테두리 반짝 */
+        .pot-area.pot-grow { animation: potGrow 520ms ease-out; }
+        @keyframes potGrow { 0% { box-shadow: 0 0 0 0 rgba(245,201,71,0); } 40% { box-shadow: 0 0 0 5px rgba(245,201,71,0.30); } 100% { box-shadow: 0 0 0 0 rgba(245,201,71,0); } }
+        /* 승자 좌석으로 칩이 도착할 때 */
+        .player-spot.chips-landing { animation: chipsLand 600ms ease-out; }
+        @keyframes chipsLand { 0%,100% { filter: none; } 45% { filter: brightness(1.3) drop-shadow(0 0 10px rgba(245,201,71,0.65)); } }
+
+        @media (prefers-reduced-motion: reduce) {
+            .fly-chip, .num-bump, .pot-area.pot-grow, .player-spot.chips-landing { animation: none !important; }
+            .fly-chip { display: none !important; }
+        }
         .chat-msg .sender { font-size: 11px; font-weight: 700; margin-bottom: 3px; text-align: left; color: #7bedaa; }
         .chat-msg .bubble { display: inline-block; background: rgba(34,42,60,0.85); color: var(--txt); padding: 8px 12px; border-radius: 13px; border-bottom-left-radius: 4px; border: 1px solid var(--line); width: 100%; text-align: left; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
         .chat-msg.me .sender { text-align: right; color: #6cbcff; }
@@ -2881,6 +2914,64 @@
         updateRaiseSlider(targetValue);
     }
 
+    // ════════ 💰 칩 이동 · 숫자 카운트업 ════════
+    const _noMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // 한 지점에서 다른 지점으로 칩을 날린다 (좌석/팟이 다시 그려져도 영향 없게 body 에 붙인다)
+    function flyChips(fromEl, toEl, count, opts) {
+        if (_noMotion() || !fromEl || !toEl) return;
+        const a = fromEl.getBoundingClientRect(), b = toEl.getBoundingClientRect();
+        if (!a.width || !b.width) return;
+        const sx = a.left + a.width / 2, sy = a.top + a.height / 2;
+        const tx = b.left + b.width / 2, ty = b.top + b.height / 2;
+        const n = Math.max(1, Math.min(5, count || 2));
+        const o = opts || {};
+        for (let i = 0; i < n; i++) {
+            const el = document.createElement('div');
+            el.className = 'fly-chip' + (o.win ? ' win' : '');
+            const jx = (Math.random() - 0.5) * 14, jy = (Math.random() - 0.5) * 14;
+            el.style.left = (sx + jx) + 'px';
+            el.style.top = (sy + jy) + 'px';
+            el.style.setProperty('--dx', (tx - sx - jx) + 'px');
+            el.style.setProperty('--dy', (ty - sy - jy) + 'px');
+            el.style.setProperty('--dur', (o.dur || 560) + 'ms');
+            el.style.animationDelay = ((o.delay || 0) + i * 55) + 'ms';
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), (o.dur || 560) + (o.delay || 0) + i * 55 + 120);
+        }
+    }
+
+    // 숫자를 목표치까지 굴린다 (요소가 유지되는 #pot-amount 전용)
+    const _count = { el: null, cur: 0, target: 0, raf: 0 };
+    function setPotAmount(v) {
+        const el = document.getElementById('pot-amount');
+        if (!el) return;
+        if (_noMotion()) { el.innerText = v.toLocaleString(); _count.cur = v; return; }
+        _count.el = el; _count.target = v;
+        if (_count.cur === v) { el.innerText = v.toLocaleString(); return; }
+        // 차이가 크지 않거나 줄어드는 경우(새 핸드)는 즉시 반영
+        if (v < _count.cur || Math.abs(v - _count.cur) < 2) { _count.cur = v; el.innerText = v.toLocaleString(); return; }
+        if (_count.raf) return; // 이미 굴러가는 중 — target 만 갱신
+        const step = () => {
+            const diff = _count.target - _count.cur;
+            if (Math.abs(diff) < 1) {
+                _count.cur = _count.target; _count.el.innerText = _count.cur.toLocaleString();
+                _count.raf = 0; return;
+            }
+            _count.cur += diff * 0.18 + (diff > 0 ? 1 : -1);
+            if ((diff > 0 && _count.cur > _count.target) || (diff < 0 && _count.cur < _count.target)) _count.cur = _count.target;
+            _count.el.innerText = Math.round(_count.cur).toLocaleString();
+            _count.raf = requestAnimationFrame(step);
+        };
+        _count.raf = requestAnimationFrame(step);
+    }
+    function bump(el) {
+        if (!el || _noMotion()) return;
+        el.classList.remove('num-bump'); void el.offsetWidth; el.classList.add('num-bump');
+    }
+
+    let _prevBets = {}, _prevBetRects = {}, _prevBetHand = null;
+    const _cardWasHidden = new Set(), _cardRevealed = new Set(); // 🃏 카드 공개 뒤집기 추적
     let playedAnimations = new Set();
     function getCard(cardStr, isHidden, animKey, squeeze) {
         let isNew = false;
@@ -2895,7 +2986,17 @@
         }
 
         const showFace = (!isHidden && cardStr !== '?');
-        const flipClass = showFace ? 'is-flipped' : '';
+        // 🃏 [쇼다운 뒤집기] 뒷면으로 보이던 카드가 처음 앞면이 되는 순간을 잡아낸다.
+        //    그 프레임에는 뒤집히지 않은 상태로 그린 뒤, 다음 프레임에 is-flipped 를 붙여
+        //    실제로 카드가 돌아가는 게 보이게 한다 (그냥 붙여서 그리면 전환이 안 보인다).
+        let revealNow = false;
+        if (animKey) {
+            if (!showFace) _cardWasHidden.add(animKey);
+            else if (_cardWasHidden.has(animKey) && !_cardRevealed.has(animKey)) {
+                _cardRevealed.add(animKey); revealNow = true;
+            }
+        }
+        const flipClass = showFace ? (revealNow ? 'reveal-pending' : 'is-flipped') : '';
         const animClass = isNew ? (animKey.startsWith('comm_') ? 'animate-comm' : 'animate-deal') : '';
         const flipDelay = isNew ? (delayNum + 0.4) : 0; 
 
@@ -2938,6 +3039,8 @@
         renderEndVote(data.endVote);
         if (data.handId !== lastHandId) {
             hideMuckPrompt(); // 🃏 이전 핸드의 패 공개 선택창 정리
+            _prevBets = {}; _prevBetRects = {}; _prevBetHand = null; // 💰 칩 이동 추적 초기화
+            _cardWasHidden.clear(); _cardRevealed.clear();            // 🃏 카드 공개 추적 초기화
             playedAnimations.clear();
             pendingBest5 = null;
             liveEquities = null;
@@ -2967,7 +3070,7 @@
         lastTurnPlayer = data.turnPlayerId;
         
         const totalCurrentBets = Object.values(data.players).reduce((sum, p) => sum + (p.currentBet || 0), 0);
-        document.getElementById('pot-amount').innerText = (data.pot + totalCurrentBets).toLocaleString();
+        setPotAmount(data.pot + totalCurrentBets);
 
         const sidepotArea = document.getElementById('sidepot-area');
         // 💡 [버그픽스] 사이드팟은 "올인한 사람들끼리 투자액이 다를 때"가 아니라
@@ -3153,6 +3256,52 @@
                 }
             }
         });
+
+        // 🃏 [쇼다운 뒤집기] 이번 프레임에 처음 공개된 카드를 다음 프레임에 돌린다
+        if (document.querySelector('.card-inner.reveal-pending')) {
+            requestAnimationFrame(() => {
+                document.querySelectorAll('.card-inner.reveal-pending').forEach(el => {
+                    el.classList.remove('reveal-pending');
+                    el.classList.add('is-flipped');
+                });
+            });
+        }
+
+        // 💰 [칩 수거] 스트리트가 끝나 각자의 벳이 팟으로 들어가는 순간, 칩이 가운데로 모이게 한다.
+        //    좌석은 매 프레임 새로 그려지므로 직전 프레임의 벳 위치를 기억해 두었다가 거기서 날린다.
+        try {
+            const potEl = document.querySelector('.pot-area');
+            const nowBets = {};
+            Object.keys(data.players || {}).forEach(n => { nowBets[n] = data.players[n].currentBet || 0; });
+            if (potEl && _prevBets && data.handId === _prevBetHand) {
+                let collected = 0;
+                Object.keys(_prevBets).forEach(n => {
+                    const before = _prevBets[n] || 0, after = nowBets[n] || 0;
+                    if (before > 0 && after === 0) {
+                        const r = _prevBetRects[n];
+                        if (r && r.width) {
+                            const ghost = { getBoundingClientRect: () => r };
+                            const cnt = before >= 4000 ? 4 : before >= 1200 ? 3 : 2;
+                            flyChips(ghost, potEl, cnt, { delay: collected * 60 });
+                            collected++;
+                        }
+                    }
+                });
+                if (collected) {
+                    potEl.classList.remove('pot-grow'); void potEl.offsetWidth; potEl.classList.add('pot-grow');
+                    bump(document.getElementById('pot-amount'));
+                }
+            }
+            // 이번 프레임의 벳 위치를 기억 (다음 프레임의 출발점)
+            _prevBets = nowBets; _prevBetHand = data.handId;
+            _prevBetRects = {};
+            Object.keys(nowBets).forEach(n => {
+                if (!nowBets[n]) return;
+                const seat = document.getElementById('player-' + n.replace(/\s/g, '_'));
+                const chip = seat && seat.querySelector('.bet-chip');
+                if (chip) { const cr = chip.getBoundingClientRect(); if (cr.width) _prevBetRects[n] = cr; }
+            });
+        } catch (e) {}
 
         const ind = document.getElementById('turn-indicator');
         const timerHtml = `<span class="timer-text">(⏳ <span id="action-time-left">${myTurnLimit}.0</span>초)</span>`;
@@ -3384,6 +3533,23 @@
         box.style.display = 'block';
         addLog(data.message.replace(/\n/g, ' '));
         clearEquityBadges(); // 결과 발표 — 승률 배지 종료
+
+        // 💰 [팟 지급] 팟이 승자 앞으로 날아간다 — 핸드의 감정적 마무리
+        try {
+            const potEl = document.querySelector('.pot-area');
+            const winners = [...new Set(data.winners || [])];
+            if (potEl && winners.length) {
+                winners.forEach((w, i) => {
+                    const seat = document.getElementById('player-' + String(w).replace(/\s/g, '_'));
+                    if (!seat) return;
+                    flyChips(potEl, seat, winners.length > 1 ? 3 : 5, { win: true, dur: 700, delay: 260 + i * 90 });
+                    setTimeout(() => {
+                        seat.classList.remove('chips-landing'); void seat.offsetWidth; seat.classList.add('chips-landing');
+                    }, 900 + i * 90);
+                });
+            }
+        } catch (e) {}
+
         playWinFX(data); // 🃏 족보별 승리 연출
 
         // 승리 5장 수집 → 하이라이트 (sendState 재렌더 이후에도 재적용)
