@@ -4,6 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>징칡홀덤 - Premium Edition</title>
+    <!-- 📱 앱처럼 쓰기(PWA) — 홈 화면에 추가하면 주소창 없이 전체화면 가로모드로 열린다 -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#221d15">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="징칡홀덤">
+    <link rel="apple-touch-icon" href="/icons/icon-180.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -982,6 +991,30 @@
         #net-banner.ok { background: linear-gradient(180deg, #27ae60, #1b7a43); }
 
         /* ── 리바이 프롬프트 ── */
+        /* 📱 세로로 들고 있을 때 가로 권장 안내 */
+        #rotate-hint {
+            display: none; position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom));
+            transform: translateX(-50%); z-index: 5000; width: 300px; max-width: 88vw;
+            background: var(--paper-hi); color: var(--ink); border: 2px solid var(--ink);
+            border-radius: 14px; padding: 11px 14px; text-align: center; box-sizing: border-box;
+            box-shadow: 5px 5px 0 rgba(200,80,31,0.9), 0 14px 32px rgba(34,29,21,0.4);
+        }
+        #rotate-hint .rh-t { font-family: var(--font-disp); font-size: 15px; }
+        #rotate-hint .rh-s { font-size: 12px; color: var(--verm); margin-top: 3px; word-break: keep-all; }
+        #rotate-hint .rh-x { margin-top: 9px; width: 100%; background: var(--ink); color: var(--paper-hi);
+            border: 2px solid var(--ink); border-radius: 9px; padding: 8px 0; font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit; }
+        /* 가로로 돌리면 자동으로 사라진다 */
+        @media (orientation: landscape) { #rotate-hint { display: none !important; } }
+
+        /* 📱 홈 화면에 추가 버튼 (로비) */
+        #install-app {
+            display: none; margin: 10px auto 0; width: 100%; max-width: 320px;
+            background: var(--ink); color: var(--paper-hi); border: 2px solid var(--ink);
+            border-radius: 11px; padding: 11px 0; font-weight: 800; font-size: 14px;
+            cursor: pointer; font-family: inherit; box-shadow: 4px 4px 0 rgba(200,80,31,0.9);
+        }
+        #install-app:active { transform: translate(1px,1px); box-shadow: none; }
+
         /* 🃏 쇼다운 — 진 사람이 패를 공개할지 고르는 창 */
         #muck-prompt {
             display: none; position: fixed; left: 50%; bottom: 220px; transform: translateX(-50%);
@@ -1318,22 +1351,37 @@
             #hud-center { order: 0; flex-basis: auto; }
             .tournament-info { font-size: 10px; padding: 2px 9px; }
 
-            /* 게임 영역: 좌측 테이블 + 우측 컨트롤 분할 (가로 활용) */
-            #game-container { width: 100vw; height: 100vh; flex-direction: row; align-items: center; justify-content: center; padding: calc(38px + env(safe-area-inset-top)) 8px 8px; box-sizing: border-box; gap: 6px; }
+            /* 게임 영역: 좌측 테이블 + 우측 컨트롤 분할 (가로 활용)
+               ⚠️ display:flex 가 빠져 있어 좌우 분할이 아예 안 되고, 컨트롤이 테이블 아래로
+                  밀려 화면 밖(y 493 > 375)으로 나가 버튼을 누를 수 없었다 — 실측으로 발견. */
+            #game-container { display: flex !important; width: 100vw; height: 100vh; flex-direction: row; align-items: flex-start; justify-content: center; padding: calc(38px + env(safe-area-inset-top)) 8px 8px; box-sizing: border-box; gap: 6px; }
 
-            .poker-table { width: 58vw; max-width: 540px; height: min(64vh, 300px); border-width: 8px; border-radius: 140px; margin: 0 auto; transform: none; }
+            /* 가로 폰은 세로 공간이 빠듯하다(375px). 실측으로 맞춘 값:
+               · 테이블을 낮추고 위에서부터 쌓아 아래에 내 좌석 자리를 만든다
+               · 팟을 보드 "아래"로 내린다 — 위에 두면 상단 좌석(pos-3)과 겹친다 */
+            .poker-table { width: 58vw; max-width: 540px; height: min(57vh, 270px); border-width: 8px; border-radius: 140px;
+                margin: 34px auto 0; transform: none; padding-bottom: 22px; box-sizing: border-box; justify-content: flex-end; }
+            .poker-table > div:first-child { order: 2; }   /* 팟 → 보드 아래로 */
+            #community-area { order: 1; }
+            .controls { margin-top: 4px; }
             .poker-table::before { font-size: 12px; letter-spacing: 2px; }
             .poker-table::after { inset: 10px; border-radius: 120px; }
 
-            /* 좌석 — 가로 타원에 맞춰 재배치 */
-            .pos-0 { bottom: -7%; left: 50%; transform: translate(-50%, 50%); z-index: 50; }
-            .pos-1 { bottom: 6%; left: -7%; transform: translate(-50%, 0); z-index: 40; }
-            .pos-2 { top: 6%; left: -7%; transform: translate(-50%, 0); z-index: 30; }
-            .pos-3 { top: -7%; left: 50%; transform: translate(-50%, -50%); z-index: 20; }
-            .pos-4 { top: 6%; right: -7%; transform: translate(50%, 0); z-index: 30; }
-            .pos-5 { bottom: 6%; right: -7%; transform: translate(50%, 0); z-index: 40; }
+            /* 좌석 — 가로에선 펠트 "안쪽"에 붙인다.
+               바깥(-7%)에 걸치면 좌우 좌석이 화면 밖으로 잘리고 컨트롤 패널과도 겹쳤다 (실측). */
+            .players-area .pos-0 { bottom: -2%; left: 50%; transform: translate(-50%, 50%); z-index: 50; }
+            .players-area .pos-1 { bottom: 7%; left: 2%; right: auto; transform: none; z-index: 40; }
+            .players-area .pos-2 { top: 7%; left: 2%; right: auto; transform: none; z-index: 30; }
+            .players-area .pos-3 { top: -8%; left: 50%; transform: translate(-50%, -50%); z-index: 20; }
+            .players-area .pos-4 { top: 7%; right: 2%; left: auto; transform: none; z-index: 30; }
+            .players-area .pos-5 { bottom: 7%; right: 2%; left: auto; transform: none; z-index: 40; }
 
-            .player-spot { min-width: 96px; max-width: 120px; padding: 4px 6px 5px; font-size: 11px; border-radius: 10px; }
+            .player-spot { min-width: 88px; max-width: 104px; padding: 3px 6px 4px; font-size: 11px; border-radius: 10px; }
+            /* 내 좌석은 카드가 커서 세로로 넘쳤다 — 가로에선 납작하게 (실측 149px → 101px) */
+            .players-area .pos-0 { max-width: 136px; min-width: 124px; }
+            .players-area .pos-0 .card-container { width: 34px; height: 47px; }
+            .players-area .pos-0 .cf-corner { font-size: 10px; }
+            .players-area .pos-0 .cf-center { font-size: 14px; margin-top: 2px; }
             .ps-namebar { margin-bottom: 3px; }
             .ps-nick { font-size: 10px; }
             .pos-badge { font-size: 8px; padding: 0 3px; }
@@ -1913,6 +1961,12 @@
     </div>
 </div>
 
+<div id="rotate-hint">
+    <div class="rh-t">📱 가로로 돌려보이소</div>
+    <div class="rh-s">가로 화면이 카드도 크고 버튼도 편합니데이</div>
+    <button class="rh-x" onclick="dismissRotateHint()">알겠심더</button>
+</div>
+
 <div id="muck-prompt">
     <div class="mk-title">🃏 패를 공개할까예?</div>
     <div class="mk-sub">안 보여줘도 됩니데이 (<span id="mk-left">6</span>초 뒤 자동으로 덮습니더)</div>
@@ -1948,6 +2002,7 @@
         <div class="login-hint">닉네임 한글/영문/숫자/_ 2~12자 · 비밀번호 숫자 4자리<br><span style="color:#7bedaa;">처음 입력한 비밀번호로 계정이 만들어집니데이</span></div>
         <div id="login-error" style="display:none; color:#ff8a78; font-size:13px; font-weight:700; margin-bottom:12px;"></div>
         <button class="btn-join" onclick="login()">카지노 입장</button>
+        <button id="install-app" onclick="installApp()">📱 홈 화면에 추가 (앱처럼 쓰기)</button>
     </div>
 </div>
 
@@ -3498,6 +3553,72 @@
             setTimeout(() => chip.remove(), 700 + (i * 80));
         }
     }
+
+    // ════════ 📱 앱처럼 쓰기 (PWA) ════════
+    //  홈 화면에 추가하면 주소창 없이 전체화면 가로모드로 열린다.
+    //  서비스워커는 아이콘·사운드만 캐시한다 — 게임 화면을 캐시하면 옛 규칙이 남아 버그처럼 보인다.
+    let _installEvent = null;
+    const _standalone = () => window.matchMedia('(display-mode: standalone)').matches
+        || window.matchMedia('(display-mode: fullscreen)').matches
+        || window.navigator.standalone === true;
+
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+    }
+
+    window.addEventListener('beforeinstallprompt', e => {
+        e.preventDefault();
+        _installEvent = e;
+        const b = document.getElementById('install-app');
+        if (b && !_standalone()) b.style.display = 'block';
+    });
+    window.addEventListener('appinstalled', () => {
+        _installEvent = null;
+        const b = document.getElementById('install-app');
+        if (b) b.style.display = 'none';
+    });
+
+    function installApp() {
+        const b = document.getElementById('install-app');
+        if (_installEvent) {
+            _installEvent.prompt();
+            _installEvent.userChoice.finally(() => { _installEvent = null; if (b) b.style.display = 'none'; });
+            return;
+        }
+        // 아이폰은 beforeinstallprompt 가 없다 — 수동 방법을 안내한다
+        const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        alert(ios
+            ? '사파리 아래쪽 공유 버튼(⬆️) → "홈 화면에 추가"를 누르면 앱처럼 쓸 수 있습니데이.'
+            : '브라우저 메뉴(⋮) → "홈 화면에 추가" 또는 "앱 설치"를 누르면 됩니데이.');
+    }
+
+    // 아이폰은 설치 이벤트가 없으니, 모바일이고 아직 앱이 아니면 버튼을 그냥 보여준다
+    window.addEventListener('DOMContentLoaded', () => {
+        const b = document.getElementById('install-app');
+        const isMobile = /iPad|iPhone|iPod|Android/.test(navigator.userAgent);
+        if (b && isMobile && !_standalone()) b.style.display = 'block';
+        checkRotateHint();
+    });
+
+    // 📱 세로로 들고 있으면 가로를 권한다 (한 번 닫으면 다시 안 띄운다)
+    function dismissRotateHint() {
+        try { localStorage.setItem('rotateHintDone', '1'); } catch (e) {}
+        const el = document.getElementById('rotate-hint');
+        if (el) el.style.display = 'none';
+    }
+    function checkRotateHint() {
+        const el = document.getElementById('rotate-hint');
+        if (!el) return;
+        let done = false;
+        try { done = localStorage.getItem('rotateHintDone') === '1'; } catch (e) {}
+        const isMobile = /iPad|iPhone|iPod|Android/.test(navigator.userAgent) || window.innerWidth <= 900;
+        const portrait = window.innerHeight > window.innerWidth;
+        el.style.display = (!done && isMobile && portrait) ? 'block' : 'none';
+    }
+    window.addEventListener('orientationchange', () => setTimeout(checkRotateHint, 300));
+    window.addEventListener('resize', () => { clearTimeout(window.__rhT); window.__rhT = setTimeout(checkRotateHint, 250); });
 
     // 🃏 [쇼다운] 뒷순서에서 진 사람만 패 공개 여부를 고른다.
     //    앞순서(먼저 까는 사람)와 팟을 먹은 사람은 규칙상 무조건 공개되므로 이 창이 뜨지 않는다.
