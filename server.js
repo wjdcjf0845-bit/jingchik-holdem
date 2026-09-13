@@ -789,6 +789,8 @@ class GameRoom {
                     tournamentInfo: (this.tournamentStarted || this.mode === 'cash') ? this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)] : null,
                     gameMode: this.mode,
                     canEndVote: this.endVoteEligible(), // 🗳️ 합의 종료 투표 가능 여부 (나가기 메뉴 노출용)
+                    youSpectate: !!recipient._wantSpectate, // 👀 내가 "관전으로 입장"을 고른 상태인가
+                    seatsUsed: this.playerOrder.length, seatsMax: TABLE_SEATS,
                     endVote: this.endVoteSnapshot(),
                     timeRemaining: this.timeRemaining,
                     turnEndTime: this.turnEndTime,
@@ -1860,6 +1862,7 @@ class GameRoom {
         //    클라이언트 좌석은 6개(pos-0~pos-5)뿐이라 7번째는 화면에 그려지지도 않는다.
         Object.keys(this.players).forEach(nick => {
             if (this.playerOrder.length >= TABLE_SEATS) return;
+            if (this.players[nick]._wantSpectate) return;   // 👀 본인이 관전을 고름 — 앉히지 않는다
             if (this.players[nick].chips > 0 && !this.playerOrder.includes(nick)) this.playerOrder.push(nick);
         });
 
@@ -2779,6 +2782,7 @@ class GameRoom {
     offerCashBuyin(nick) {
         const p = this.players[nick];
         if (!p || p.socketId == null) return; // 봇/연결없음 제외
+        if (p._wantSpectate) return;          // 👀 스스로 관전을 고른 사람에겐 권하지 않는다
         // 자리가 없으면 권하지 않는다 (권해봐야 doCashBuyin 이 거절한다)
         const withChips = Object.keys(this.players).filter(n => (this.players[n].chips || 0) > 0).length;
         if (withChips >= TABLE_SEATS) return;
@@ -3964,8 +3968,10 @@ io.on('connection', (socket) => {
         }
 
         if (!room.players[nick]) {
+            // 👀 본인이 "관전으로 입장"을 고른 경우 — 자리가 있어도 앉지 않는다
+            const wantSpectate = !!(data && data.asSpectator);
             // 💵 캐시: 진행 중에도 칩 들고 바로 착석 / 🏆 토너먼트: 진행 중이면 관전 / 풀방: 관전
-            const asSpectator = joinAsSpectatorFull || ((room.mode === 'tournament') && room.tournamentStarted);
+            const asSpectator = wantSpectate || joinAsSpectatorFull || ((room.mode === 'tournament') && room.tournamentStarted);
             room.players[nick] = {
                 id: nick, socketId: socket.id,
                 chips: asSpectator ? 0 : room.startingChips,
@@ -3974,9 +3980,13 @@ io.on('connection', (socket) => {
                 isDisconnected: false, isMucked: false, hand: [], lastEmoteTime: 0,
                 isSpectator: asSpectator,
                 _fullRoomSpectator: joinAsSpectatorFull, // 풀방 관전 — 자리 나면 합류 가능
+                _wantSpectate: wantSpectate,             // 👀 본인이 고른 관전 — 자동으로 앉히지 않는다
                 rebuysUsed: 0, totalBuyins: 1
             };
-            if (asSpectator) {
+            if (wantSpectate) {
+                io.to(roomId).emit('gameMessage', `👀 ${nick} 님이 관전하러 왔습니데이.`);
+                socket.emit('gameMessage', '👀 관전 중입니데이 — 아래 [참여하기]를 누르면 자리에 앉습니더.');
+            } else if (asSpectator) {
                 const reason = joinAsSpectatorFull ? '(자리가 차서 관전석으로)' : '';
                 io.to(roomId).emit('gameMessage', `👀 ${nick} 님이 관전자로 입장하셨습니다. ${reason}`);
                 if (joinAsSpectatorFull) socket.emit('gameMessage', '👀 자리가 가득 차 관전자로 입장했습니데이. 자리가 나면 다음 핸드부터 참여할 수 있어예.');
@@ -4259,6 +4269,68 @@ io.on('connection', (socket) => {
         socket.emit('mttCreated', { mttId, name });
         mtt.broadcastLobby();
         io.emit('mttList', mttListArray());
+    });
+
+    // 👀 관전자가 자리에 앉겠다고 할 때
+    socket.on('takeSeat', () => {
+        const room = rooms.get(socket.currentRoom);
+        if (!room || !socket.nickname) return;
+        const nick = socket.nickname;
+        const p = room.players[nick];
+        if (!p) return;
+        if (!p.isSpectator && (p.chips || 0) > 0) return;           // 이미 앉아 있음
+
+        // 자리 확인 (클라이언트 좌석 레이아웃과 동일한 정원)
+        const withChips = Object.keys(room.players).filter(n => (room.players[n].chips || 0) > 0).length;
+        if (withChips >= TABLE_SEATS) {
+            socket.emit('gameMessage', '🪑 자리가 가득 찼습니데이 — 자리가 나면 앉을 수 있어예.');
+            return;
+        }
+        // 진행 중인 토너먼트에는 중간 합류 불가 (공정성)
+        if (room.mode !== 'cash' && room.tournamentStarted) {
+            socket.emit('gameMessage', '🏆 토너먼트 진행 중에는 합류할 수 없습니데이 — 끝나면 자동으로 참여됩니더.');
+            return;
+        }
+
+        p._wantSpectate = false;
+        p._fullRoomSpectator = false;
+        p.isSpectator = false;
+        p.chips = room.startingChips;
+        if (room.mode === 'cash') {
+            // 💵 캐시는 바이인 — 뱅크롤에서 차감하고 본인 화면에 반영
+            MockDB.recordCashNet(nick, -room.startingChips);
+            MockDB.adjustBankroll(nick, -room.startingChips).then(nb => socket.emit('bankrollUpdate', { bankroll: nb || 0 }));
+        }
+        io.to(room.roomId).emit('gameMessage', `🪑 ${nick} 님이 관전석에서 자리에 앉았습니데이.`);
+        if (room.gameStage === 0 && !room.playerOrder.includes(nick)) room.playerOrder.push(nick);
+        else if (room.gameStage !== 0) socket.emit('gameMessage', '🪑 다음 핸드부터 플레이합니데이.');
+        room.sendState();
+        if (room.mode === 'cash') room.tryAutoResume();
+        io.to('lobby').emit('roomList', roomListArray());
+    });
+
+    // 👀 자리에 앉아 있다가 관전으로 돌아가기 (칩은 정산)
+    socket.on('goSpectate', () => {
+        const room = rooms.get(socket.currentRoom);
+        if (!room || !socket.nickname) return;
+        const p = room.players[socket.nickname];
+        if (!p || p.isSpectator) return;
+        if (room.mode !== 'cash') { socket.emit('gameMessage', '🏆 토너먼트에선 중간에 관전으로 바꿀 수 없습니데이.'); return; }
+        if (room.gameStage >= 1 && room.gameStage <= 4 && !p.isFolded && ((p.totalInvested || 0) > 0 || p.isAllIn)) {
+            socket.emit('gameMessage', '🚨 이번 핸드가 끝난 뒤에 관전으로 바꿀 수 있습니데이.');
+            return;
+        }
+        const back = p.chips || 0;
+        if (back > 0) {
+            MockDB.recordCashNet(socket.nickname, back);
+            MockDB.adjustBankroll(socket.nickname, back).then(nb => socket.emit('bankrollUpdate', { bankroll: nb || 0 }));
+        }
+        p.chips = 0;
+        p.isSpectator = true;
+        p._wantSpectate = true;
+        room.playerOrder = room.playerOrder.filter(n => n !== socket.nickname);
+        io.to(room.roomId).emit('gameMessage', `👀 ${socket.nickname} 님이 ${back.toLocaleString()} 칩을 정산하고 관전으로 돌아갔습니데이.`);
+        room.sendState();
     });
 
     // 🃏 진 사람이 자기 패를 공개하기로 선택 (앞순서·승자는 애초에 선택지가 없다)

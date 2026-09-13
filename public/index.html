@@ -1074,6 +1074,35 @@
             82%  { opacity: 1; }
             100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.72); opacity: 0; }
         }
+        /* 👀 방 목록 — 관전으로 입장 버튼 */
+        .room-item .room-watch {
+            flex: 0 0 auto; margin-left: 8px; padding: 5px 10px; border-radius: 8px;
+            font-size: 11.5px; font-weight: 800; cursor: pointer; white-space: nowrap;
+            background: rgba(255,255,255,0.08); color: var(--txt-dim);
+            border: 1px solid rgba(255,255,255,0.2); font-family: inherit;
+        }
+        .room-item .room-watch:hover { background: rgba(255,255,255,0.16); color: var(--txt); }
+        .room-item .room-right { display: flex; align-items: center; gap: 4px; }
+
+        /* 👀 관전 중 — 자리에 앉기 */
+        #spectate-bar {
+            display: none; position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom));
+            transform: translateX(-50%); z-index: 3400; width: 330px; max-width: 92vw;
+            background: var(--paper-hi); color: var(--ink); border: 2px solid var(--ink);
+            border-radius: 14px; padding: 11px 14px; text-align: center; box-sizing: border-box;
+            box-shadow: 5px 5px 0 rgba(200,80,31,0.9), 0 14px 32px rgba(34,29,21,0.4);
+        }
+        #spectate-bar .sp-t { font-family: var(--font-disp); font-size: 15px; }
+        #spectate-bar .sp-s { font-size: 12px; color: var(--verm); margin-top: 3px; word-break: keep-all; }
+        #spectate-bar button {
+            margin-top: 9px; width: 100%; background: var(--ink); color: var(--paper-hi);
+            border: 2px solid var(--ink); border-radius: 9px; padding: 10px 0;
+            font-weight: 800; font-size: 13.5px; cursor: pointer; font-family: inherit;
+            box-shadow: 3px 3px 0 rgba(200,80,31,0.9);
+        }
+        #spectate-bar button:active { transform: translate(1px,1px); box-shadow: none; }
+        @media screen and (max-width: 960px) and (orientation: landscape) { #spectate-bar { bottom: 8px; width: 300px; padding: 8px 12px; } #spectate-bar .sp-t { font-size: 13px; } #spectate-bar button { padding: 8px 0; margin-top: 6px; } }
+
         /* ════════ ⚡ 자동 액션(프리액션) ════════
            상업용 포커 앱의 기본 기능. 내 차례가 오기 전에 미리 골라두면
            차례가 오는 즉시 실행돼 멀티웨이에서 기다리는 시간이 확 준다. */
@@ -2122,6 +2151,12 @@
     </div>
 </div>
 
+<div id="spectate-bar">
+    <div class="sp-t">👀 관전 중입니데이</div>
+    <div class="sp-s"></div>
+    <button onclick="takeSeat()">▶ 자리에 앉기</button>
+</div>
+
 <div id="showdown-dim"></div>
 <div id="showdown-stamp">
     <div class="sd-rank"></div>
@@ -2545,6 +2580,7 @@
 <script>
     const socket = io();
     let myNickname = '';
+    let myPin = '';   // 재접속 자동 재인증용 (선언 없이 쓰여 ReferenceError 가 날 수 있었다)
     let serverTurnEndTime = 0;
     let myTurnLimit = 20; // 💡 [수정 #4] 서버 방 설정과 동기화되는 턴 제한시간
     let lastTurnPlayer = null;
@@ -2737,7 +2773,9 @@
         } });
     }
 
-    function joinRoom(rm) { socket.emit('joinRoom', { roomId: rm }); }
+    function joinRoom(rm, asSpectator) { socket.emit('joinRoom', { roomId: rm, asSpectator: !!asSpectator }); }
+    function takeSeat() { socket.emit('takeSeat'); }
+    function goSpectate() { socket.emit('goSpectate'); }
 
     // 💡 [수정 #9] 방 나가기 → 로비 복귀
     function requestLeave() {
@@ -2882,8 +2920,11 @@
             const meta = `<span class="room-meta">${room.total || 0}명${room.playing ? ' · 진행중' : ' · 대기중'}</span>`;
             const btn = document.createElement('div');
             btn.className = 'room-item';
-            btn.innerHTML = `<span class="room-name"><span class="room-suit">${suit}</span>${esc(room.id)} ${badge}${meta}</span><span class="room-enter">ENTER ▶</span>`;
+            btn.innerHTML = `<span class="room-name"><span class="room-suit">${suit}</span>${esc(room.id)} ${badge}${meta}</span>` +
+                `<span class="room-right"><button class="room-watch" type="button">👀 관전</button><span class="room-enter">ENTER ▶</span></span>`;
             btn.onclick = () => joinRoom(room.id);
+            // 👀 관전으로 입장 — 자리가 있어도 앉지 않고 구경만 한다
+            btn.querySelector('.room-watch').onclick = (e) => { e.stopPropagation(); joinRoom(room.id, true); };
             list.appendChild(btn);
         });
         updateRoomListUI();
@@ -3043,7 +3084,7 @@
         netBanner.style.display = 'block';
     });
     socket.on('connect', () => {
-        if (!hadSession || !myNickname) return;
+        if (!hadSession || !myNickname || !myPin) return;
         socket.emit('login', { nickname: myNickname, pin: myPin, deviceId: getDeviceId(), reconnect: true });
         netBanner.classList.add('ok');
         netBanner.innerText = '✔ 재접속 완료!';
@@ -3627,12 +3668,32 @@
 
         const myPlayer = data.players[myNickname];
         if (myPlayer && myPlayer.chips > 0) document.getElementById('rebuy-prompt').style.display = 'none';
+        // 👀 관전 상태가 아니면 관전 바를 숨긴다 (myPlayer 선언 이후여야 한다)
+        if (!(myPlayer && myPlayer.isSpectator && data.youSpectate)) {
+            const _sb = document.getElementById('spectate-bar');
+            if (_sb) _sb.style.display = 'none';
+        }
         const isSpectator = data.playerOrder && !data.playerOrder.includes(myNickname);
 
         if (myPlayer && myPlayer.isSpectator) {
             document.getElementById('ready-controls').style.display = 'none';
             document.getElementById('action-controls').style.display = 'none';
-            ind.innerHTML = `👀 현재 진행 중인 토너먼트를 관전 중입니데이... (종료 후 자동 참여)`;
+            // 👀 스스로 관전을 고른 경우엔 언제든 앉을 수 있게 안내한다
+            if (data.youSpectate) {
+                const full = (data.seatsUsed || 0) >= (data.seatsMax || 6);
+                const tourneyRunning = data.gameMode !== 'cash' && data.gameStage > 0;
+                const bar = document.getElementById('spectate-bar');
+                const sub = bar.querySelector('.sp-s');
+                const btn = bar.querySelector('button');
+                if (full) { sub.innerText = `자리가 가득 찼습니데이 (${data.seatsUsed}/${data.seatsMax})`; btn.disabled = true; btn.style.opacity = 0.45; }
+                else if (tourneyRunning) { sub.innerText = '토너먼트가 끝나면 참여할 수 있습니데이'; btn.disabled = true; btn.style.opacity = 0.45; }
+                else { sub.innerText = `빈자리 ${(data.seatsMax || 6) - (data.seatsUsed || 0)}개 — 지금 앉을 수 있습니데이`; btn.disabled = false; btn.style.opacity = 1; }
+                bar.style.display = 'block';
+                ind.innerHTML = `👀 관전 중입니데이 — 아래 [자리에 앉기]로 참여하이소`;
+            } else {
+                document.getElementById('spectate-bar').style.display = 'none';
+                ind.innerHTML = `👀 현재 진행 중인 토너먼트를 관전 중입니데이... (종료 후 자동 참여)`;
+            }
         }
         else if (myPlayer && myPlayer.chips <= 0 && data.gameStage > 0) {
             document.getElementById('ready-controls').style.display = 'none';
