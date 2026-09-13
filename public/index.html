@@ -3597,8 +3597,8 @@
     // 아이폰은 설치 이벤트가 없으니, 모바일이고 아직 앱이 아니면 버튼을 그냥 보여준다
     window.addEventListener('DOMContentLoaded', () => {
         const b = document.getElementById('install-app');
-        const isMobile = /iPad|iPhone|iPod|Android/.test(navigator.userAgent);
-        if (b && isMobile && !_standalone()) b.style.display = 'block';
+        const isMobileUA = /iPad|iPhone|iPod|Android/.test(navigator.userAgent);
+        if (b && isMobileUA && !_standalone()) b.style.display = 'block';
         checkRotateHint();
     });
 
@@ -3613,9 +3613,11 @@
         if (!el) return;
         let done = false;
         try { done = localStorage.getItem('rotateHintDone') === '1'; } catch (e) {}
-        const isMobile = /iPad|iPhone|iPod|Android/.test(navigator.userAgent) || window.innerWidth <= 900;
+        // 터치 기기에서만 권한다 — 데스크톱에서 창을 좁게 써도 뜨면 곤란하다
+        const isTouch = window.matchMedia('(pointer: coarse)').matches
+            || /iPad|iPhone|iPod|Android/.test(navigator.userAgent);
         const portrait = window.innerHeight > window.innerWidth;
-        el.style.display = (!done && isMobile && portrait) ? 'block' : 'none';
+        el.style.display = (!done && isTouch && portrait) ? 'block' : 'none';
     }
     window.addEventListener('orientationchange', () => setTimeout(checkRotateHint, 300));
     window.addEventListener('resize', () => { clearTimeout(window.__rhT); window.__rhT = setTimeout(checkRotateHint, 250); });
