@@ -1074,6 +1074,29 @@
             82%  { opacity: 1; }
             100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.72); opacity: 0; }
         }
+        /* ════════ ⚡ 자동 액션(프리액션) ════════
+           상업용 포커 앱의 기본 기능. 내 차례가 오기 전에 미리 골라두면
+           차례가 오는 즉시 실행돼 멀티웨이에서 기다리는 시간이 확 준다. */
+        #preaction-bar { display: none; margin-top: 8px; }
+        #preaction-bar .pa-t { font-size: 11.5px; color: var(--txt-dim); margin-bottom: 6px; letter-spacing: 0.5px; }
+        #preaction-bar .pa-row { display: flex; gap: 6px; }
+        #preaction-bar button {
+            flex: 1; padding: 10px 0; border-radius: 10px; font-size: 12.5px; font-weight: 800;
+            cursor: pointer; font-family: inherit; white-space: nowrap;
+            background: rgba(255,255,255,0.06); color: var(--txt-dim);
+            border: 1px solid rgba(255,255,255,0.16); transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+        #preaction-bar button:hover { background: rgba(255,255,255,0.12); }
+        #preaction-bar button.on {
+            background: var(--gold-grad); color: #3a2503; border-color: rgba(245,201,71,0.8);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 3px 10px rgba(245,201,71,0.28);
+        }
+        /* 올인 오조작 방지 — 한 번 더 눌러야 실행 */
+        .btn-allin.confirming { animation: allinWarn 0.9s ease-in-out infinite; }
+        @keyframes allinWarn { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.35); } }
+
+        @media (prefers-reduced-motion: reduce) { .btn-allin.confirming { animation: none; outline: 2px solid var(--gold-hi); } }
+
         /* ════════ 🏆 쇼다운 연출 ════════
            예전엔 스트레이트 이상만 효과가 있어서 일반 쇼다운이 밋밋했다.
            이제 모든 쇼다운에 "조명이 꺼지고 → 족보가 찍히고 → 승자에 링이 퍼지는" 흐름을 준다. */
@@ -2325,6 +2348,14 @@
             </div>
             <div class="key-hint">단축키 — F 폴드 · C 체크/콜 · R 레이즈 · A 올인 · ← → 금액 조절</div>
         </div>
+        <div id="preaction-bar">
+            <div class="pa-t">⚡ 미리 정해두기 — 내 차례가 오면 바로 실행됩니데이</div>
+            <div class="pa-row">
+                <button data-pa="checkfold" onclick="togglePreAction('checkfold')">체크/폴드</button>
+                <button data-pa="check" onclick="togglePreAction('check')">체크</button>
+                <button data-pa="call" onclick="togglePreAction('call')">콜</button>
+            </div>
+        </div>
         <div id="turn-indicator">대기 중... 호스트가 게임 시작을 대기 중입니다.</div>
     </div>
 
@@ -2903,10 +2934,74 @@
     socket.on('joinError', msg => alert(msg));
 
     function sendAction(type) {
+        // 🔥 [오조작 방지] 올인은 한 번 더 눌러야 나간다. 폰에서 잘못 눌러 스택을 날리는 사고가
+        //    제일 뼈아프다 — 상업용 앱들도 큰 베팅엔 확인 단계를 둔다.
+        if (type === 'allin' && !_allinArmed) {
+            armAllin();
+            return;
+        }
+        disarmAllin();
+        clearPreAction();                                  // 손으로 쳤으면 예약은 해제
         hideGtoAdvice(); // 🎓 액션하면 조언 숨김 (다음 턴에 갱신)
         if (type === 'raise') socket.emit('action', { type, amount: document.getElementById('raise-slider').value });
         else if (type === 'check') socket.emit('action', { type: myActionMode });
         else socket.emit('action', { type });
+    }
+
+    // ── 🔥 올인 확인 ──────────────────────────────────────────
+    let _allinArmed = false, _allinTimer = null, _allinLabel = '🔥 올인';
+    function armAllin() {
+        const b = document.getElementById('btn-allin');
+        if (!b) return;
+        _allinArmed = true;
+        _allinLabel = b.innerText;
+        b.innerText = '한 번 더 누르면 올인';
+        b.classList.add('confirming');
+        clearTimeout(_allinTimer);
+        _allinTimer = setTimeout(disarmAllin, 2600);       // 2.6초 안에 다시 안 누르면 취소
+        try { SFX.myturn(); } catch (e) {}
+    }
+    function disarmAllin() {
+        const b = document.getElementById('btn-allin');
+        clearTimeout(_allinTimer); _allinTimer = null;
+        if (!_allinArmed) return;
+        _allinArmed = false;
+        if (b) { b.innerText = _allinLabel || '🔥 올인'; b.classList.remove('confirming'); }
+    }
+
+    // ── ⚡ 자동 액션(프리액션) ─────────────────────────────────
+    //  내 차례가 오기 전에 미리 골라두면 차례가 오는 즉시 실행된다.
+    //   · 체크/폴드 — 공짜면 체크, 벳이 있으면 폴드
+    //   · 체크      — 공짜일 때만 체크. 벳이 들어오면 예약이 풀려 직접 판단한다(정석)
+    //   · 콜        — 금액 상관없이 콜 (공짜면 체크)
+    let _preAction = null;
+    function togglePreAction(kind) {
+        _preAction = (_preAction === kind) ? null : kind;
+        renderPreAction();
+    }
+    function clearPreAction() {
+        if (_preAction === null) return;
+        _preAction = null;
+        renderPreAction();
+    }
+    function renderPreAction() {
+        document.querySelectorAll('#preaction-bar button').forEach(b => {
+            b.classList.toggle('on', b.dataset.pa === _preAction);
+        });
+    }
+    // 내 차례가 됐을 때 예약된 행동을 실행한다. 실행했으면 true.
+    function firePreAction(toCall) {
+        if (!_preAction) return false;
+        const kind = _preAction;
+        if (kind === 'check' && toCall > 0) { clearPreAction(); return false; } // 벳이 들어옴 → 예약 해제
+        clearPreAction();
+        let act;
+        if (kind === 'call') act = toCall > 0 ? 'call' : 'check';
+        else if (kind === 'checkfold') act = toCall > 0 ? 'fold' : 'check';
+        else act = 'check';
+        hideGtoAdvice();
+        socket.emit('action', { type: act });
+        return true;
     }
 
     // ⌨️ PC 키보드 단축키 (입력창 포커스 시 무시)
@@ -2916,6 +3011,7 @@
         const ac = document.getElementById('action-controls');
         if (!ac || ac.style.display === 'none') return;
         const k = e.key.toLowerCase();
+        if (k === 'escape') { disarmAllin(); clearPreAction(); return; }
         if (k === 'f') sendAction('fold');
         else if (k === 'c') sendAction('check');
         else if (k === 'r') { if (!document.getElementById('btn-raise').disabled) sendAction('raise'); }
@@ -3212,6 +3308,7 @@
         renderEndVote(data.endVote);
         if (data.handId !== lastHandId) {
             clearTimeout(window.__resultBoxT); // 🏆 결과 패널 지연 타이머 정리
+            clearPreAction(); disarmAllin();    // ⚡ 새 핸드 — 예약·올인확인 해제
             hideMuckPrompt(); // 🃏 이전 핸드의 패 공개 선택창 정리
             _prevBets = {}; _prevBetRects = {}; _prevBetHand = null; // 💰 칩 이동 추적 초기화
             _cardWasHidden.clear(); _cardRevealed.clear();            // 🃏 카드 공개 추적 초기화
@@ -3393,7 +3490,9 @@
 
             if (isMe && isActive && data.gameStage !== 5) {
                 const callAmount = data.currentHighestBet - p.currentBet;
-                myActionMode = callAmount === 0 ? 'check' : 'call'; 
+                myActionMode = callAmount === 0 ? 'check' : 'call';
+                // ⚡ 미리 정해둔 게 있으면 바로 실행 (상업용 앱 표준)
+                if (firePreAction(Math.max(0, callAmount))) return; 
 
                 const btnCall = document.getElementById('btn-call');
                 const btnR = document.getElementById('btn-raise');
@@ -3439,6 +3538,22 @@
                 }
             }
         });
+
+        // ⚡ [프리액션] 내가 핸드에 살아 있는데 아직 내 차례가 아닐 때만 예약 바를 보여준다.
+        try {
+            const pb = document.getElementById('preaction-bar');
+            if (pb) {
+                const me = data.players[myNickname];
+                const live = data.gameStage >= 1 && data.gameStage <= 4;
+                const seated = (data.playerOrder || []).includes(myNickname);
+                const canPre = !!me && seated && live && !me.isFolded && !me.isAllIn
+                    && data.turnPlayerId && data.turnPlayerId !== myNickname;
+                pb.style.display = canPre ? 'block' : 'none';
+                if (!canPre && data.turnPlayerId !== myNickname) clearPreAction();
+                if (canPre) renderPreAction();
+            }
+            if (data.turnPlayerId !== myNickname) disarmAllin(); // 내 차례가 아니면 올인 확인 해제
+        } catch (e) {}
 
         // 🎯 [딜러 버튼] 핸드가 바뀌어 버튼이 다음 사람에게 넘어가면, 굴러가는 연출을 준다.
         try {
