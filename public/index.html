@@ -1015,6 +1015,29 @@
         }
         #install-app:active { transform: translate(1px,1px); box-shadow: none; }
 
+        /* 🃏 죽은 뒤 — 내 패를 보여줄지 고르는 창 */
+        #foldshow-prompt {
+            display: none; position: fixed; left: 50%; bottom: 220px; transform: translateX(-50%);
+            z-index: 3550; width: 320px; max-width: 90%;
+            background: var(--paper-hi); color: var(--ink);
+            border: 2px solid var(--ink); border-radius: 16px; padding: 13px 15px;
+            box-shadow: 6px 6px 0 rgba(200,80,31,0.9), 0 18px 44px rgba(34,29,21,0.45);
+            text-align: center; box-sizing: border-box;
+        }
+        #foldshow-prompt .fs-title { font-family: var(--font-disp); font-size: 16px; }
+        #foldshow-prompt .fs-sub { font-size: 12px; color: var(--verm); margin: 4px 0 10px; word-break: keep-all; }
+        #foldshow-prompt .fs-row { display: flex; gap: 6px; }
+        #foldshow-prompt button {
+            flex: 1; border-radius: 10px; padding: 10px 0; font-weight: 800; font-size: 13px;
+            cursor: pointer; font-family: inherit; background: transparent; color: var(--ink);
+            border: 2px solid var(--ink);
+        }
+        #foldshow-prompt button.on { background: var(--ink); color: var(--paper-hi); box-shadow: 3px 3px 0 rgba(200,80,31,0.9); }
+        #foldshow-prompt button:active { transform: translate(1px, 1px); box-shadow: none; }
+        #foldshow-prompt .fs-close { margin-top: 8px; width: 100%; font-size: 12px; padding: 7px 0; border: none; background: transparent; color: var(--txt-dim); cursor: pointer; font-family: inherit; }
+        @media (max-width: 900px) { #foldshow-prompt { bottom: 190px; width: 88vw; } }
+        @media screen and (max-width: 960px) and (orientation: landscape) { #foldshow-prompt { bottom: 8px; width: 300px; padding: 9px 12px; } #foldshow-prompt .fs-title { font-size: 14px; } #foldshow-prompt button { padding: 8px 0; font-size: 12px; } }
+
         /* 🃏 쇼다운 — 진 사람이 패를 공개할지 고르는 창 */
         #muck-prompt {
             display: none; position: fixed; left: 50%; bottom: 220px; transform: translateX(-50%);
@@ -2173,6 +2196,17 @@
     <div class="rh-t">📱 가로로 돌려보이소</div>
     <div class="rh-s">가로 화면이 카드도 크고 버튼도 편합니데이</div>
     <button class="rh-x" onclick="dismissRotateHint()">알겠심더</button>
+</div>
+
+<div id="foldshow-prompt">
+    <div class="fs-title">🃏 죽은 패, 보여줄까예?</div>
+    <div class="fs-sub">핸드가 끝나면 공개됩니데이</div>
+    <div class="fs-row">
+        <button data-fs="0" onclick="setFoldShow(0)">첫 장</button>
+        <button data-fs="1" onclick="setFoldShow(1)">둘째 장</button>
+        <button data-fs="both" onclick="setFoldShow('both')">둘 다</button>
+    </div>
+    <button class="fs-close" onclick="setFoldShow('none')">안 보여주기</button>
 </div>
 
 <div id="muck-prompt">
@@ -3350,7 +3384,7 @@
         if (data.handId !== lastHandId) {
             clearTimeout(window.__resultBoxT); // 🏆 결과 패널 지연 타이머 정리
             clearPreAction(); disarmAllin();    // ⚡ 새 핸드 — 예약·올인확인 해제
-            hideMuckPrompt(); // 🃏 이전 핸드의 패 공개 선택창 정리
+            hideMuckPrompt(); hideFoldShow(); // 🃏 이전 핸드의 패 공개 선택창 정리
             _prevBets = {}; _prevBetRects = {}; _prevBetHand = null; // 💰 칩 이동 추적 초기화
             _cardWasHidden.clear(); _cardRevealed.clear();            // 🃏 카드 공개 추적 초기화
             playedAnimations.clear();
@@ -3668,6 +3702,7 @@
 
         const myPlayer = data.players[myNickname];
         if (myPlayer && myPlayer.chips > 0) document.getElementById('rebuy-prompt').style.display = 'none';
+        renderFoldShow(data); // 🃏 죽은 패 공개 선택창
         // 👀 관전 상태가 아니면 관전 바를 숨긴다 (myPlayer 선언 이후여야 한다)
         if (!(myPlayer && myPlayer.isSpectator && data.youSpectate)) {
             const _sb = document.getElementById('spectate-bar');
@@ -4177,6 +4212,36 @@
     }
     window.addEventListener('orientationchange', () => setTimeout(checkRotateHint, 300));
     window.addEventListener('resize', () => { clearTimeout(window.__rhT); window.__rhT = setTimeout(checkRotateHint, 250); });
+
+    // 🃏 [죽은 패 공개] 폴드한 뒤에도 내 패를 보여줄 수 있다 (한 장만도 가능 — 블러프 자랑).
+    //    실제 공개는 핸드가 끝난 뒤에 일어난다. 진행 중에 까면 남은 사람들에게
+    //    정보를 주게 되고(에이스가 죽었다 등) 규칙에도 어긋나기 때문이다.
+    function setFoldShow(which) {
+        socket.emit('showFoldedCards', { which });
+        if (which === 'none') hideFoldShow();
+    }
+    function hideFoldShow() {
+        const el = document.getElementById('foldshow-prompt');
+        if (el) el.style.display = 'none';
+    }
+    function renderFoldShow(data) {
+        const el = document.getElementById('foldshow-prompt');
+        if (!el) return;
+        const me = data.players[myNickname];
+        const live = data.gameStage >= 1 && data.gameStage <= 5;
+        const canShow = !!me && me.isFolded && live && (me.hand || []).length === 2 && me.hand[0] !== '?';
+        if (!canShow) { el.style.display = 'none'; return; }
+        const rc = data.youRevealFold;
+        el.querySelectorAll('button[data-fs]').forEach(b => {
+            const k = b.dataset.fs;
+            const on = rc && ((k === '0' && rc[0] && !rc[1]) || (k === '1' && rc[1] && !rc[0]) || (k === 'both' && rc[0] && rc[1]));
+            b.classList.toggle('on', !!on);
+        });
+        el.querySelector('.fs-sub').innerText = rc
+            ? (data.gameStage === 5 ? '공개했습니데이' : '핸드가 끝나면 공개됩니데이')
+            : '핸드가 끝나면 공개됩니데이';
+        el.style.display = 'block';
+    }
 
     // 🃏 [쇼다운] 뒷순서에서 진 사람만 패 공개 여부를 고른다.
     //    앞순서(먼저 까는 사람)와 팟을 먹은 사람은 규칙상 무조건 공개되므로 이 창이 뜨지 않는다.

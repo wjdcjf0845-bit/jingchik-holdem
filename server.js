@@ -766,9 +766,22 @@ class GameRoom {
                         }
                     }
 
+                    // 🃏 [폴드 패 공개] 죽은 사람이 "보여주기"를 고른 카드는 핸드가 끝난 뒤에 깐다.
+                    //    핸드가 살아 있는 동안 까면 남은 사람들에게 정보를 주게 되므로(예: 에이스가 죽었다)
+                    //    규칙상으로도 안 된다. 그래서 선택은 미리 받고 공개는 종료 시점에 한다.
+                    let handOut;
+                    if (showHand) handOut = safeHand;
+                    else if (safeHand.length === 0) handOut = [];
+                    else {
+                        const rc = (this.gameStage === 5 && p._revealCards) ? p._revealCards : null;
+                        handOut = rc
+                            ? [rc[0] ? safeHand[0] : '?', rc[1] ? safeHand[1] : '?']
+                            : ['?', '?'];
+                    }
+
                     sanitizedPlayers[nick] = {
                         ...p,
-                        hand: showHand ? safeHand : (safeHand.length > 0 ? ['?', '?'] : []),
+                        hand: handOut,
                         currentRank: currentRankName
                     };
                     // 🔒 내부 전용 필드(_로 시작) 전부 제거 — 타이머 직렬화 방지 + 봇 전략 정보 유출 차단
@@ -790,6 +803,7 @@ class GameRoom {
                     gameMode: this.mode,
                     canEndVote: this.endVoteEligible(), // 🗳️ 합의 종료 투표 가능 여부 (나가기 메뉴 노출용)
                     youSpectate: !!recipient._wantSpectate, // 👀 내가 "관전으로 입장"을 고른 상태인가
+                    youRevealFold: recipient._revealCards ? recipient._revealCards.slice() : null, // 🃏 폴드 패 공개 선택
                     seatsUsed: this.playerOrder.length, seatsMax: TABLE_SEATS,
                     endVote: this.endVoteSnapshot(),
                     timeRemaining: this.timeRemaining,
@@ -1819,6 +1833,7 @@ class GameRoom {
                 this.players[nick].isFolded = false;
                 this.players[nick].isAllIn = false;
                 this.players[nick].isMucked = false;
+                this.players[nick]._revealCards = null; // 🃏 폴드 패 공개 선택 초기화
                 this.players[nick].hasActed = false;
                 this.players[nick].role = '';
                 this.players[nick]._trapStreet = -1; // 🪤 체크레이즈 트랩 플래그 초기화 (스트리트 번호 재사용 오발동 방지)
@@ -4269,6 +4284,32 @@ io.on('connection', (socket) => {
         socket.emit('mttCreated', { mttId, name });
         mtt.broadcastLobby();
         io.emit('mttList', mttListArray());
+    });
+
+    // 🃏 폴드한 사람이 자기 패를 보여주기로 선택 (한 장만도 가능 — 블러프 자랑용)
+    //    실제 공개는 핸드가 끝난 뒤(gameStage 5)에 일어난다. sendState 가 그때만 깐다.
+    socket.on('showFoldedCards', (data) => {
+        const room = rooms.get(socket.currentRoom);
+        if (!room || !socket.nickname) return;
+        const p = room.players[socket.nickname];
+        if (!p || !p.isFolded) return;                       // 죽은 사람만
+        if (!p.hand || p.hand.length !== 2) return;
+        if (room.gameStage < 1 || room.gameStage > 5) return; // 이번 핸드 안에서만
+
+        const which = data && data.which;
+        let rc;
+        if (which === 0) rc = [true, false];
+        else if (which === 1) rc = [false, true];
+        else if (which === 'both') rc = [true, true];
+        else if (which === 'none') rc = null;
+        else return;
+
+        p._revealCards = rc;
+        if (rc && room.gameStage === 5) {
+            const shown = [rc[0] ? p.hand[0] : null, rc[1] ? p.hand[1] : null].filter(Boolean);
+            io.to(room.roomId).emit('gameMessage', `🃏 ${socket.nickname} 님이 죽은 패를 공개했습니데이 (${shown.length}장).`);
+        }
+        room.sendState();
     });
 
     // 👀 관전자가 자리에 앉겠다고 할 때
