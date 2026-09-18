@@ -30,7 +30,8 @@ self.addEventListener('fetch', e => {
     if (url.origin !== self.location.origin) return;          // 외부 CDN·폰트는 건드리지 않음
     if (url.pathname.startsWith('/socket.io/')) return;        // 실시간 통신 제외
     // 정적 자산만 캐시 우선, 나머지(HTML 포함)는 항상 네트워크
-    const cacheable = /^\/(icons|sounds)\//.test(url.pathname) || url.pathname === '/manifest.json';
+    // 🎨 skins: 카드 뒷면/아바타 이미지 — 한 번 받으면 바뀌지 않으니 캐시해서 모바일 데이터를 아낀다
+    const cacheable = /^\/(icons|sounds|skins)\//.test(url.pathname) || url.pathname === '/manifest.json';
     if (!cacheable) return;
     e.respondWith(
         caches.match(req).then(hit => hit || fetch(req).then(res => {

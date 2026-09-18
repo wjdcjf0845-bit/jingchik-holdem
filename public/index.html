@@ -2152,6 +2152,79 @@
         /* ── 스크롤바 ── */
         ::-webkit-scrollbar-thumb { background: rgba(34,29,21,0.35); }
         ::-webkit-scrollbar-track { background: transparent; }
+
+        /* ═══ 🎨 꾸미기(상점) ═══════════════════════════════
+           ⚠️ 이 블록은 반드시 빈티지 테마의 .card-back-side 규칙보다 아래에 있어야 한다.
+              위에 두면 테마의 background 단축 속성이 스킨 이미지를 지워버린다. */
+        .card-back-side.sk {
+            background: var(--skin) center/cover no-repeat !important;
+            border: 1.5px solid rgba(34,29,21,0.7) !important;
+        }
+        .card-back-side.sk::before, .card-back-side.sk::after { content: none !important; display: none !important; }
+        .avatar.sk, .lu-avatar.sk, .sd-avatar.sk, .pf-avatar.sk {
+            background: var(--skin) center/cover no-repeat !important;
+            color: transparent !important; text-shadow: none !important;
+        }
+        /* 칭호 — 닉네임 줄에 끼우면 이름이 잘려서, 바로 아래 자기 줄을 준다 */
+        .ps-title {
+            display: block; width: 100%; margin: -3px 0 5px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;
+            font-size: 9px; font-weight: 900; color: var(--verm); line-height: 1.5;
+        }
+        @media screen and (max-width: 960px) and (orientation: landscape) { .ps-title { font-size: 8px; margin: -2px 0 3px; } }
+        .pf-title { font-size: 12px; font-weight: 900; color: var(--verm); margin: -4px 0 8px; }
+
+        /* ── 상점 모달 ── */
+        #shop-modal { align-items: center; justify-content: center; }
+        .shop-card {
+            width: 560px; max-width: 94vw; max-height: 88vh; overflow-y: auto;
+            background: var(--paper-hi); color: var(--ink);
+            border: 2px solid var(--ink); border-radius: 16px; padding: 18px 18px 14px;
+            box-shadow: 8px 8px 0 rgba(34,29,21,0.35);
+        }
+        .shop-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+        .shop-title { font-family: var(--font-disp); font-size: 20px; font-weight: 900; }
+        .shop-bank {
+            font-family: var(--font-num); font-weight: 900; font-size: 14px; color: var(--ink);
+            background: var(--paper-lo); border: 1.5px solid var(--ink); border-radius: 999px; padding: 4px 12px;
+        }
+        .shop-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+        .shop-tab {
+            flex: 1; padding: 9px 0; font-size: 13px; font-weight: 800; cursor: pointer; font-family: inherit;
+            background: transparent; color: var(--ink); border: 2px solid var(--ink); border-radius: 8px;
+        }
+        .shop-tab.on { background: var(--ink); color: var(--paper-hi); box-shadow: 3px 3px 0 rgba(200,80,31,0.9); }
+        #shop-msg { min-height: 18px; font-size: 12px; font-weight: 800; text-align: center; margin-bottom: 8px; color: var(--verm); }
+        #shop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .sh-item {
+            background: var(--paper); border: 2px solid var(--ink); border-radius: 12px; padding: 9px 8px;
+            display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center;
+        }
+        .sh-item.eq { box-shadow: 3px 3px 0 rgba(200,80,31,0.9); }
+        .sh-prev { border: 1.5px solid rgba(34,29,21,0.7); background-size: cover; background-position: center; }
+        .sh-prev.back { width: 56px; height: 78px; border-radius: 6px; }
+        .sh-prev.av { width: 56px; height: 56px; border-radius: 50%; }
+        .sh-prev.back.def {
+            background: repeating-linear-gradient(45deg, #141a2c 0px, #141a2c 4px, #0d111e 4px, #0d111e 8px);
+        }
+        .sh-prev.av.def { background: radial-gradient(circle at 32% 26%, hsl(210,72%,64%), hsl(210,62%,36%) 75%); }
+        .sh-prev.title {
+            width: 100%; height: 56px; display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 900; color: var(--verm); border-radius: 8px; background: var(--paper-lo);
+        }
+        .sh-name { font-family: var(--font-disp); font-size: 13px; font-weight: 900; }
+        .sh-desc { font-size: 10px; color: var(--txt-dim); line-height: 1.3; min-height: 26px; word-break: keep-all; }
+        .sh-btn {
+            width: 100%; padding: 7px 0; font-size: 11px; font-weight: 900; cursor: pointer; font-family: inherit;
+            border: 2px solid var(--ink); border-radius: 7px; background: var(--paper-hi); color: var(--ink);
+        }
+        .sh-btn.buy { background: var(--verm); color: #fdf8ec; }
+        .sh-btn.on { background: var(--ink); color: var(--mustard); cursor: default; }
+        .sh-btn:active { transform: translate(1px,1px); }
+        @media (max-width: 560px) {
+            #shop-grid { grid-template-columns: repeat(2, 1fr); }
+            .shop-card { padding: 14px 12px 12px; }
+        }
     </style>
 </head>
 <body>
@@ -2160,6 +2233,23 @@
 
 <div id="fx-flash"></div>
 <div id="rank-banner"><div class="rb-rank"></div><div class="rb-who"></div></div>
+
+<div id="shop-modal" class="overlay" style="display:none; z-index:4400;">
+    <div class="shop-card">
+        <div class="shop-head">
+            <div class="shop-title">🎨 꾸미기 상점</div>
+            <div class="shop-bank">💰 <span id="shop-bankroll">0</span></div>
+        </div>
+        <div class="shop-tabs">
+            <button class="shop-tab on" data-kind="back" onclick="shopTab('back')">🃏 카드 뒷면</button>
+            <button class="shop-tab" data-kind="avatar" onclick="shopTab('avatar')">🦊 아바타</button>
+            <button class="shop-tab" data-kind="title" onclick="shopTab('title')">🏷️ 칭호</button>
+        </div>
+        <div id="shop-msg"></div>
+        <div id="shop-grid"></div>
+        <button class="btn-close-modal" style="margin-top:16px; width:100%;" onclick="closeShop()">닫기</button>
+    </div>
+</div>
 
 <div id="profile-modal">
     <div class="pf-card">
@@ -2316,6 +2406,11 @@
         <!-- 🎁 일일 보상 -->
         <button id="daily-btn" class="btn-join" onclick="openDaily()" style="width:100%; margin-bottom:14px; background: linear-gradient(180deg, #5f4a2c, #443218 60%, #2c1f0e); color:#ffd97a; box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 6px 16px rgba(0,0,0,0.5); text-shadow:none; position:relative;">
             🎁 출석 · 일일 미션 <span id="daily-badge" class="daily-badge" style="display:none;">!</span>
+        </button>
+
+        <!-- 🎨 꾸미기 상점 -->
+        <button id="shop-btn" class="btn-join" onclick="openShop()" style="width:100%; margin-bottom:14px; background: linear-gradient(180deg, #5f2c3a, #44182a 60%, #2c0e1c); color:#ffb0c4; box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 6px 16px rgba(0,0,0,0.5); text-shadow:none; font-weight:900;">
+            🎨 꾸미기 상점 <span style="font-size:11px; color:var(--txt-dim); font-weight:400;">(카드 뒷면 · 아바타 · 칭호)</span>
         </button>
 
         <!-- 🎮 열린 방 목록 (박스 경계 + 헤더) -->
@@ -2623,6 +2718,76 @@
 
     // 💡 [수정 #2] HTML 이스케이프 유틸 — innerHTML에 들어가는 모든 외부 문자열에 적용 (XSS 차단)
     const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    // ═══ 🎨 꾸미기(상점) ═══════════════════════════════
+    //   서버가 updateTable 마다 내려주는 data.cos 로 "그 카드 주인의 뒷면"을 그린다.
+    //   기본 지급품(back_classic / av_none)은 이미지가 없고 원래 CSS를 그대로 쓴다.
+    let tableCos = {};   // { 닉네임: {back, avatar, title(문구)} }
+    let shopState = { items: [], owned: [], equipped: {}, bankroll: 0 };
+    let shopKind = 'back';
+    const hasSkin = id => !!id && id !== 'back_classic' && id !== 'av_none' && /^[a-z_0-9]+$/.test(id);
+    const skinUrl = id => `skins/${id}.webp`;
+    const cosOf = nick => tableCos[nick] || {};
+    // 내 장착 상태 — 상점에서 받은 게 있으면 그걸, 없으면 테이블 정보를 쓴다
+    function myCos() {
+        const eq = shopState.equipped || {};
+        if (eq.back) return eq;
+        return cosOf(myNickname);
+    }
+    function backSideHtml(backId) {
+        return hasSkin(backId)
+            ? `<div class="card-back-side sk" style="--skin:url('${skinUrl(backId)}')"></div>`
+            : '<div class="card-back-side"></div>';
+    }
+    function avatarAttrs(nick, avId) {
+        const sk = hasSkin(avId);
+        return {
+            cls: sk ? ' sk' : '',
+            style: `--av:${avatarHue(nick)}${sk ? `;--skin:url('${skinUrl(avId)}')` : ''}`
+        };
+    }
+
+    function openShop() { socket.emit('getShop'); document.getElementById('shop-msg').innerText = ''; document.getElementById('shop-modal').style.display = 'flex'; }
+    function closeShop() { document.getElementById('shop-modal').style.display = 'none'; }
+    function shopTab(kind) { shopKind = kind; renderShop(); }
+
+    socket.on('shopData', d => { shopState = d || shopState; renderShop(); });
+    socket.on('shopResult', r => {
+        const el = document.getElementById('shop-msg');
+        if (!el || !r) return;
+        el.innerText = r.msg || '';
+        el.style.color = r.ok ? '#1f7a4a' : 'var(--verm)';
+    });
+
+    function shopPreview(it) {
+        if (it.kind === 'title') return `<div class="sh-prev title">${esc(it.text || '—')}</div>`;
+        const cls = it.kind === 'back' ? 'back' : 'av';
+        return hasSkin(it.id)
+            ? `<div class="sh-prev ${cls}" style="background-image:url('${skinUrl(it.id)}')"></div>`
+            : `<div class="sh-prev ${cls} def"></div>`;
+    }
+
+    function renderShop() {
+        const grid = document.getElementById('shop-grid');
+        if (!grid) return;
+        document.getElementById('shop-bankroll').innerText = (shopState.bankroll || 0).toLocaleString();
+        document.querySelectorAll('.shop-tab').forEach(b => b.classList.toggle('on', b.dataset.kind === shopKind));
+        const owned = shopState.owned || [];
+        const eq = shopState.equipped || {};
+        const items = (shopState.items || []).filter(i => i.kind === shopKind);
+        grid.innerHTML = items.map(it => {
+            const isOn = eq[it.kind] === it.id;
+            const has = owned.includes(it.id);
+            const btn = isOn
+                ? '<button class="sh-btn on" disabled>장착 중</button>'
+                : has
+                    ? `<button class="sh-btn" onclick="socket.emit('equipCosmetic',{id:'${it.id}'})">장착</button>`
+                    : `<button class="sh-btn buy" onclick="socket.emit('buyCosmetic',{id:'${it.id}'})">💰 ${(it.price || 0).toLocaleString()}</button>`;
+            return `<div class="sh-item ${isOn ? 'eq' : ''}">${shopPreview(it)}
+                <div class="sh-name">${esc(it.name)}</div>
+                <div class="sh-desc">${esc(it.desc || '')}</div>${btn}</div>`;
+        }).join('');
+    }
 
     // 🎨 닉네임 해시 → 아바타 색상(hue)/이니셜 (상용 게임식 프로필 원형)
     function avatarHue(nick) {
@@ -3317,7 +3482,7 @@
     let _prevDealer = null, _prevDealerRect = null;               // 🎯 딜러 버튼 이동 추적
     let _prevBlind = null;                                        // 🚨 블라인드 레벨 추적
     let playedAnimations = new Set();
-    function getCard(cardStr, isHidden, animKey, squeeze) {
+    function getCard(cardStr, isHidden, animKey, squeeze, backId) {
         let isNew = false;
         let delayNum = 0;
         if (animKey && !playedAnimations.has(animKey)) {
@@ -3347,7 +3512,7 @@
         if (!showFace) {
             return `<div class="card-container ${animClass}" style="animation-delay:${delayNum}s">
                         <div class="card-inner">
-                            <div class="card-back-side"></div>
+                            ${backSideHtml(backId)}
                         </div>
                     </div>`;
         }
@@ -3363,7 +3528,7 @@
         // 🃏 코너 인덱스 + 중앙 슈트의 실제 카드 레이아웃
         return `<div class="card-container ${animClass}${sqClass}" data-code="${cardStr}" style="animation-delay:${delayNum}s">
                     <div class="card-inner ${finalFlip}" style="transition-delay: ${flipDelay}s">
-                        <div class="card-back-side"></div>
+                        ${backSideHtml(backId)}
                         <div class="card-front ${cl}">
                             <div class="cf-corner">${disp}</div>
                             <div class="cf-center">${sym}</div>
@@ -3376,6 +3541,7 @@
     let lastHandId = -1;
 
     socket.on('updateTable', (data) => {
+        if (data.cos) tableCos = data.cos; // 🎨 카드 뒷면/아바타/칭호 — 반드시 렌더 전에 갱신
         window._lastGameMode = data.gameMode;
         window._lastGameStage = data.gameStage;
         window._canEndVote = !!data.canEndVote;
@@ -3435,7 +3601,7 @@
         }
         
         const commArea = document.getElementById('community-area');
-        commArea.innerHTML = data.communityCards.map((c, i) => getCard(c, false, `comm_${i}`)).join('');
+        commArea.innerHTML = data.communityCards.map((c, i) => getCard(c, false, `comm_${i}`, false, myCos().back)).join('');
         // 🎧 새로 딜링된 카드 수만큼 카드 스냅음 (최대 8장, 120ms 간격)
         const newDealt = Math.min(8, playedAnimations.size - animCountBefore);
         for (let di = 0; di < newDealt; di++) SFX.deal(di * 0.12);
@@ -3518,7 +3684,8 @@
                 const hideCard = (p.hand[0] === '?');
                 // 🎴 조이기: 내 카드 + 진행 중 + 아직 공개 안 함 → 드래그로 까기
                 const sq = i => false; // 🎴 조이기 제거 — 받는 즉시 자동 공개
-                cardsHtml = `<div class="cards">${getCard(p.hand[0], hideCard, `hand_${nick}_0`, sq(0))}${getCard(p.hand[1], hideCard, `hand_${nick}_1`, sq(1))}</div>`;
+                const _back = cosOf(nick).back;
+                cardsHtml = `<div class="cards">${getCard(p.hand[0], hideCard, `hand_${nick}_0`, sq(0), _back)}${getCard(p.hand[1], hideCard, `hand_${nick}_1`, sq(1), _back)}</div>`;
             }
 
             const rankKor = {
@@ -3538,12 +3705,15 @@
             const div = document.createElement('div');
             div.id = `player-${nick.replace(/\s/g, '_')}`;
             div.className = cls;
+            const _cos = cosOf(nick);
+            const _av = avatarAttrs(nick, _cos.avatar);
+            const _titleHtml = _cos.title ? `<div class="ps-title">${esc(_cos.title)}</div>` : '';
             div.innerHTML = `${roleHtml}${betChipHtml}
-                <div class="ps-namebar">${hostCrown ? `<span class="ps-crown">${hostCrown}</span>` : ''}<span class="ps-nick">${title}</span>${posHtml}</div>
+                <div class="ps-namebar">${hostCrown ? `<span class="ps-crown">${hostCrown}</span>` : ''}<span class="ps-nick">${title}</span>${posHtml}</div>${_titleHtml}
                 <div class="ps-row">
                     <div class="ps-info">
                         <div class="ps-head">
-                            <div class="avatar" style="--av:${avatarHue(nick)}">${avatarInitial(nick)}</div>
+                            <div class="avatar${_av.cls}" style="${_av.style}">${avatarInitial(nick)}</div>
                             ${tag ? `<span class="ps-tag">${tag}</span>` : ''}
                         </div>
                         <div class="chips-info"><span class="chip-ico"></span>${p.chips.toLocaleString()}</div>
@@ -5325,9 +5495,22 @@
     socket.on('profileData', u => {
         const modal = document.getElementById('profile-modal');
         if (!u) return;
-        document.getElementById('pf-avatar').style.setProperty('--av', avatarHue(u.nickname));
-        document.getElementById('pf-avatar').innerText = avatarInitial(u.nickname);
+        const _pfc = u.cosmetics || {};
+        const _pfa = avatarAttrs(u.nickname, _pfc.avatar);
+        const _pfEl = document.getElementById('pf-avatar');
+        _pfEl.className = 'pf-avatar' + _pfa.cls;
+        _pfEl.setAttribute('style', _pfa.style);
+        _pfEl.innerText = avatarInitial(u.nickname);
         document.getElementById('pf-name').innerText = u.nickname;
+        // 🎨 칭호는 이름 바로 아래 — 없으면 줄 자체를 안 만든다
+        let _pfT = document.getElementById('pf-title');
+        if (!_pfT) {
+            _pfT = document.createElement('div');
+            _pfT.id = 'pf-title'; _pfT.className = 'pf-title';
+            document.getElementById('pf-name').insertAdjacentElement('afterend', _pfT);
+        }
+        _pfT.innerText = _pfc.title || '';
+        _pfT.style.display = _pfc.title ? 'block' : 'none';
 
         const hp = u.handsPlayed || 0;
         const winRate = hp > 0 ? Math.round(u.handsWon / hp * 100) : 0;
@@ -5596,7 +5779,7 @@
 
     // 📱 [모바일] 정보성 모달은 배경(바깥) 탭으로 닫기 — 폰에서 닫기 편의
     (function enableBackdropClose() {
-        const closable = ['hof-modal', 'season-modal', 'session-modal', 'help-modal', 'daily-modal', 'learn-setup-modal', 'bankroll-modal', 'history-modal', 'mttchamp-modal', 'replay-modal'];
+        const closable = ['hof-modal', 'season-modal', 'session-modal', 'help-modal', 'daily-modal', 'learn-setup-modal', 'bankroll-modal', 'history-modal', 'mttchamp-modal', 'replay-modal', 'shop-modal'];
         closable.forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;

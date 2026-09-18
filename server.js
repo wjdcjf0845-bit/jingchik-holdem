@@ -35,6 +35,72 @@ const SHOWDOWN_REVEAL_MS = 3000; // 🃏 올인 쇼다운 — 카드 한 장을 
 const MUCK_CHOICE_MS = 6000;     // 🃏 진 사람이 패를 공개할지 정하는 시간
 const END_VOTE_MS = 30000; // 🗳️ 합의 종료 투표 제한시간
 
+// 🎨 [상점] 뱅크롤로 사는 꾸미기 — 카드 뒷면 / 아바타 / 칭호.
+//    kind 별로 하나씩만 장착된다. price 0 은 기본 지급품이라 따로 살 필요가 없다.
+//    ⚠️ id 는 클라이언트 CSS(public/skins/<id>.webp)와 1:1로 묶여 있으니 바꾸지 말 것.
+const COSMETICS = {
+    // ── 카드 뒷면 (이미지: public/skins/<id>.webp)
+    back_classic: { kind: 'back', name: '기본 문양',   price: 0,      desc: '처음부터 주어지는 기본 뒷면' },
+    back_verm:    { kind: 'back', name: '버밀리언 데코', price: 30000,  desc: '주홍 잉크로 찍어낸 아르데코 태양' },
+    back_jade:    { kind: 'back', name: '옥빛 물결',   price: 50000,  desc: '청해파 문양을 새긴 목판화' },
+    back_noir:    { kind: 'back', name: '느와르',      price: 80000,  desc: '1920년대 흑백 개츠비' },
+    back_peony:   { kind: 'back', name: '목단',        price: 120000, desc: '겨자빛 모란이 만발한 뒷면' },
+    back_star:    { kind: 'back', name: '별자리',      price: 200000, desc: '한밤의 은빛 천문도' },
+    back_royal:   { kind: 'back', name: '황금 왕관',   price: 350000, desc: '감청 바탕에 금박을 올린 세공' },
+    // ── 아바타
+    av_none:   { kind: 'avatar', name: '이니셜',  price: 0,      desc: '닉네임 첫 글자' },
+    av_fox:    { kind: 'avatar', name: '여우',    price: 20000,  desc: '얍삽한 블러퍼' },
+    av_cat:    { kind: 'avatar', name: '고양이',  price: 20000,  desc: '표정을 안 주는 쪽' },
+    av_owl:    { kind: 'avatar', name: '올빼미',  price: 40000,  desc: '길게 보고 판단하는 쪽' },
+    av_wolf:   { kind: 'avatar', name: '늑대',    price: 60000,  desc: '물면 안 놓는다' },
+    av_shark:  { kind: 'avatar', name: '상어',    price: 100000, desc: '테이블의 포식자' },
+    av_dragon: { kind: 'avatar', name: '용',      price: 250000, desc: '아무나 못 다는 것' },
+    // ── 칭호 (이미지 없음 — 닉네임 옆에 붙는다)
+    ti_none:  { kind: 'title', name: '없음',        price: 0,      text: '', desc: '칭호를 떼어 둡니데이' },
+    ti_rookie:{ kind: 'title', name: '입문자',    price: 10000,  text: '🌱 입문자', desc: '이제 막 판에 앉았습니데이' },
+    ti_bluff: { kind: 'title', name: '블러프 장인', price: 70000,  text: '🎭 블러프 장인', desc: '없는 패로 이기는 사람' },
+    ti_allin: { kind: 'title', name: '올인 러버',  price: 70000,  text: '🔥 올인 러버', desc: '고민은 짧게, 베팅은 크게' },
+    ti_rock:  { kind: 'title', name: '바위',      price: 90000,  text: '🪨 바위', desc: '좋은 패만 골라 칩니데이' },
+    ti_shark: { kind: 'title', name: '테이블 상어', price: 150000, text: '🦈 테이블 상어', desc: '앉은 자리가 곧 사냥터' },
+    ti_king:  { kind: 'title', name: '판의 지배자', price: 400000, text: '👑 판의 지배자', desc: '뱅크롤로 증명하는 자리' }
+};
+const COSMETIC_DEFAULTS = { back: 'back_classic', avatar: 'av_none', title: 'ti_none' };
+// 칭호는 화면에 그대로 찍히는 문구라 id 대신 문구를 내려보낸다 (클라이언트에 카탈로그 사본을 두지 않으려고)
+// ⚠️ COSMETICS 는 평범한 객체라 COSMETICS['__proto__'] 같은 상속 키가 걸려든다.
+//    클라이언트가 보낸 id 는 반드시 이 함수로만 조회할 것 (자기 소유 키만 통과).
+function cosItem(id) {
+    if (typeof id !== 'string') return null;
+    return Object.prototype.hasOwnProperty.call(COSMETICS, id) ? COSMETICS[id] : null;
+}
+function cosTitleText(id) { const it = cosItem(id); return (it && it.text) || ''; }
+
+// 🎨 꾸미기 레코드 정규화 — 구버전 계정/손상된 값이 들어와도 항상 온전한 형태를 돌려준다.
+function normalizeCosmetics(u) {
+    const c = (u.cosmetics && typeof u.cosmetics === 'object') ? u.cosmetics : {};
+    if (!Array.isArray(c.owned)) c.owned = [];
+    // 기본 지급품은 항상 보유 상태
+    Object.values(COSMETIC_DEFAULTS).forEach(id => { if (!c.owned.includes(id)) c.owned.push(id); });
+    // 카탈로그에서 사라진 id 는 버린다
+    c.owned = c.owned.filter(id => cosItem(id));
+    ['back', 'avatar', 'title'].forEach(kind => {
+        const cur = c[kind];
+        const cit = cosItem(cur);
+        const ok = cit && cit.kind === kind && c.owned.includes(cur);
+        if (!ok) c[kind] = COSMETIC_DEFAULTS[kind];
+    });
+    u.cosmetics = c;
+    return c;
+}
+
+// 🤖 봇도 밋밋하지 않게 — 이름에서 뽑은 고정 값으로 뒷면/아바타를 준다 (구매와 무관한 연출).
+const BOT_BACKS = ['back_classic', 'back_verm', 'back_jade', 'back_noir', 'back_peony'];
+const BOT_AVATARS = ['av_fox', 'av_cat', 'av_owl', 'av_wolf', 'av_shark'];
+function botCosmetics(nick) {
+    let h = 0;
+    for (let i = 0; i < nick.length; i++) h = (h * 31 + nick.charCodeAt(i)) >>> 0;
+    return { back: BOT_BACKS[h % BOT_BACKS.length], avatar: BOT_AVATARS[(h >>> 5) % BOT_AVATARS.length], title: '' };
+}
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -227,6 +293,7 @@ const MockDB = {
                 achievements: [], seasonId: CURRENT_SEASON, seasonPoints: 0,
                 cashNet: 0, bestRank: '',
                 pinHash: null, bankroll: 100000, deviceId: null,
+                cosmetics: { owned: [], back: 'back_classic', avatar: 'av_none', title: 'ti_none' }, // 🎨 꾸미기
                 // 📊 포커 분석 지표 누적 카운터
                 pfrHands: 0,        // 프리플랍 레이즈 핸드 (PFR)
                 preflopOpps: 0,     // 프리플랍 액션 기회 (VPIP/PFR 분모)
@@ -253,6 +320,7 @@ const MockDB = {
         if (u.pinHash === undefined) u.pinHash = null;        // 🔒 PIN 미설정(구버전)
         if (u.bankroll === undefined) u.bankroll = (u.totalChips != null ? u.totalChips : 100000); // 💰 뱅크롤
         if (u.deviceId === undefined) u.deviceId = null; // 🔒 기기 바인딩
+        normalizeCosmetics(u); // 🎨 꾸미기 — 구버전/손상 레코드 복구
         // 📊 포커 분석 지표 마이그레이션
         ['pfrHands','preflopOpps','threeBetCount','threeBetOpps','aggrBets','aggrCalls',
          'foldToBet','faceBet','wentToShowdown','wonAtShowdown','gtoScoreSum','gtoScoreCount']
@@ -743,6 +811,17 @@ class GameRoom {
             const activeNonAllIn = this.playerOrder.filter(n => this.players[n] && !this.players[n].isFolded && !this.players[n].isAllIn);
             const isAllInShowdown = (activeNonAllIn.length <= 1 && this.turnIndex === -1);
 
+            // 🎨 [꾸미기] 이 테이블 사람들의 장착 상태를 한 번만 모아서 모든 수신자에게 같이 보낸다.
+            //    카드 뒷면은 "그 카드 주인"의 것으로 그려야 하므로 남의 것도 알아야 한다.
+            const cosMap = {};
+            Object.keys(this.players).forEach(nick => {
+                if (this.players[nick].isBot) { cosMap[nick] = botCosmetics(nick); return; }
+                const u = MockDB.users.get(nick);
+                if (!u) return;
+                const c = normalizeCosmetics(u);
+                cosMap[nick] = { back: c.back, avatar: c.avatar, title: cosTitleText(c.title) };
+            });
+
             Object.values(this.players).forEach(recipient => {
                 const sanitizedPlayers = {};
                 Object.keys(this.players).forEach(nick => {
@@ -805,6 +884,7 @@ class GameRoom {
                     youSpectate: !!recipient._wantSpectate, // 👀 내가 "관전으로 입장"을 고른 상태인가
                     youRevealFold: recipient._revealCards ? recipient._revealCards.slice() : null, // 🃏 폴드 패 공개 선택
                     seatsUsed: this.playerOrder.length, seatsMax: TABLE_SEATS,
+                    cos: cosMap, // 🎨 자리에 앉은 사람들의 꾸미기 (뒷면/아바타/칭호)
                     endVote: this.endVoteSnapshot(),
                     timeRemaining: this.timeRemaining,
                     turnEndTime: this.turnEndTime,
@@ -4286,6 +4366,60 @@ io.on('connection', (socket) => {
         io.emit('mttList', mttListArray());
     });
 
+    // 🎨 [상점] 카탈로그 + 내 보유/장착 상태
+    function shopPayload(u) {
+        const c = normalizeCosmetics(u);
+        return {
+            items: Object.entries(COSMETICS).map(([id, it]) => ({ id, kind: it.kind, name: it.name, price: it.price, desc: it.desc || '', text: it.text || '' })),
+            owned: c.owned.slice(),
+            equipped: { back: c.back, avatar: c.avatar, title: c.title },
+            bankroll: u.bankroll || 0
+        };
+    }
+    socket.on('getShop', async () => {
+        if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
+        socket.emit('shopData', shopPayload(MockDB.users.get(socket.nickname)));
+    });
+
+    // 🎨 구매 — 뱅크롤에서 차감한다. 이미 가진 것/모르는 id/잔액 부족은 전부 거절.
+    socket.on('buyCosmetic', async (data) => {
+        if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
+        const u = MockDB.users.get(socket.nickname);
+        const c = normalizeCosmetics(u);
+        const id = data && data.id;
+        const item = cosItem(id);
+        if (!item) { socket.emit('shopResult', { ok: false, msg: '없는 아이템입니데이.' }); return; }
+        if (c.owned.includes(id)) { socket.emit('shopResult', { ok: false, msg: '이미 가지고 있습니데이.' }); return; }
+        if ((u.bankroll || 0) < item.price) {
+            socket.emit('shopResult', { ok: false, msg: `뱅크롤이 ${(item.price - (u.bankroll || 0)).toLocaleString()} 모자랍니데이.` });
+            return;
+        }
+        await MockDB.adjustBankroll(socket.nickname, -item.price);
+        c.owned.push(id);
+        c[item.kind] = id; // 산 건 바로 장착
+        MockDB.save();
+        socket.emit('bankrollUpdate', { bankroll: u.bankroll || 0 });
+        socket.emit('shopResult', { ok: true, msg: `${item.name} 구매 완료! 바로 장착했습니데이.` });
+        socket.emit('shopData', shopPayload(u));
+        const room = rooms.get(socket.currentRoom);
+        if (room) room.sendState();
+    });
+
+    // 🎨 장착 변경 — 보유한 것만 가능
+    socket.on('equipCosmetic', (data) => {
+        if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
+        const u = MockDB.users.get(socket.nickname);
+        const c = normalizeCosmetics(u);
+        const id = data && data.id;
+        const item = cosItem(id);
+        if (!item || !c.owned.includes(id)) { socket.emit('shopResult', { ok: false, msg: '아직 가지고 있지 않습니데이.' }); return; }
+        c[item.kind] = id;
+        MockDB.save();
+        socket.emit('shopData', shopPayload(u));
+        const room = rooms.get(socket.currentRoom);
+        if (room) room.sendState();
+    });
+
     // 🃏 폴드한 사람이 자기 패를 보여주기로 선택 (한 장만도 가능 — 블러프 자랑용)
     //    실제 공개는 핸드가 끝난 뒤(gameStage 5)에 일어난다. sendState 가 그때만 깐다.
     socket.on('showFoldedCards', (data) => {
@@ -4509,7 +4643,9 @@ io.on('connection', (socket) => {
         const hp = u.handsPlayed || 0;
         const pfOpps = u.preflopOpps || 0;
         const pct = (num, den) => den > 0 ? Math.round((num / den) * 100) : null;
+        const _pc = normalizeCosmetics(u);
         socket.emit('profileData', {
+            cosmetics: { back: _pc.back, avatar: _pc.avatar, title: cosTitleText(_pc.title) }, // 🎨 꾸미기
             nickname: u.nickname,
             wins: u.wins || 0,
             handsPlayed: hp,
