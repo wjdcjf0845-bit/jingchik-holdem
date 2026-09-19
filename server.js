@@ -34,6 +34,11 @@ const TABLE_SEATS = 6;           // 🪑 테이블 정원 — 클라이언트 �
 const SHOWDOWN_REVEAL_MS = 3000; // 🃏 올인 쇼다운 — 카드 한 장을 보고 나서 다음 장까지의 간격
 const MUCK_CHOICE_MS = 6000;     // 🃏 진 사람이 패를 공개할지 정하는 시간
 const END_VOTE_MS = 30000; // 🗳️ 합의 종료 투표 제한시간
+const TIME_BANK_MS = 15000;      // ⏳ 타임뱅크 — 핸드당 1회, 더 쓸 수 있는 시간
+const THROW_ITEMS = ['🍅', '🌹', '🥚', '👏']; // 🍅 상대에게 던질 수 있는 것 (연출 전용)
+const PHOTO_MAX_BYTES = 24000;   // 📷 프로필 사진 원본 상한 (클라가 128px 로 줄여 보내면 5~10KB)
+const PHOTO_MAX_B64 = 40000;     // 📷 data URL 문자열 상한 — 파싱 전에 먼저 걸러낸다
+const photoRate = new Map();     // 📷 닉네임 → 마지막 업로드 시각 (도배 방지)
 
 // 🎨 [상점] 뱅크롤로 사는 꾸미기 — 카드 뒷면 / 아바타 / 칭호.
 //    kind 별로 하나씩만 장착된다. price 0 은 기본 지급품이라 따로 살 필요가 없다.
@@ -55,6 +60,14 @@ const COSMETICS = {
     av_wolf:   { kind: 'avatar', name: '늑대',    price: 60000,  desc: '물면 안 놓는다' },
     av_shark:  { kind: 'avatar', name: '상어',    price: 100000, desc: '테이블의 포식자' },
     av_dragon: { kind: 'avatar', name: '용',      price: 250000, desc: '아무나 못 다는 것' },
+    // ── 🏅 등급 테두리 (살 수 없다 — 등급이 오르면 열린다. rank = 필요한 등급 번호)
+    fr_none:   { kind: 'frame', price: 0, noBuy: true, rank: 0, name: '없음',      desc: '기본 테두리' },
+    fr_bronze: { kind: 'frame', price: 0, noBuy: true, rank: 1, name: '구릿빛',    desc: '동네 고수의 증표' },
+    fr_silver: { kind: 'frame', price: 0, noBuy: true, rank: 2, name: '은빛',      desc: '선수 소리 듣는 사람' },
+    fr_gold:   { kind: 'frame', price: 0, noBuy: true, rank: 3, name: '금빛',      desc: '타짜의 자리' },
+    fr_legend: { kind: 'frame', price: 0, noBuy: true, rank: 4, name: '무지개',    desc: '전설 — 아무나 못 답니데이' },
+    // ── 📷 직접 올린 프로필 사진 (사진이 있을 때만 장착 가능)
+    av_photo:  { kind: 'avatar', price: 0, noBuy: true, photo: true, name: '내 사진', desc: '직접 올린 프로필 사진' },
     // ── 칭호 (이미지 없음 — 닉네임 옆에 붙는다)
     ti_none:  { kind: 'title', name: '없음',        price: 0,      text: '', desc: '칭호를 떼어 둡니데이' },
     ti_rookie:{ kind: 'title', name: '입문자',    price: 10000,  text: '🌱 입문자', desc: '이제 막 판에 앉았습니데이' },
@@ -64,7 +77,11 @@ const COSMETICS = {
     ti_shark: { kind: 'title', name: '테이블 상어', price: 150000, text: '🦈 테이블 상어', desc: '앉은 자리가 곧 사냥터' },
     ti_king:  { kind: 'title', name: '판의 지배자', price: 400000, text: '👑 판의 지배자', desc: '뱅크롤로 증명하는 자리' }
 };
-const COSMETIC_DEFAULTS = { back: 'back_classic', avatar: 'av_none', title: 'ti_none' };
+const COSMETIC_DEFAULTS = { back: 'back_classic', avatar: 'av_none', title: 'ti_none', frame: 'fr_none' };
+
+// 🏅 [등급] 돈으로 살 수 없는 것 — 우승 횟수나 "최고로 모았던 뱅크롤"로만 열린다.
+//    판정 기준과 임계값은 lib/rank.js 에 있다 (단위 테스트로 오름차순을 지킨다).
+const { RANKS, rankIndexOf, rankNeedText } = require('./lib/rank');
 // 칭호는 화면에 그대로 찍히는 문구라 id 대신 문구를 내려보낸다 (클라이언트에 카탈로그 사본을 두지 않으려고)
 // ⚠️ COSMETICS 는 평범한 객체라 COSMETICS['__proto__'] 같은 상속 키가 걸려든다.
 //    클라이언트가 보낸 id 는 반드시 이 함수로만 조회할 것 (자기 소유 키만 통과).
@@ -88,9 +105,22 @@ function normalizeCosmetics(u) {
         const ok = cit && cit.kind === kind && c.owned.includes(cur);
         if (!ok) c[kind] = COSMETIC_DEFAULTS[kind];
     });
+    // 📷 사진 아바타는 owned 목록이 아니라 "사진이 실제로 있느냐"로 판정한다
+    if (c.avatar === 'av_photo' && !hasPhoto(u)) c.avatar = 'av_none';
+
+    // 🏅 테두리는 등급이 곧 소유권이다. 한 번도 직접 고른 적이 없으면(frameAuto)
+    //    등급이 오를 때마다 가장 높은 테두리로 알아서 갈아 끼워준다.
+    const maxRank = rankIndexOf(u);
+    const fit = cosItem(c.frame);
+    const frameOk = fit && fit.kind === 'frame' && fit.rank <= maxRank;
+    if (c.frameAuto !== false || !frameOk) {
+        c.frame = RANKS[maxRank].frame;
+        if (c.frameAuto === undefined) c.frameAuto = true;
+    }
     u.cosmetics = c;
     return c;
 }
+function hasPhoto(u) { return !!(u && u.photo && u.photo.b64); }
 
 // 🤖 봇도 밋밋하지 않게 — 이름에서 뽑은 고정 값으로 뒷면/아바타를 준다 (구매와 무관한 연출).
 const BOT_BACKS = ['back_classic', 'back_verm', 'back_jade', 'back_noir', 'back_peony'];
@@ -98,7 +128,7 @@ const BOT_AVATARS = ['av_fox', 'av_cat', 'av_owl', 'av_wolf', 'av_shark'];
 function botCosmetics(nick) {
     let h = 0;
     for (let i = 0; i < nick.length; i++) h = (h * 31 + nick.charCodeAt(i)) >>> 0;
-    return { back: BOT_BACKS[h % BOT_BACKS.length], avatar: BOT_AVATARS[(h >>> 5) % BOT_AVATARS.length], title: '' };
+    return { back: BOT_BACKS[h % BOT_BACKS.length], avatar: BOT_AVATARS[(h >>> 5) % BOT_AVATARS.length], title: '', frame: 'fr_none', ph: 0 };
 }
 
 const app = express();
@@ -113,6 +143,24 @@ app.get('/healthz', (req, res) => res.status(200).send('ok'));
 app.use('/manual', require('./manual'));
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+// 📷 [프로필 사진] /avatar/<닉네임>?v=<버전>
+//    ⚠️ 사용자가 올린 바이트를 그대로 돌려주는 곳이다. 업로드 때 매직바이트로 이미지인지 확인하고,
+//       여기선 nosniff + sandbox 로 브라우저가 HTML/스크립트로 해석할 여지를 없앤다.
+app.get('/avatar/:nick', (req, res) => {
+    let nick = '';
+    try { nick = decodeURIComponent(req.params.nick || ''); } catch (e) { return res.status(400).end(); }
+    const u = MockDB.users.get(nick);
+    if (!u || !u.photo || !u.photo.b64) return res.status(404).end();
+    let buf;
+    try { buf = Buffer.from(u.photo.b64, 'base64'); } catch (e) { return res.status(404).end(); }
+    res.set('Content-Type', u.photo.mime || 'image/jpeg');
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Content-Disposition', 'inline');
+    res.set('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.set('Cache-Control', 'public, max-age=31536000, immutable'); // 버전이 바뀌면 URL이 바뀐다
+    res.send(buf);
+});
 
 // ─────────────────────────────────────────────
 // 유틸
@@ -293,7 +341,10 @@ const MockDB = {
                 achievements: [], seasonId: CURRENT_SEASON, seasonPoints: 0,
                 cashNet: 0, bestRank: '',
                 pinHash: null, bankroll: 100000, deviceId: null,
-                cosmetics: { owned: [], back: 'back_classic', avatar: 'av_none', title: 'ti_none' }, // 🎨 꾸미기
+                cosmetics: { owned: [], back: 'back_classic', avatar: 'av_none', title: 'ti_none', frame: 'fr_none', frameAuto: true }, // 🎨 꾸미기
+                peakBankroll: 100000, // 🏅 등급 판정용 — 지금까지 모았던 최고 뱅크롤
+                photo: null,          // 📷 직접 올린 프로필 사진 {b64, mime, ver}
+                h2h: {},              // ⚔️ 상대별 쇼다운 전적 {닉: {w, l}}
                 // 📊 포커 분석 지표 누적 카운터
                 pfrHands: 0,        // 프리플랍 레이즈 핸드 (PFR)
                 preflopOpps: 0,     // 프리플랍 액션 기회 (VPIP/PFR 분모)
@@ -320,6 +371,11 @@ const MockDB = {
         if (u.pinHash === undefined) u.pinHash = null;        // 🔒 PIN 미설정(구버전)
         if (u.bankroll === undefined) u.bankroll = (u.totalChips != null ? u.totalChips : 100000); // 💰 뱅크롤
         if (u.deviceId === undefined) u.deviceId = null; // 🔒 기기 바인딩
+        // 🏅 등급: 예전 계정은 최고 기록을 남긴 적이 없다. 다들 10만으로 시작했으니
+        //    최소 10만은 찍었다고 보고, 지금 잔고가 그보다 크면 그 값을 쓴다.
+        if (typeof u.peakBankroll !== 'number') u.peakBankroll = Math.max(u.bankroll || 0, 100000);
+        if (u.photo === undefined) u.photo = null;                                 // 📷 프로필 사진
+        if (!u.h2h || typeof u.h2h !== 'object') u.h2h = {};                       // ⚔️ 상대전적
         normalizeCosmetics(u); // 🎨 꾸미기 — 구버전/손상 레코드 복구
         // 📊 포커 분석 지표 마이그레이션
         ['pfrHands','preflopOpps','threeBetCount','threeBetOpps','aggrBets','aggrCalls',
@@ -329,6 +385,17 @@ const MockDB = {
         if (u.seasonId !== CURRENT_SEASON) { u.seasonId = CURRENT_SEASON; u.seasonPoints = 0; }
         if (u.seasonPoints === undefined) u.seasonPoints = 0;
         return u;
+    },
+    // ⚔️ [상대전적] 이긴 사람/진 사람 양쪽 레코드에 한 번씩 적는다.
+    recordH2H(winner, loser) {
+        if (!winner || !loser || winner === loser) return;
+        const w = this.users.get(winner), l = this.users.get(loser);
+        if (!w || !l) return;
+        if (!w.h2h || typeof w.h2h !== 'object') w.h2h = {};
+        if (!l.h2h || typeof l.h2h !== 'object') l.h2h = {};
+        const a = w.h2h[loser] || (w.h2h[loser] = { w: 0, l: 0 });
+        const b = l.h2h[winner] || (l.h2h[winner] = { w: 0, l: 0 });
+        a.w++; b.l++;
     },
     async addWin(nickname) {
         if (typeof nickname === 'string' && nickname.startsWith('🤖')) return; // 봇 제외
@@ -558,6 +625,8 @@ const MockDB = {
         if (typeof nickname === 'string' && nickname.startsWith('🤖')) return 0;
         const user = await this.getUser(nickname);
         user.bankroll = Math.max(0, (user.bankroll || 0) + delta);
+        // 🏅 등급은 "최고로 모았던" 금액 기준 — 한 판 잃었다고 테두리가 사라지면 안 된다
+        if (user.bankroll > (user.peakBankroll || 0)) user.peakBankroll = user.bankroll;
         this.save();
         return user.bankroll;
     },
@@ -819,7 +888,8 @@ class GameRoom {
                 const u = MockDB.users.get(nick);
                 if (!u) return;
                 const c = normalizeCosmetics(u);
-                cosMap[nick] = { back: c.back, avatar: c.avatar, title: cosTitleText(c.title) };
+                // 📷 사진은 무거워서 상태에 싣지 않는다 — 버전 번호만 보내고 실제 그림은 /avatar 로 따로 받는다
+                cosMap[nick] = { back: c.back, avatar: c.avatar, title: cosTitleText(c.title), frame: c.frame, ph: hasPhoto(u) ? u.photo.ver : 0 };
             });
 
             Object.values(this.players).forEach(recipient => {
@@ -883,6 +953,7 @@ class GameRoom {
                     canEndVote: this.endVoteEligible(), // 🗳️ 합의 종료 투표 가능 여부 (나가기 메뉴 노출용)
                     youSpectate: !!recipient._wantSpectate, // 👀 내가 "관전으로 입장"을 고른 상태인가
                     youRevealFold: recipient._revealCards ? recipient._revealCards.slice() : null, // 🃏 폴드 패 공개 선택
+                    youTimeBank: !recipient._tbUsed, // ⏳ 이번 핸드에 타임뱅크가 남았나
                     seatsUsed: this.playerOrder.length, seatsMax: TABLE_SEATS,
                     cos: cosMap, // 🎨 자리에 앉은 사람들의 꾸미기 (뒷면/아바타/칭호)
                     endVote: this.endVoteSnapshot(),
@@ -914,6 +985,40 @@ class GameRoom {
         }, 1000);
     }
 
+    // ⏳ 시간 만료 시 자동 처리 (체크 가능하면 체크, 아니면 폴드)
+    //    타임뱅크로 타이머를 다시 걸 수 있게 클로저가 아닌 메서드로 둔다.
+    _autoAct(expectedNick) {
+        if (this.turnIndex === -1 || this.playerOrder[this.turnIndex] !== expectedNick) return;
+        const p = this.players[expectedNick];
+        if (!p || p.isFolded || p.isAllIn) return;
+        const callAmount = this.currentHighestBet - p.currentBet;
+        if (callAmount === 0) {
+            p.hasActed = true;
+            io.to(this.roomId).emit('gameMessage', `⏳ ${expectedNick} 자동 체크`);
+            io.to(this.roomId).emit('actionSound', { nick: expectedNick, type: 'check' });
+        } else {
+            p.isFolded = true;
+            p.hasActed = true;
+            io.to(this.roomId).emit('gameMessage', `⏳ ${expectedNick} 시간 초과 (자동 폴드)`);
+            io.to(this.roomId).emit('actionSound', { nick: expectedNick, type: 'fold' });
+        }
+        this.nextTurn();
+    }
+
+    // ⏳ [타임뱅크] 지금 턴의 남은 시간에 더 얹는다. 턴이 이미 넘어갔으면 아무것도 안 한다.
+    extendTurn(addMs) {
+        if (this.turnIndex === -1) return false;
+        const nick = this.playerOrder[this.turnIndex];
+        if (!nick) return false;
+        const remain = Math.max(0, this.turnEndTime - Date.now()) + addMs;
+        this.turnEndTime = Date.now() + remain;
+        if (this.turnTimeout) clearTimeout(this.turnTimeout);
+        this.turnTimeout = setTimeout(() => this._autoAct(nick), remain);
+        io.to(this.roomId).emit('updateTurnTimer', this.turnEndTime);
+        io.to(this.roomId).emit('gameMessage', `⏳ ${nick} 님이 시간을 ${Math.round(addMs / 1000)}초 더 씁니데이`);
+        return true;
+    }
+
     startTurnTimer() {
         if (this.turnTimeout) clearTimeout(this.turnTimeout);
         const _turnNick = this.playerOrder[this.turnIndex];
@@ -928,31 +1033,7 @@ class GameRoom {
 
         const expectedNick = _turnNick;
 
-        // ⏳ 시간 만료 시 자동 처리 (체크 가능하면 체크, 아니면 폴드)
-        const autoAct = () => {
-            if (this.turnIndex === -1 || this.playerOrder[this.turnIndex] !== expectedNick) return;
-
-            const p = this.players[expectedNick];
-            if (p && !p.isFolded && !p.isAllIn) {
-                const callAmount = this.currentHighestBet - p.currentBet;
-                if (callAmount === 0) {
-                    p.hasActed = true;
-                    io.to(this.roomId).emit('gameMessage', `⏳ ${expectedNick} 자동 체크`);
-                    io.to(this.roomId).emit('actionSound', { nick: expectedNick, type: 'check' });
-                } else {
-                    p.isFolded = true;
-                    p.hasActed = true;
-                    io.to(this.roomId).emit('gameMessage', `⏳ ${expectedNick} 시간 초과 (자동 폴드)`);
-                    io.to(this.roomId).emit('actionSound', { nick: expectedNick, type: 'fold' });
-                }
-                this.nextTurn();
-            }
-        };
-
-        this.turnTimeout = setTimeout(() => {
-            if (this.turnIndex === -1 || this.playerOrder[this.turnIndex] !== expectedNick) return;
-            autoAct();
-        }, msLimit);
+        this.turnTimeout = setTimeout(() => this._autoAct(expectedNick), msLimit);
 
         this.maybeScheduleBot(expectedNick); // 🤖 현재 턴이 봇이면 자동 행동 예약
 
@@ -1914,6 +1995,7 @@ class GameRoom {
                 this.players[nick].isAllIn = false;
                 this.players[nick].isMucked = false;
                 this.players[nick]._revealCards = null; // 🃏 폴드 패 공개 선택 초기화
+                this.players[nick]._tbUsed = false;     // ⏳ 타임뱅크는 핸드마다 1회
                 this.players[nick].hasActed = false;
                 this.players[nick].role = '';
                 this.players[nick]._trapStreet = -1; // 🪤 체크레이즈 트랩 플래그 초기화 (스트리트 번호 재사용 오발동 방지)
@@ -2625,6 +2707,15 @@ class GameRoom {
                 io.to(pl.socketId).emit('muckChoice', { deadline: this._muckDeadline });
             }
         });
+
+        // ⚔️ [상대전적] 쇼다운까지 간 사람끼리만 승패를 적는다.
+        //    폴드로 끝난 팟은 패를 겨룬 게 아니므로 전적에 넣지 않는다. 봇도 제외.
+        const _humansShown = _contenders.filter(n => this.players[n] && !this.players[n].isBot);
+        if (_humansShown.length >= 2) {
+            const _won = _humansShown.filter(n => allWinnerIds.has(n));
+            const _lost = _humansShown.filter(n => !allWinnerIds.has(n));
+            _won.forEach(w => _lost.forEach(l => MockDB.recordH2H(w, l)));
+        }
 
         // 💬 봇 승/패 멘트 (쇼다운까지 간 봇만)
         this.playerOrder.forEach(nick => {
@@ -4307,6 +4398,36 @@ io.on('connection', (socket) => {
         } catch(e) { console.error("Action Error:", e); }
     });
 
+    // ⏳ [타임뱅크] 진짜 고민될 때 한 핸드에 딱 한 번, 15초를 더 쓴다.
+    //    상용 포커앱의 표준 기능. 내 턴일 때만, 핸드당 1회.
+    socket.on('useTimeBank', () => {
+        const room = rooms.get(socket.currentRoom);
+        if (!room || !socket.nickname) return;
+        if (room.gameStage < 1 || room.gameStage > 4) return;
+        if (room.turnIndex === -1 || room.playerOrder[room.turnIndex] !== socket.nickname) return;
+        const p = room.players[socket.nickname];
+        if (!p || p.isFolded || p.isAllIn || p._tbUsed) return;
+        p._tbUsed = true;
+        room.extendTurn(TIME_BANK_MS);
+        room.sendState();
+    });
+
+    // 🍅 [던지기] 상대 자리로 물건이 날아간다 — 한게임 포커류의 그 재미.
+    //    실제 게임에는 아무 영향이 없는 순수 연출이라 검증은 "누구에게" 만 확인하면 된다.
+    socket.on('throwItem', (data) => {
+        const room = rooms.get(socket.currentRoom);
+        if (!room || !socket.nickname) return;
+        const me = room.players[socket.nickname];
+        if (!me) return;
+        const now = Date.now();
+        if (now - (me.lastThrowTime || 0) < 3000) return;
+        const target = data && data.to;
+        if (typeof target !== 'string' || target === socket.nickname || !room.players[target]) return;
+        const item = THROW_ITEMS.includes(data && data.item) ? data.item : THROW_ITEMS[0];
+        me.lastThrowTime = now;
+        io.to(room.roomId).emit('itemThrown', { from: socket.nickname, to: target, item });
+    });
+
     socket.on('emote', (emoji) => {
         const room = rooms.get(socket.currentRoom);
         if (!room || !socket.nickname) return;
@@ -4369,11 +4490,29 @@ io.on('connection', (socket) => {
     // 🎨 [상점] 카탈로그 + 내 보유/장착 상태
     function shopPayload(u) {
         const c = normalizeCosmetics(u);
+        const myRank = rankIndexOf(u);
         return {
-            items: Object.entries(COSMETICS).map(([id, it]) => ({ id, kind: it.kind, name: it.name, price: it.price, desc: it.desc || '', text: it.text || '' })),
+            items: Object.entries(COSMETICS).map(([id, it]) => ({
+                id, kind: it.kind, name: it.name, price: it.price,
+                desc: it.desc || '', text: it.text || '',
+                noBuy: !!it.noBuy,
+                // 🏅 테두리는 등급으로 열린다 — 잠겨 있으면 무엇이 필요한지 같이 보낸다
+                locked: it.kind === 'frame' ? (it.rank > myRank) : (it.photo ? !hasPhoto(u) : false),
+                need: it.kind === 'frame' ? rankNeedText(it.rank) : (it.photo ? '사진을 올리면 열립니데이' : '')
+            })),
             owned: c.owned.slice(),
-            equipped: { back: c.back, avatar: c.avatar, title: c.title },
-            bankroll: u.bankroll || 0
+            equipped: { back: c.back, avatar: c.avatar, title: c.title, frame: c.frame },
+            bankroll: u.bankroll || 0,
+            // 🏅 내 등급 현황 (다음 등급까지 얼마나 남았는지 보여주려고)
+            rank: {
+                idx: myRank, name: RANKS[myRank].name,
+                wins: u.wins || 0, peak: u.peakBankroll || 0,
+                next: myRank + 1 < RANKS.length
+                    ? { name: RANKS[myRank + 1].name, wins: RANKS[myRank + 1].wins, peak: RANKS[myRank + 1].peak }
+                    : null
+            },
+            hasPhoto: hasPhoto(u),
+            photoVer: hasPhoto(u) ? u.photo.ver : 0
         };
     }
     socket.on('getShop', async () => {
@@ -4389,6 +4528,8 @@ io.on('connection', (socket) => {
         const id = data && data.id;
         const item = cosItem(id);
         if (!item) { socket.emit('shopResult', { ok: false, msg: '없는 아이템입니데이.' }); return; }
+        // 🏅 테두리는 등급으로만, 📷 사진은 업로드로만 — 돈으로 사는 물건이 아니다
+        if (item.noBuy) { socket.emit('shopResult', { ok: false, msg: '이건 돈으로 살 수 있는 게 아닙니데이.' }); return; }
         if (c.owned.includes(id)) { socket.emit('shopResult', { ok: false, msg: '이미 가지고 있습니데이.' }); return; }
         if ((u.bankroll || 0) < item.price) {
             socket.emit('shopResult', { ok: false, msg: `뱅크롤이 ${(item.price - (u.bankroll || 0)).toLocaleString()} 모자랍니데이.` });
@@ -4405,6 +4546,56 @@ io.on('connection', (socket) => {
         if (room) room.sendState();
     });
 
+    // 📷 [프로필 사진] 클라이언트가 캔버스로 128px 까지 줄여서 data URL 로 보낸다.
+    //    ⚠️ 확장자나 MIME 문자열은 믿지 않는다 — 실제 바이트 앞머리(매직바이트)로 이미지인지 확인한다.
+    //       그래야 HTML/SVG 같은 걸 이미지인 척 올려 /avatar 로 되받는 길이 막힌다.
+    socket.on('uploadAvatar', (data) => {
+        if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
+        const fail = msg => socket.emit('shopResult', { ok: false, msg });
+        const now = Date.now();
+        if (now - (photoRate.get(socket.nickname) || 0) < 5000) { fail('조금 있다 다시 올리이소.'); return; }
+
+        const raw = data && data.data;
+        if (typeof raw !== 'string' || raw.length > PHOTO_MAX_B64) { fail('사진이 너무 큽니데이.'); return; }
+        const m = /^data:image\/(?:jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(raw);
+        if (!m) { fail('사진 형식을 못 읽겠습니데이.'); return; }
+        let buf;
+        try { buf = Buffer.from(m[1], 'base64'); } catch (e) { fail('사진을 못 읽겠습니데이.'); return; }
+        if (!buf.length || buf.length > PHOTO_MAX_BYTES) { fail('사진이 너무 큽니데이.'); return; }
+
+        const isJpg = buf.length > 3 && buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
+        const isPng = buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
+        const isWebp = buf.length > 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP';
+        const mime = isJpg ? 'image/jpeg' : isPng ? 'image/png' : isWebp ? 'image/webp' : null;
+        if (!mime) { fail('이미지 파일이 아닙니데이.'); return; }
+
+        const u = MockDB.users.get(socket.nickname);
+        photoRate.set(socket.nickname, now);
+        u.photo = { b64: buf.toString('base64'), mime, ver: ((u.photo && u.photo.ver) || 0) + 1 };
+        const c = normalizeCosmetics(u);
+        if (!c.owned.includes('av_photo')) c.owned.push('av_photo');
+        c.avatar = 'av_photo'; // 올렸으면 바로 쓴다
+        MockDB.save();
+        socket.emit('shopResult', { ok: true, msg: '프로필 사진을 바꿨습니데이!' });
+        socket.emit('shopData', shopPayload(u));
+        const room = rooms.get(socket.currentRoom);
+        if (room) room.sendState();
+    });
+
+    socket.on('removeAvatarPhoto', () => {
+        if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
+        const u = MockDB.users.get(socket.nickname);
+        u.photo = null;
+        const c = normalizeCosmetics(u);
+        c.owned = c.owned.filter(id => id !== 'av_photo');
+        if (c.avatar === 'av_photo') c.avatar = 'av_none';
+        MockDB.save();
+        socket.emit('shopResult', { ok: true, msg: '사진을 내렸습니데이.' });
+        socket.emit('shopData', shopPayload(u));
+        const room = rooms.get(socket.currentRoom);
+        if (room) room.sendState();
+    });
+
     // 🎨 장착 변경 — 보유한 것만 가능
     socket.on('equipCosmetic', (data) => {
         if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
@@ -4412,8 +4603,22 @@ io.on('connection', (socket) => {
         const c = normalizeCosmetics(u);
         const id = data && data.id;
         const item = cosItem(id);
-        if (!item || !c.owned.includes(id)) { socket.emit('shopResult', { ok: false, msg: '아직 가지고 있지 않습니데이.' }); return; }
-        c[item.kind] = id;
+        if (!item) { socket.emit('shopResult', { ok: false, msg: '없는 아이템입니데이.' }); return; }
+        if (item.kind === 'frame') {
+            // 🏅 테두리는 owned 가 아니라 등급으로 판정한다
+            if (item.rank > rankIndexOf(u)) {
+                socket.emit('shopResult', { ok: false, msg: `아직 못 답니데이 — ${rankNeedText(item.rank)}` });
+                return;
+            }
+            c.frame = id;
+            c.frameAuto = false; // 직접 골랐으니 이제 자동으로 안 바꾼다
+        } else if (item.photo) {
+            if (!hasPhoto(u)) { socket.emit('shopResult', { ok: false, msg: '먼저 사진을 올리이소.' }); return; }
+            c.avatar = id;
+        } else {
+            if (!c.owned.includes(id)) { socket.emit('shopResult', { ok: false, msg: '아직 가지고 있지 않습니데이.' }); return; }
+            c[item.kind] = id;
+        }
         MockDB.save();
         socket.emit('shopData', shopPayload(u));
         const room = rooms.get(socket.currentRoom);
@@ -4644,7 +4849,14 @@ io.on('connection', (socket) => {
         const pfOpps = u.preflopOpps || 0;
         const pct = (num, den) => den > 0 ? Math.round((num / den) * 100) : null;
         const _pc = normalizeCosmetics(u);
+        const _ri = rankIndexOf(u);
+        // ⚔️ "나와의" 전적 — 보는 사람 기준으로 뒤집어 보여준다
+        const _rec = (u.h2h && u.h2h[socket.nickname]) || null;
         socket.emit('profileData', {
+            rank: { idx: _ri, name: RANKS[_ri].name, peak: u.peakBankroll || 0 }, // 🏅 등급
+            photoVer: hasPhoto(u) ? u.photo.ver : 0,                               // 📷 프로필 사진
+            // u.h2h[나] 는 "이 사람이 나를 상대로" 낸 성적 → 내 기준으로는 승패를 바꿔 읽는다
+            h2h: (u.nickname !== socket.nickname && _rec) ? { myWins: _rec.l || 0, myLosses: _rec.w || 0 } : null,
             cosmetics: { back: _pc.back, avatar: _pc.avatar, title: cosTitleText(_pc.title) }, // 🎨 꾸미기
             nickname: u.nickname,
             wins: u.wins || 0,

@@ -1296,7 +1296,7 @@
         .sc-ico { font-size: 14px; }
         .sound-slider { width: 64px; cursor: pointer; }
 
-        #emote-panel { position: fixed; left: 15px; top: 50%; transform: translateY(-50%); z-index: 2005; background: rgba(14,17,26,0.88); padding: 14px 9px; border-radius: 999px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; box-shadow: 0 6px 18px rgba(0,0,0,0.55); backdrop-filter: blur(6px); transition: transform 0.3s; }
+        #emote-panel { position: fixed; left: 15px; top: 50%; transform: translateY(-50%); z-index: 2005; background: rgba(14,17,26,0.88); padding: 14px 9px; border-radius: 999px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; box-shadow: 0 6px 18px rgba(0,0,0,0.55); backdrop-filter: blur(6px); transition: transform 0.3s; max-height: 88vh; overflow-y: auto; }
         .emote-btn { background: transparent; font-size: 26px; padding: 5px; margin: 2px; border: none; cursor: pointer; transition: transform 0.2s; }
         .emote-btn:hover { transform: scale(1.3); }
         .emote-bubble { position: absolute; top: -60px; left: 50%; transform: translateX(-50%); font-size: 45px; pointer-events: none; z-index: 250; animation: emotePop 2s ease-out forwards; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5)); }
@@ -2225,6 +2225,95 @@
             #shop-grid { grid-template-columns: repeat(2, 1fr); }
             .shop-card { padding: 14px 12px 12px; }
         }
+
+        /* ═══ 🏅 등급 테두리 ═══════════════════════════════
+           아바타 바깥에 링을 두르는 방식. 아바타는 사진일 수도 있어서
+           배경이 아니라 border/box-shadow 로만 그린다. */
+        .avatar.fr-bronze, .pf-avatar.fr-bronze, .sh-prev.av.fr-bronze {
+            border-color: #c98a4b !important;
+            box-shadow: 0 0 0 2px #7b4d1f, 0 3px 9px rgba(0,0,0,0.5) !important;
+        }
+        .avatar.fr-silver, .pf-avatar.fr-silver, .sh-prev.av.fr-silver {
+            border-color: #e6ecf5 !important;
+            box-shadow: 0 0 0 2px #8b93a0, 0 0 10px rgba(220,230,245,0.55), 0 3px 9px rgba(0,0,0,0.5) !important;
+        }
+        .avatar.fr-gold, .pf-avatar.fr-gold, .sh-prev.av.fr-gold {
+            border-color: #ffdf7e !important;
+            box-shadow: 0 0 0 2px #9a7413, 0 0 12px rgba(245,201,71,0.7), 0 3px 9px rgba(0,0,0,0.5) !important;
+        }
+        /* 전설은 도는 무지개 링 — z-index:0 으로 자기 쌓임맥락을 만들어야
+           inset 음수인 ::after 가 부모 뒤로 사라지지 않는다 */
+        .avatar.fr-legend, .pf-avatar.fr-legend, .sh-prev.av.fr-legend {
+            position: relative; z-index: 0; border-color: transparent !important;
+        }
+        .avatar.fr-legend::after, .pf-avatar.fr-legend::after, .sh-prev.av.fr-legend::after {
+            content: ''; position: absolute; inset: -4px; border-radius: 50%; z-index: -1;
+            background: conic-gradient(#ff5f6d, #ffc371, #f9f871, #47e5bc, #5b9df9, #c86dd7, #ff5f6d);
+            animation: frSpin 3.2s linear infinite;
+        }
+        @keyframes frSpin { to { transform: rotate(360deg); } }
+        .pf-rank {
+            display: inline-block; font-size: 11px; font-weight: 900; color: var(--ink);
+            background: var(--paper-lo); border: 1.5px solid var(--ink); border-radius: 999px;
+            padding: 2px 10px; margin-bottom: 8px;
+        }
+        .pf-h2h {
+            font-size: 12px; font-weight: 800; color: var(--ink); margin: 6px 0 2px;
+            background: var(--paper-lo); border: 1.5px solid var(--ink); border-radius: 8px; padding: 6px 10px;
+        }
+        .pf-h2h b.w { color: #1f7a4a; } .pf-h2h b.l { color: var(--verm); }
+
+        /* ═══ 📷 상점 — 등급 배너 / 사진 카드 ═══ */
+        .shop-rank {
+            display: flex; align-items: center; gap: 9px; margin-bottom: 10px; padding: 9px 11px;
+            background: var(--paper-lo); border: 2px solid var(--ink); border-radius: 12px;
+        }
+        .shop-rank .sr-badge { font-family: var(--font-disp); font-size: 15px; font-weight: 900; white-space: nowrap; }
+        .shop-rank .sr-next { font-size: 11px; color: var(--txt-dim); line-height: 1.35; word-break: keep-all; }
+        .sh-item.locked { opacity: 0.6; }
+        .sh-need { font-size: 10px; font-weight: 800; color: var(--verm); word-break: keep-all; }
+        .sh-photo-row { display: flex; gap: 6px; width: 100%; }
+        .sh-photo-row .sh-btn { flex: 1; }
+
+        /* ═══ ⏳ 타임뱅크 ═══ */
+        #timebank-row { display: none; justify-content: center; margin-top: 7px; }
+        #timebank-row.on { display: flex; }
+        #btn-timebank {
+            border: 2px solid var(--ink); border-radius: 8px; background: var(--mustard, #e8b93a); color: var(--ink);
+            font-family: inherit; font-weight: 900; font-size: 12.5px; padding: 7px 18px; cursor: pointer;
+            box-shadow: 3px 3px 0 rgba(34,29,21,0.75);
+        }
+        #btn-timebank:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 rgba(34,29,21,0.75); }
+        #btn-timebank[disabled] { opacity: 0.4; cursor: default; box-shadow: none; }
+
+        /* ═══ 🍅 던지기 ═══ */
+        .throw-btn { font-size: 19px; }
+        #throw-hint {
+            display: none; position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
+            z-index: 3600; background: var(--ink); color: var(--paper-hi);
+            border-radius: 999px; padding: 8px 16px; font-size: 12.5px; font-weight: 800;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+        }
+        #throw-hint.on { display: block; }
+        #throw-hint button { margin-left: 8px; background: none; border: none; color: var(--verm); font-weight: 900; cursor: pointer; font-family: inherit; }
+        .player-spot.throw-target { outline: 3px dashed var(--verm); outline-offset: 2px; cursor: crosshair; }
+        .fly-item {
+            position: fixed; z-index: 3700; font-size: 26px; pointer-events: none;
+            transform: translate(-50%, -50%);
+            animation: flyItem var(--dur, 620ms) cubic-bezier(0.3, 0.1, 0.6, 1) forwards;
+        }
+        @keyframes flyItem {
+            0%   { transform: translate(-50%, -50%) scale(0.5) rotate(0deg); opacity: 0; }
+            12%  { opacity: 1; }
+            100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.25) rotate(540deg); opacity: 1; }
+        }
+        .splat { position: fixed; z-index: 3700; font-size: 34px; pointer-events: none; transform: translate(-50%,-50%); animation: splatPop 700ms ease-out forwards; }
+        @keyframes splatPop {
+            0% { transform: translate(-50%,-50%) scale(0.4); opacity: 1; }
+            35% { transform: translate(-50%,-50%) scale(1.5); opacity: 1; }
+            100% { transform: translate(-50%,-50%) scale(1.1); opacity: 0; }
+        }
+        @media (prefers-reduced-motion: reduce) { .fly-item, .splat { display: none !important; } }
     </style>
 </head>
 <body>
@@ -2233,6 +2322,8 @@
 
 <div id="fx-flash"></div>
 <div id="rank-banner"><div class="rb-rank"></div><div class="rb-who"></div></div>
+
+<div id="throw-hint"><span class="th-t"></span><button onclick="disarmThrow()">취소</button></div>
 
 <div id="shop-modal" class="overlay" style="display:none; z-index:4400;">
     <div class="shop-card">
@@ -2244,8 +2335,11 @@
             <button class="shop-tab on" data-kind="back" onclick="shopTab('back')">🃏 카드 뒷면</button>
             <button class="shop-tab" data-kind="avatar" onclick="shopTab('avatar')">🦊 아바타</button>
             <button class="shop-tab" data-kind="title" onclick="shopTab('title')">🏷️ 칭호</button>
+            <button class="shop-tab" data-kind="frame" onclick="shopTab('frame')">🏅 테두리</button>
         </div>
+        <div class="shop-rank" id="shop-rank"></div>
         <div id="shop-msg"></div>
+        <input type="file" id="photo-input" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="onPhotoPicked(this)">
         <div id="shop-grid"></div>
         <button class="btn-close-modal" style="margin-top:16px; width:100%;" onclick="closeShop()">닫기</button>
     </div>
@@ -2463,6 +2557,10 @@
         <button class="emote-btn" onclick="sendEmote('😂')" title="기쁨">😂</button>
         <button class="emote-btn" onclick="sendEmote('😡')" title="화남">😡</button>
         <button class="emote-btn" onclick="sendEmote('😎')" title="도발">😎</button>
+        <button class="emote-btn throw-btn" onclick="armThrow('🍅')" title="토마토 던지기">🍅</button>
+        <button class="emote-btn throw-btn" onclick="armThrow('🌹')" title="장미 던지기">🌹</button>
+        <button class="emote-btn throw-btn" onclick="armThrow('🥚')" title="계란 던지기">🥚</button>
+        <button class="emote-btn throw-btn" onclick="armThrow('👏')" title="박수 보내기">👏</button>
         <div id="emote-cooldown" style="font-size: 11px; color: #e74c3c; display: none; font-weight: bold; padding-top: 5px;">10초<br>제한!</div>
     </div>
 
@@ -2510,6 +2608,7 @@
                 <button class="btn-raise" id="btn-raise" onclick="sendAction('raise')">레이즈</button>
                 <button class="btn-allin" id="btn-allin" onclick="sendAction('allin')">🔥 올인</button>
             </div>
+            <div id="timebank-row"><button id="btn-timebank" onclick="useTimeBank()">⏳ 시간 더 쓰기 <b>+15초</b></button></div>
             <div class="key-hint">단축키 — F 폴드 · C 체크/콜 · R 레이즈 · A 올인 · ← → 금액 조절</div>
         </div>
         <div id="preaction-bar">
@@ -2739,51 +2838,189 @@
             ? `<div class="card-back-side sk" style="--skin:url('${skinUrl(backId)}')"></div>`
             : '<div class="card-back-side"></div>';
     }
-    function avatarAttrs(nick, avId) {
-        const sk = hasSkin(avId);
+    // 🏅 등급 테두리 id → CSS 클래스
+    const FRAME_CLASS = { fr_bronze: 'fr-bronze', fr_silver: 'fr-silver', fr_gold: 'fr-gold', fr_legend: 'fr-legend' };
+    // 📷 사진은 상태 메시지가 아니라 /avatar 에서 받는다 — 버전(ph)이 바뀌면 URL이 바뀌어 캐시가 깨진다
+    const photoUrl = (nick, ver) => `/avatar/${encodeURIComponent(nick)}?v=${ver || 0}`;
+    function avatarAttrs(nick, cos) {
+        const c = cos || {};
+        let skin = null;
+        if (c.avatar === 'av_photo') { if (c.ph > 0) skin = photoUrl(nick, c.ph); }
+        else if (hasSkin(c.avatar)) skin = skinUrl(c.avatar);
+        const fr = FRAME_CLASS[c.frame] || '';
         return {
-            cls: sk ? ' sk' : '',
-            style: `--av:${avatarHue(nick)}${sk ? `;--skin:url('${skinUrl(avId)}')` : ''}`
+            cls: (skin ? ' sk' : '') + (fr ? ' ' + fr : ''),
+            style: `--av:${avatarHue(nick)}${skin ? `;--skin:url('${skin}')` : ''}`
         };
     }
+
+    // ⏳ [타임뱅크] 내 턴에 한 핸드 1회. 서버가 남은 시간에 15초를 얹어준다.
+    function useTimeBank() {
+        socket.emit('useTimeBank');
+        const b = document.getElementById('btn-timebank');
+        if (b) b.disabled = true;
+    }
+    function renderTimeBank(data) {
+        const row = document.getElementById('timebank-row');
+        if (!row) return;
+        const myTurn = data.turnPlayerId === myNickname && data.gameStage >= 1 && data.gameStage <= 4;
+        const can = !!(myTurn && data.youTimeBank);
+        row.classList.toggle('on', can);
+        const b = document.getElementById('btn-timebank');
+        if (b) b.disabled = !can;
+    }
+
+    // 🍅 [던지기] 물건을 고르면 "표적 고르기" 모드가 되고, 좌석을 누르면 날아간다.
+    let throwArmed = null;
+    function armThrow(item) {
+        throwArmed = item;
+        const h = document.getElementById('throw-hint');
+        if (h) { h.querySelector('.th-t').innerText = `${item} 던질 사람을 누르이소`; h.classList.add('on'); }
+        const panel = document.getElementById('emote-panel');
+        if (panel) panel.classList.remove('open');
+        document.querySelectorAll('.player-spot').forEach(el => {
+            if (el.id !== 'player-' + myNickname.replace(/\s/g, '_')) el.classList.add('throw-target');
+        });
+    }
+    function disarmThrow() {
+        throwArmed = null;
+        const h = document.getElementById('throw-hint');
+        if (h) h.classList.remove('on');
+        document.querySelectorAll('.throw-target').forEach(el => el.classList.remove('throw-target'));
+    }
+    function flyThrow(fromEl, toEl, item) {
+        if (_noMotion() || !fromEl || !toEl) return;
+        const a = fromEl.getBoundingClientRect(), b = toEl.getBoundingClientRect();
+        if (!a.width || !b.width) return;
+        const sx = a.left + a.width / 2, sy = a.top + a.height / 2;
+        const tx = b.left + b.width / 2, ty = b.top + b.height / 2;
+        const el = document.createElement('div');
+        el.className = 'fly-item';
+        el.innerText = item;
+        el.style.left = sx + 'px'; el.style.top = sy + 'px';
+        el.style.setProperty('--dx', (tx - sx) + 'px');
+        el.style.setProperty('--dy', (ty - sy) + 'px');
+        el.style.setProperty('--dur', '620ms');
+        document.body.appendChild(el);
+        setTimeout(() => {
+            el.remove();
+            const sp = document.createElement('div');
+            sp.className = 'splat';
+            sp.innerText = item === '👏' ? '✨' : item === '🌹' ? '💐' : '💥';
+            sp.style.left = tx + 'px'; sp.style.top = ty + 'px';
+            document.body.appendChild(sp);
+            setTimeout(() => sp.remove(), 720);
+        }, 620);
+    }
+    socket.on('itemThrown', d => {
+        if (!d) return;
+        const idOf = n => 'player-' + String(n).replace(/\s/g, '_');
+        flyThrow(document.getElementById(idOf(d.from)), document.getElementById(idOf(d.to)), d.item);
+    });
 
     function openShop() { socket.emit('getShop'); document.getElementById('shop-msg').innerText = ''; document.getElementById('shop-modal').style.display = 'flex'; }
     function closeShop() { document.getElementById('shop-modal').style.display = 'none'; }
     function shopTab(kind) { shopKind = kind; renderShop(); }
 
     socket.on('shopData', d => { shopState = d || shopState; renderShop(); });
-    socket.on('shopResult', r => {
-        const el = document.getElementById('shop-msg');
-        if (!el || !r) return;
-        el.innerText = r.msg || '';
-        el.style.color = r.ok ? '#1f7a4a' : 'var(--verm)';
-    });
+    socket.on('shopResult', r => { if (r) shopMsg(r.msg || '', !!r.ok); });
 
     function shopPreview(it) {
         if (it.kind === 'title') return `<div class="sh-prev title">${esc(it.text || '—')}</div>`;
-        const cls = it.kind === 'back' ? 'back' : 'av';
+        // 🏅 테두리는 그 자체가 링이라 미리보기도 동그라미에 링만 둘러 보여준다
+        if (it.kind === 'frame') {
+            const fr = FRAME_CLASS[it.id] || '';
+            return `<div class="sh-prev av def ${fr}"></div>`;
+        }
+        // 📷 사진 카드는 실제 내 사진을 보여준다
+        if (it.id === 'av_photo') {
+            return shopState.hasPhoto
+                ? `<div class="sh-prev av" style="background-image:url('${photoUrl(myNickname, (shopState.photoVer || Date.now()))}')"></div>`
+                : '<div class="sh-prev av def" style="display:flex;align-items:center;justify-content:center;font-size:22px">📷</div>';
+        }
         return hasSkin(it.id)
-            ? `<div class="sh-prev ${cls}" style="background-image:url('${skinUrl(it.id)}')"></div>`
-            : `<div class="sh-prev ${cls} def"></div>`;
+            ? `<div class="sh-prev av" style="background-image:url('${skinUrl(it.id)}')"></div>`
+            : '<div class="sh-prev av def"></div>';
     }
+
+    function shopMsg(text, ok) {
+        const el = document.getElementById('shop-msg');
+        if (!el) return;
+        el.innerText = text || '';
+        el.style.color = ok ? '#1f7a4a' : 'var(--verm)';
+    }
+
+    // 📷 파일을 고르면 브라우저에서 128px 정사각으로 줄여서 보낸다.
+    //    원본 그대로 올리면 수 MB라 서버/DB가 감당이 안 된다.
+    function pickPhoto() { document.getElementById('photo-input').click(); }
+    function onPhotoPicked(input) {
+        const f = input.files && input.files[0];
+        input.value = '';
+        if (!f) return;
+        if (!/^image\/(png|jpeg|webp)$/.test(f.type)) { shopMsg('이미지 파일만 됩니데이.', false); return; }
+        if (f.size > 12 * 1024 * 1024) { shopMsg('파일이 너무 큽니데이 (12MB 이하).', false); return; }
+        const url = URL.createObjectURL(f);
+        const img = new Image();
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            const side = Math.min(img.naturalWidth, img.naturalHeight);
+            if (!side) { shopMsg('사진을 못 읽겠습니데이.', false); return; }
+            const cv = document.createElement('canvas');
+            cv.width = cv.height = 128;
+            const ctx = cv.getContext('2d');
+            ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 128, 128);
+            let data = cv.toDataURL('image/jpeg', 0.72);
+            if (data.length > 36000) data = cv.toDataURL('image/jpeg', 0.5);
+            shopMsg('올리는 중입니데이...', true);
+            socket.emit('uploadAvatar', { data });
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); shopMsg('사진을 못 읽겠습니데이.', false); };
+        img.src = url;
+    }
+    function removePhoto() { socket.emit('removeAvatarPhoto'); }
 
     function renderShop() {
         const grid = document.getElementById('shop-grid');
         if (!grid) return;
         document.getElementById('shop-bankroll').innerText = (shopState.bankroll || 0).toLocaleString();
         document.querySelectorAll('.shop-tab').forEach(b => b.classList.toggle('on', b.dataset.kind === shopKind));
+
+        // 🏅 등급 배너 — 지금 등급과 다음 등급 조건
+        const rk = shopState.rank;
+        const rankBar = document.getElementById('shop-rank');
+        if (rankBar) {
+            if (!rk) rankBar.style.display = 'none';
+            else {
+                rankBar.style.display = 'flex';
+                const nx = rk.next
+                    ? `다음 <b>${esc(rk.next.name)}</b> — 우승 ${rk.next.wins}회 또는 최고 뱅크롤 ${rk.next.peak.toLocaleString()}<br>지금 우승 ${rk.wins}회 · 최고 ${(rk.peak || 0).toLocaleString()}`
+                    : `최고 등급입니데이 — 우승 ${rk.wins}회 · 최고 ${(rk.peak || 0).toLocaleString()}`;
+                rankBar.innerHTML = `<div class="sr-badge">🏅 ${esc(rk.name)}</div><div class="sr-next">${nx}</div>`;
+            }
+        }
+
         const owned = shopState.owned || [];
         const eq = shopState.equipped || {};
         const items = (shopState.items || []).filter(i => i.kind === shopKind);
         grid.innerHTML = items.map(it => {
             const isOn = eq[it.kind] === it.id;
-            const has = owned.includes(it.id);
-            const btn = isOn
-                ? '<button class="sh-btn on" disabled>장착 중</button>'
-                : has
-                    ? `<button class="sh-btn" onclick="socket.emit('equipCosmetic',{id:'${it.id}'})">장착</button>`
-                    : `<button class="sh-btn buy" onclick="socket.emit('buyCosmetic',{id:'${it.id}'})">💰 ${(it.price || 0).toLocaleString()}</button>`;
-            return `<div class="sh-item ${isOn ? 'eq' : ''}">${shopPreview(it)}
+            let btn;
+            if (it.id === 'av_photo') {
+                // 📷 사진은 사고파는 게 아니라 올리고 내린다
+                btn = shopState.hasPhoto
+                    ? `<div class="sh-photo-row"><button class="sh-btn" onclick="pickPhoto()">바꾸기</button><button class="sh-btn" onclick="removePhoto()">내리기</button></div>`
+                      + (isOn ? '' : `<button class="sh-btn" style="margin-top:5px" onclick="socket.emit('equipCosmetic',{id:'av_photo'})">장착</button>`)
+                    : '<button class="sh-btn buy" onclick="pickPhoto()">📷 사진 올리기</button>';
+            } else if (it.locked) {
+                btn = `<div class="sh-need">🔒 ${esc(it.need || '아직 잠겨 있습니데이')}</div>`;
+            } else if (isOn) {
+                btn = '<button class="sh-btn on" disabled>장착 중</button>';
+            } else if (it.noBuy || owned.includes(it.id)) {
+                btn = `<button class="sh-btn" onclick="socket.emit('equipCosmetic',{id:'${it.id}'})">장착</button>`;
+            } else {
+                btn = `<button class="sh-btn buy" onclick="socket.emit('buyCosmetic',{id:'${it.id}'})">💰 ${(it.price || 0).toLocaleString()}</button>`;
+            }
+            return `<div class="sh-item ${isOn ? 'eq' : ''} ${(it.locked && it.id !== 'av_photo') ? 'locked' : ''}">${shopPreview(it)}
                 <div class="sh-name">${esc(it.name)}</div>
                 <div class="sh-desc">${esc(it.desc || '')}</div>${btn}</div>`;
         }).join('');
@@ -3550,7 +3787,7 @@
         if (data.handId !== lastHandId) {
             clearTimeout(window.__resultBoxT); // 🏆 결과 패널 지연 타이머 정리
             clearPreAction(); disarmAllin();    // ⚡ 새 핸드 — 예약·올인확인 해제
-            hideMuckPrompt(); hideFoldShow(); // 🃏 이전 핸드의 패 공개 선택창 정리
+            hideMuckPrompt(); hideFoldShow(); disarmThrow(); // 🃏 이전 핸드의 선택창/던지기 모드 정리
             _prevBets = {}; _prevBetRects = {}; _prevBetHand = null; // 💰 칩 이동 추적 초기화
             _cardWasHidden.clear(); _cardRevealed.clear();            // 🃏 카드 공개 추적 초기화
             playedAnimations.clear();
@@ -3664,6 +3901,7 @@
             if (p.isAllIn) cls += ' all-in';
             if (p.chips <= 0 && data.gameStage === 0) cls += ' bankrupt';
             if (p.isDisconnected) cls += ' disconnected';
+            if (throwArmed && nick !== myNickname) cls += ' throw-target'; // 🍅 던질 상대 고르는 중
 
             let roleHtml = p.role ? `<div class="role-badge ${p.role.includes('SB') ? 'role-SB' : p.role.includes('BB') ? 'role-BB' : 'role-D'}">${esc(p.role)}</div>` : '';
             
@@ -3706,7 +3944,7 @@
             div.id = `player-${nick.replace(/\s/g, '_')}`;
             div.className = cls;
             const _cos = cosOf(nick);
-            const _av = avatarAttrs(nick, _cos.avatar);
+            const _av = avatarAttrs(nick, _cos);
             const _titleHtml = _cos.title ? `<div class="ps-title">${esc(_cos.title)}</div>` : '';
             div.innerHTML = `${roleHtml}${betChipHtml}
                 <div class="ps-namebar">${hostCrown ? `<span class="ps-crown">${hostCrown}</span>` : ''}<span class="ps-nick">${title}</span>${posHtml}</div>${_titleHtml}
@@ -3730,6 +3968,8 @@
             // 👤 플레이트 탭 → 프로필 (조이기 카드 제외)
             div.addEventListener('click', e => {
                 if (e.target.closest('.squeezable')) return;
+                // 🍅 던지기 모드면 프로필 대신 던진다
+                if (throwArmed && nick !== myNickname) { socket.emit('throwItem', { to: nick, item: throwArmed }); disarmThrow(); return; }
                 openProfile(nick);
             });
 
@@ -3873,6 +4113,7 @@
         const myPlayer = data.players[myNickname];
         if (myPlayer && myPlayer.chips > 0) document.getElementById('rebuy-prompt').style.display = 'none';
         renderFoldShow(data); // 🃏 죽은 패 공개 선택창
+        renderTimeBank(data); // ⏳ 타임뱅크 버튼
         // 👀 관전 상태가 아니면 관전 바를 숨긴다 (myPlayer 선언 이후여야 한다)
         if (!(myPlayer && myPlayer.isSpectator && data.youSpectate)) {
             const _sb = document.getElementById('spectate-bar');
@@ -5495,8 +5736,8 @@
     socket.on('profileData', u => {
         const modal = document.getElementById('profile-modal');
         if (!u) return;
-        const _pfc = u.cosmetics || {};
-        const _pfa = avatarAttrs(u.nickname, _pfc.avatar);
+        const _pfc = Object.assign({}, u.cosmetics || {}, { ph: u.photoVer || 0 });
+        const _pfa = avatarAttrs(u.nickname, _pfc);
         const _pfEl = document.getElementById('pf-avatar');
         _pfEl.className = 'pf-avatar' + _pfa.cls;
         _pfEl.setAttribute('style', _pfa.style);
@@ -5511,6 +5752,29 @@
         }
         _pfT.innerText = _pfc.title || '';
         _pfT.style.display = _pfc.title ? 'block' : 'none';
+
+        // 🏅 등급 배지 + ⚔️ 나와의 전적 — 칭호 바로 아래에 붙인다
+        let _pfR = document.getElementById('pf-rank');
+        if (!_pfR) {
+            _pfR = document.createElement('div'); _pfR.id = 'pf-rank';
+            _pfT.insertAdjacentElement('afterend', _pfR);
+        }
+        _pfR.innerHTML = u.rank ? `<span class="pf-rank">🏅 ${esc(u.rank.name)}</span>` : '';
+
+        let _pfH = document.getElementById('pf-h2h');
+        if (!_pfH) {
+            _pfH = document.createElement('div'); _pfH.id = 'pf-h2h';
+            _pfR.insertAdjacentElement('afterend', _pfH);
+        }
+        if (u.h2h && (u.h2h.myWins || u.h2h.myLosses)) {
+            const w = u.h2h.myWins || 0, l = u.h2h.myLosses || 0;
+            const rate = (w + l) > 0 ? Math.round(w / (w + l) * 100) : 0;
+            _pfH.className = 'pf-h2h';
+            _pfH.innerHTML = `⚔️ 나와의 쇼다운 전적 <b class="w">${w}승</b> <b class="l">${l}패</b> · 승률 ${rate}%`;
+            _pfH.style.display = 'block';
+        } else {
+            _pfH.style.display = 'none';
+        }
 
         const hp = u.handsPlayed || 0;
         const winRate = hp > 0 ? Math.round(u.handsWon / hp * 100) : 0;
