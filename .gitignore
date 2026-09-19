@@ -6,6 +6,9 @@ poker_stats.json
 poker_stats.json.bak
 poker_stats.json.tmp
 ranking.json
+# 접속 기록 (IP 포함 — 절대 커밋 금지)
+access_log.json
+access_log.json.tmp
 
 # 백업/임시
 public/*.bak-*

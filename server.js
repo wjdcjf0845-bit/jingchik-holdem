@@ -132,6 +132,9 @@ function botCosmetics(nick) {
 }
 
 const app = express();
+// 🛡️ Render 등은 앞단 프록시를 거친다. 이걸 켜야 req.ip / req.secure 가 실제 값이 된다.
+app.set('trust proxy', 1);
+
 const server = http.createServer(app);
 const io = new Server(server);
 
@@ -192,6 +195,42 @@ function hashPin(pin) {
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) { console.error('DATA_DIR 생성 실패:', e.message); }
 const DATA_FILE = path.join(DATA_DIR, 'poker_stats.json');
+
+// 📋 [접속 기록] 관리자 페이지에서 보는 로그. 전적 DB 와 파일을 분리한다 —
+//    로그는 자주 쌓이고 성격도 달라서(개인정보 포함) 같이 두면 서로 발목을 잡는다.
+const ACCESS_FILE = path.join(DATA_DIR, 'access_log.json');
+const { AccessLog, shortUA } = require('./lib/accesslog');
+const accessLog = new AccessLog({ max: 3000, maxAgeMs: 60 * 24 * 3600 * 1000 });
+try {
+    if (fs.existsSync(ACCESS_FILE)) {
+        accessLog.load(JSON.parse(fs.readFileSync(ACCESS_FILE, 'utf8')));
+        console.log(`📋 접속 기록 로드: ${accessLog.events.length}건`);
+    }
+} catch (e) { console.error('접속 기록 로드 실패:', e.message); }
+
+// 기록할 때마다 디스크를 때리면 손해라 15초마다 모아서 쓴다.
+function flushAccessLog() {
+    if (!accessLog.dirty) return;
+    accessLog.dirty = false;
+    try {
+        const tmp = ACCESS_FILE + '.tmp';
+        fs.writeFileSync(tmp, JSON.stringify(accessLog.toJSON()));
+        fs.renameSync(tmp, ACCESS_FILE); // 원자적 교체
+    } catch (e) { console.error('접속 기록 저장 실패:', e.message); }
+}
+setInterval(flushAccessLog, 15000);
+
+// 소켓에서 진짜 접속 IP 뽑기 (프록시를 거치면 handshake.address 는 프록시 주소다)
+function socketIp(socket) {
+    try {
+        const h = socket.handshake || {};
+        const xf = (h.headers && h.headers['x-forwarded-for']) || '';
+        let ip = xf ? String(xf).split(',')[0].trim() : (h.address || '');
+        if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+        if (ip === '::1') ip = '127.0.0.1';
+        return ip;
+    } catch (e) { return ''; }
+}
 
 // 🏆 시즌: 월 단위 (예: 2026-06). 월이 바뀌면 시즌 포인트 자동 리셋
 function getCurrentSeason() {
@@ -4058,6 +4097,11 @@ io.on('connection', (socket) => {
                     // 최초 로그인 → PIN 등록
                     await MockDB.setPin(safeNick, pin);
                 } else if (user.pinHash !== hashPin(pin)) {
+                    accessLog.push({
+                        type: 'fail', nick: safeNick, ip: socketIp(socket),
+                        ua: shortUA(socket.handshake && socket.handshake.headers && socket.handshake.headers['user-agent']),
+                        detail: '비밀번호 불일치'
+                    });
                     socket.emit('loginError', '비밀번호가 일치하지 않습니데이. 다시 확인해주세요.');
                     return;
                 }
@@ -4111,6 +4155,16 @@ io.on('connection', (socket) => {
                 }
             }
 
+            // 📋 [접속 기록] 관리자 페이지용. 봇은 소켓으로 로그인하지 않으므로 사람만 남는다.
+            socket._ip = socketIp(socket);
+            socket._loginAt = Date.now();
+            user.lastSeen = socket._loginAt;
+            accessLog.push({
+                type: 'login', nick: user.nickname, ip: socket._ip,
+                ua: shortUA(socket.handshake && socket.handshake.headers && socket.handshake.headers['user-agent']),
+                detail: isReconnect ? '재접속' : (existed ? '' : '신규 가입')
+            });
+
             socket.emit('loginSuccess', {
                 nickname: user.nickname,
                 chips: user.totalChips,
@@ -4127,6 +4181,11 @@ io.on('connection', (socket) => {
 
     socket.on('joinRoom', (data) => {
         if (!socket.nickname) return;
+        // 📋 [접속 기록] 어느 방에 들어갔는지 (방 이름은 사용자가 지은 것이라 길이를 자른다)
+        accessLog.push({
+            type: 'join', nick: socket.nickname, ip: socket._ip || socketIp(socket),
+            detail: String((data && data.roomId) || '').slice(0, 40)
+        });
 
         // 💡 [수정 #8] 방 이름 길이 제한
         const roomId = (typeof data === 'string' ? data : String(data.roomId || '')).trim().slice(0, 20);
@@ -5005,6 +5064,16 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         try {
+            // 📋 [접속 기록] 머문 시간까지 남긴다
+            if (socket.nickname) {
+                const mins = socket._loginAt ? Math.round((Date.now() - socket._loginAt) / 60000) : null;
+                accessLog.push({
+                    type: 'logout', nick: socket.nickname, ip: socket._ip || socketIp(socket),
+                    detail: mins === null ? '' : `${mins}분 머무름`
+                });
+                const _u = MockDB.users.get(socket.nickname);
+                if (_u) _u.lastSeen = Date.now();
+            }
             leaveLobby(socket); // 🏛️ 로비에 있었으면 대기자 명단에서 제거
             const roomId = socket.currentRoom;
             const room = rooms.get(roomId);
@@ -5083,6 +5152,13 @@ io.on('connection', (socket) => {
     });
 });
 
+// 🛡️ 관리자 페이지 — MockDB·rooms·io 가 다 만들어진 뒤에 붙인다(위에서 붙이면 참조가 비어 있다)
+try {
+    app.use('/admin', require('./admin')({ accessLog, MockDB, rooms, io }));
+} catch (e) {
+    console.error('🛡️ [관리자] 마운트 실패(게임에는 영향 없음):', e && e.message);
+}
+
 // 🎉 파티 나이트 — 포커(기본 네임스페이스)와 분리된 /party 모듈 마운트
 try {
     require('./lib/party/engine')(io, app);
@@ -5102,6 +5178,7 @@ MockDB.initRemote().catch(e => console.error('🌐 원격 초기화 오류:', e 
 
 // 🛡️ [안정성] 주기적 자동저장 (디바운스가 놓친 변경분까지 60초마다 안전 저장)
 setInterval(() => { try { MockDB.flush(); } catch (e) {} }, 60000);
+process.on('exit', () => { try { flushAccessLog(); } catch (e) {} });
 
 // 🧹 [안정성] 주기적 빈 방 청소 — 사람이 아무도 없는 방(봇만/유령) 자동 정리
 //   호출이 누락되는 경로가 있어도 30초마다 한 번씩 확실히 청소 (MTT 테이블은 제외)
