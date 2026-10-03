@@ -71,3 +71,61 @@ test('단계표 화면 데이터: 깬 것/열린 것/잠긴 것이 구분된다'
     assert.strictEqual(l.length, 10);
     assert.deepStrictEqual(l.slice(0, 4).map(x => [x.cleared, x.open]), [[true, true], [true, true], [false, true], [false, false]]);
 });
+
+// ══════════════ 코어(컴까기 전용 재화) ══════════════
+
+test('코어: 첫 클리어는 단계 번호만큼, 다시 깨면 1~3개', () => {
+    const u = {};
+    assert.strictEqual(C.applyClear(u, 1).cores, 1);
+    assert.strictEqual(C.applyClear(u, 2).cores, 2);
+    assert.strictEqual(u.cores, 3);
+    assert.strictEqual(C.applyClear(u, 1).cores, 1);       // 재클리어
+    assert.strictEqual(C.coresFor(10, false), 3);
+    assert.strictEqual(C.coresFor(10, true), 10);
+    assert.strictEqual(u.cores, 4);
+});
+
+test('코어는 열리지 않은 단계로는 못 번다 / 손상된 값에서도 음수·NaN 이 안 된다', () => {
+    const u = { cores: 'abc' };
+    assert.strictEqual(C.applyClear(u, 4), null);
+    assert.strictEqual(u.cores, 'abc');                    // 거절이면 건드리지 않는다
+    C.applyClear(u, 1);
+    assert.strictEqual(u.cores, 1);
+    const v = { cores: -5 }; C.applyClear(v, 1);
+    assert.strictEqual(v.cores, 1);
+});
+
+// ══════════════ 협동 ══════════════
+
+test('협동: 사람 + 봇이 6자리를 넘지 않는다', () => {
+    for (let st = 1; st <= 10; st++) for (let h = 1; h <= 3; h++) {
+        const s = C.coopSetup(st, h);
+        assert.ok(s.bots.length >= 1 && s.bots.length + h <= 6, `단계 ${st} 사람 ${h}`);
+    }
+});
+
+test('협동: 사람이 늘면 봇이 늘거나(자리 될 때) 봇 칩이 늘어 — 쉬워지지 않게', () => {
+    for (let st = 1; st <= 10; st++) {
+        const solo = C.coopSetup(st, 1);
+        for (let h = 2; h <= 3; h++) {
+            const co = C.coopSetup(st, h);
+            const power = x => x.bots.length * x.mult;
+            assert.ok(co.mult > solo.mult, `단계 ${st} 사람 ${h}: 칩 배율이 안 올랐다`);
+            assert.ok(co.bots.length >= Math.min(solo.bots.length, 6 - h));
+            assert.ok(power(co) > power(solo) * 0.75, `단계 ${st} 사람 ${h}: 봇 총전력이 너무 줄었다`);
+        }
+        assert.strictEqual(solo.mult, C.STAGES[st - 1].botChipsMult || 1);   // 혼자면 원래 규칙 그대로
+    }
+});
+
+test('협동: 인원 범위를 벗어나도 안전하게 1~3명으로 본다', () => {
+    assert.deepStrictEqual(C.coopSetup(3, 0), C.coopSetup(3, 1));
+    assert.deepStrictEqual(C.coopSetup(3, 99), C.coopSetup(3, 3));
+});
+
+test('협동: 고를 수 있는 단계는 가장 덜 깬 사람 기준', () => {
+    assert.strictEqual(C.partyMaxStage([{ challenge: { best: 7 } }, { challenge: { best: 2 } }, {}]), 1);
+    assert.strictEqual(C.partyMaxStage([{ challenge: { best: 7 } }, { challenge: { best: 4 } }]), 5);
+    assert.strictEqual(C.partyMaxStage([{ challenge: { best: 10 } }]), 10);   // 끝까지 깬 사람도 10 을 넘지 않는다
+    assert.strictEqual(C.partyMaxStage([]), 1);
+});

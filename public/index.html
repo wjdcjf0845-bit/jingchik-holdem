@@ -2960,6 +2960,120 @@
         .ch-toprow:nth-child(odd) { background: rgba(255,255,255,0.04); }
         .ch-toprow span:last-child { color: var(--gold); font-family: var(--font-num); white-space: nowrap; }
         @media screen and (max-width: 560px) { .ch-go { padding: 7px 10px; font-size: 12px; } .ch-name { font-size: 13px; } }
+    
+        /* ═══ 🤖 컴까기 — 연출 · 보스전 · 협동 · 코어 ═══ */
+        .shop-wallets { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+        .shop-bank.core { border-color: rgba(90,209,255,0.5) !important; color: #bfeaff !important; }
+        .sh-item.core-item { border-color: rgba(90,209,255,0.35) !important; background: rgba(90,209,255,0.06) !important; }
+        .sh-item.core-item .sh-btn.buy { background: linear-gradient(180deg, #8fe3ff, #2f9fe6) !important; color: #03203a !important; box-shadow: 0 5px 14px rgba(47,159,230,0.25) !important; }
+        .room-badge.coop { background: rgba(90,209,255,0.18) !important; color: #9fe0ff !important; border: 1px solid rgba(90,209,255,0.55) !important; }
+        .ch-coop-btn {
+            width: 100%; margin: 0 0 12px; padding: 11px 12px; border-radius: 12px; cursor: pointer; font: inherit; font-weight: 900; font-size: 14px;
+            background: linear-gradient(180deg, #8fe3ff, #2f9fe6); color: #03203a; border: none; box-shadow: 0 6px 16px rgba(47,159,230,0.25);
+        }
+        .ch-coop-btn small { display: block; font-size: 11px; font-weight: 600; opacity: 0.8; margin-top: 2px; }
+        .ch-stage.boss { border-color: rgba(240,72,58,0.55); background: rgba(240,72,58,0.07); }
+        .ch-stage.boss .ch-no { background: linear-gradient(180deg, #ff6557, #a3160f) !important; color: #fff !important; font-size: 17px; }
+
+        /* 진행 표시 칩 */
+        #ch-hud {
+            position: fixed; left: 50%; top: 46px; transform: translateX(-50%); z-index: 2100; pointer-events: none;
+            align-items: center; gap: 8px; padding: 4px 14px; border-radius: 999px; white-space: nowrap;
+            font-size: 12px; font-weight: 800; color: #bfeaff;
+            background: rgba(6,14,28,0.88); border: 1px solid rgba(90,209,255,0.55); box-shadow: 0 0 16px rgba(90,209,255,0.25);
+        }
+        #ch-hud b { color: var(--gold); }
+        body.challenge-boss #ch-hud { color: #ffc0b8; border-color: rgba(240,72,58,0.75); box-shadow: 0 0 18px rgba(240,72,58,0.45); animation: chBossPulse 1.4s ease-in-out infinite; }
+        @media screen and (max-width: 960px) and (orientation: landscape) { #ch-hud { top: 4px; left: 62%; font-size: 10.5px; padding: 3px 10px; z-index: 2200; } }
+
+        /* 컴까기 테이블: 차가운 강철빛 펠트 */
+        body.challenge-mode .poker-table { --felt-1: #1f86c9; --felt-2: #12598f; --felt-3: #072c4d; }
+        body.challenge-mode .poker-table { box-shadow: inset 0 0 0 2px rgba(90,209,255,0.9), inset 0 0 0 5px rgba(0,0,0,0.45), inset 0 18px 70px rgba(0,0,0,0.5), inset 0 0 120px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.10), 0 30px 70px rgba(0,0,0,0.75), 0 0 70px rgba(90,209,255,0.16) !important; }
+        body.challenge-mode #ready-controls { display: none !important; }
+        /* 보스전: 핏빛 펠트 + 붉게 맥동하는 테두리, 봇 좌석은 붉은 기운 */
+        body.challenge-boss .poker-table { --felt-1: #a3242b; --felt-2: #5e0f18; --felt-3: #22050a; animation: chBossTable 2.2s ease-in-out infinite; }
+        /* ⚠️ 테이블 box-shadow 는 테마가 !important 로 잡고 있어 애니메이션으로 못 바꾼다 → 맥동은 filter 로 준다 */
+        @keyframes chBossTable {
+            0%, 100% { filter: drop-shadow(0 0 10px rgba(240,72,58,0.35)); }
+            50%      { filter: drop-shadow(0 0 34px rgba(255,80,60,0.85)); }
+        }
+        body.challenge-boss .poker-table { box-shadow: inset 0 0 0 2px rgba(255,90,77,0.95), inset 0 0 0 5px rgba(0,0,0,0.5), inset 0 18px 70px rgba(0,0,0,0.55), inset 0 0 120px rgba(0,0,0,0.6), 0 30px 70px rgba(0,0,0,0.75) !important; }
+        body.challenge-boss .player-spot.is-bot:not(.folded) { border-color: rgba(255,90,77,0.85) !important; box-shadow: 0 0 22px rgba(240,72,58,0.5), 0 10px 24px rgba(0,0,0,0.55) !important; }
+        body.challenge-boss .player-spot.is-bot .ps-nick::before { content: '👹 '; }
+        body.challenge-boss::before {
+            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 1;
+            background: radial-gradient(ellipse at center, transparent 55%, rgba(160,20,20,0.28) 100%); animation: chBossPulse 2.2s ease-in-out infinite;
+        }
+        @keyframes chBossPulse { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
+
+        /* 단계 인트로 */
+        .ch-intro-fx {
+            position: fixed; inset: 0; z-index: 4500; pointer-events: none; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: radial-gradient(ellipse at center, rgba(8,20,44,0.92) 0%, rgba(4,8,18,0.96) 70%);
+            animation: chIntroBg 3s ease forwards;
+        }
+        .ch-intro-fx.boss { background: radial-gradient(ellipse at center, rgba(60,6,10,0.94) 0%, rgba(10,2,4,0.97) 70%); animation-duration: 4.4s; }
+        @keyframes chIntroBg { 0% { opacity: 0; } 8%, 82% { opacity: 1; } 100% { opacity: 0; } }
+        .ci-stage {
+            font-family: var(--font-num); font-weight: 700; font-size: clamp(54px, 13vw, 130px); letter-spacing: 8px; line-height: 1;
+            background: linear-gradient(180deg, #e9fbff 0%, #5ad1ff 45%, #1f6fd0 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+            filter: drop-shadow(0 0 26px rgba(90,209,255,0.8)); animation: chSlam 0.55s cubic-bezier(0.2, 1.5, 0.3, 1) both;
+        }
+        .ch-intro-fx.boss .ci-stage { background: linear-gradient(180deg, #fff0e0 0%, #ff8a4d 35%, #e0242b 70%, #6e0808 100%); -webkit-background-clip: text; background-clip: text; filter: drop-shadow(0 0 34px rgba(255,60,50,0.95)); animation: chSlam 0.55s 0.9s cubic-bezier(0.2, 1.5, 0.3, 1) both, chGlitch 0.35s 1.6s steps(2) 4; }
+        @keyframes chSlam { 0% { opacity: 0; transform: scale(3.2); } 100% { opacity: 1; transform: scale(1); } }
+        @keyframes chGlitch { 0% { transform: translate(0,0) skewX(0); } 50% { transform: translate(-6px, 2px) skewX(-8deg); } 100% { transform: translate(5px,-2px) skewX(6deg); } }
+        .ci-warn {
+            font-family: var(--font-num); font-size: clamp(16px, 3.4vw, 30px); letter-spacing: 10px; color: #ffe45e; margin-bottom: 10px;
+            padding: 6px 30px; border-top: 3px solid #ffe45e; border-bottom: 3px solid #ffe45e;
+            background: repeating-linear-gradient(-45deg, rgba(255,228,94,0.22) 0 14px, transparent 14px 28px);
+            animation: chWarn 0.45s steps(2) 6;
+        }
+        @keyframes chWarn { 0% { opacity: 1; } 50% { opacity: 0.25; } }
+        .ci-name { margin-top: 10px; font-weight: 900; font-size: clamp(16px, 3vw, 26px); color: #fff; letter-spacing: 3px; animation: chFadeUp 0.5s 0.5s both; }
+        .ch-intro-fx.boss .ci-name { animation-delay: 1.4s; }
+        .ci-vs { margin-top: 16px; font-family: var(--font-num); font-size: 20px; color: var(--gold); letter-spacing: 6px; animation: chFadeUp 0.5s 0.9s both; }
+        .ch-intro-fx.boss .ci-vs { animation-delay: 1.9s; }
+        .ci-bots { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 90vw; }
+        .ci-bots span { padding: 5px 12px; border-radius: 999px; font-weight: 800; font-size: 13px; color: #dfe6f7; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); animation: chFadeUp 0.4s both; }
+        .ci-bots span:nth-child(1) { animation-delay: 1.1s; } .ci-bots span:nth-child(2) { animation-delay: 1.25s; } .ci-bots span:nth-child(3) { animation-delay: 1.4s; }
+        .ci-bots span:nth-child(4) { animation-delay: 1.55s; } .ci-bots span:nth-child(5) { animation-delay: 1.7s; }
+        .ch-intro-fx.boss .ci-bots span { border-color: rgba(255,90,77,0.7); background: rgba(240,72,58,0.16); animation-delay: 2.2s; }
+        @keyframes chFadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+        body.ch-quake #game-container { animation: chQuake 0.18s linear 7; }
+        @keyframes chQuake { 0%, 100% { translate: 0 0; } 25% { translate: -5px 3px; } 75% { translate: 5px -3px; } }
+
+        /* 봇 격파 */
+        .ch-ko { position: fixed; z-index: 2450; pointer-events: none; transform: translate(-50%, -50%); text-align: center; animation: chKo 1.4s ease-out forwards; }
+        .ch-ko i { display: block; font-style: normal; font-size: 62px; line-height: 1; filter: drop-shadow(0 0 18px rgba(255,160,60,0.9)); }
+        .ch-ko b { display: block; margin-top: -6px; font-family: var(--font-disp); font-weight: 400; font-size: 26px; color: #fff; text-shadow: 0 0 14px #ff6a3d, 0 3px 0 rgba(0,0,0,0.6); }
+        @keyframes chKo { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3) rotate(-12deg); } 18% { opacity: 1; transform: translate(-50%, -50%) scale(1.25) rotate(4deg); } 70% { opacity: 1; transform: translate(-50%, -62%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -80%) scale(0.95); } }
+
+        /* 클리어 도장 */
+        .ch-clear { position: relative; overflow: hidden; }
+        .ch-clear-stamp {
+            font-family: var(--font-num); font-weight: 700; letter-spacing: 6px; font-size: 22px; color: #5ad1ff; margin-bottom: 8px;
+            text-shadow: 0 0 18px rgba(90,209,255,0.8); animation: chSlam 0.5s cubic-bezier(0.2, 1.5, 0.3, 1) both;
+        }
+        .ch-clear.boss .ch-clear-stamp { color: var(--gold); font-size: 28px; text-shadow: 0 0 24px rgba(255,200,87,0.9); }
+        .ch-clear::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,0.22) 50%, transparent 60%) no-repeat; background-size: 250% 100%; animation: frSweep 2.4s ease-in-out infinite; }
+
+        /* 협동 대기 패널 */
+        #coop-panel {
+            position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 3200; width: min(92vw, 520px); box-sizing: border-box;
+            padding: 14px 16px; border-radius: 16px; text-align: center; color: #eef2fb;
+            background: linear-gradient(165deg, rgba(20,44,74,0.98), rgba(9,18,34,0.98)); border: 1px solid rgba(90,209,255,0.5);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6), 0 0 30px rgba(90,209,255,0.15);
+        }
+        .cp-title { font-weight: 900; font-size: 16px; }
+        .cp-members { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin: 8px 0; }
+        .cp-members span { padding: 4px 12px; border-radius: 999px; font-weight: 800; font-size: 12.5px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); }
+        .cp-sub { font-size: 11.5px; color: #9aa6c2; margin: 6px 0; word-break: keep-all; }
+        .cp-stages { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+        .cp-stage { font: inherit; font-weight: 900; font-size: 12.5px; padding: 8px 12px; border-radius: 10px; cursor: pointer; border: none; background: var(--gold-grad); color: #2c1c00; }
+        .cp-stage.boss { background: linear-gradient(180deg, #ff6557, #a3160f); color: #fff; }
+        .cp-stage[disabled] { opacity: 0.45; cursor: default; }
+        @media screen and (max-width: 960px) and (orientation: landscape) { #coop-panel { left: auto; right: 8px; bottom: 8px; transform: none; width: 34vw; min-width: 230px; padding: 9px 10px; } .cp-title { font-size: 13px; } .cp-stage { padding: 6px 9px; font-size: 11.5px; } }
+        @media (prefers-reduced-motion: reduce) { .ch-intro-fx, .ch-ko { animation-duration: 0.01s !important; } body.challenge-boss .poker-table, body.challenge-boss::before, #ch-hud { animation: none !important; } }
     </style>
 </head>
 <body>
@@ -2969,13 +3083,17 @@
 <div id="fx-flash"></div>
 <div id="rank-banner"><div class="rb-rank"></div><div class="rb-who"></div></div>
 
+<div id="ch-hud" style="display:none;"></div>
+<div id="coop-panel" style="display:none;"></div>
+
 <div id="challenge-modal" class="overlay" style="display:none; z-index:4400;">
     <div class="shop-card ch-card">
         <div class="shop-head">
             <div class="shop-title">🤖 컴까기 — AI 도장깨기</div>
             <div class="shop-bank" id="ch-progress">0 / 10</div>
         </div>
-        <div class="ch-intro">혼자서 봇들과 토너먼트를 쳐서 <b>1등</b>을 하면 다음 단계가 열립니데이. 참가비는 없고, 깨면 뱅크롤 보상을 받습니데이.</div>
+        <div class="ch-intro">봇들과 토너먼트를 쳐서 <b>이기면</b> 다음 단계가 열립니데이. 참가비는 없고, 깨면 뱅크롤과 <b>🔷 코어</b>(컴까기 전용 재화)를 받습니데이.</div>
+        <button class="ch-coop-btn" onclick="createCoop()">👥 친구랑 같이 깨기 <small>(최대 3명 · 방을 만들고 친구를 기다립니데이)</small></button>
         <div id="ch-ladder"></div>
         <div class="ch-top-title">🏅 컴까기 순위</div>
         <div id="ch-top"></div>
@@ -2989,7 +3107,10 @@
     <div class="shop-card">
         <div class="shop-head">
             <div class="shop-title">🎨 꾸미기 상점</div>
-            <div class="shop-bank" title="사람 3명 이상 참가한 토너먼트에서 우승하면 1개씩 받습니데이">🏆 토큰 <span id="shop-tokens">0</span></div>
+            <div class="shop-wallets">
+                <div class="shop-bank" title="사람 3명 이상 참가한 토너먼트에서 우승하면 1개씩 받습니데이">🏆 토큰 <span id="shop-tokens">0</span></div>
+                <div class="shop-bank core" title="컴까기 단계를 깨면 받습니데이">🔷 코어 <span id="shop-cores">0</span></div>
+            </div>
         </div>
         <div class="shop-tabs">
             <button class="shop-tab on" data-kind="back" onclick="shopTab('back')">🃏 카드 뒷면</button>
@@ -3620,10 +3741,10 @@
                 ? `<button class="ch-go" onclick="startChallenge(${st.no})">${st.cleared ? '다시 도전' : '도전!'}</button>`
                 : '<span class="ch-lock">🔒</span>';
             const reward = st.cleared
-                ? `<span class="ch-reward done">✔ 클리어 · 재도전 +${st.repeatReward.toLocaleString()}</span>`
-                : `<span class="ch-reward">💰 +${st.reward.toLocaleString()}</span>`;
-            return `<div class="ch-stage ${state}">
-                <div class="ch-no">${st.no}</div>
+                ? `<span class="ch-reward done">✔ 클리어 · 재도전 +${st.repeatReward.toLocaleString()} · 🔷 +${st.repeatCores}</span>`
+                : `<span class="ch-reward">💰 +${st.reward.toLocaleString()} · 🔷 +${st.cores}</span>`;
+            return `<div class="ch-stage ${state} ${st.boss ? 'boss' : ''}">
+                <div class="ch-no">${st.boss ? '👹' : st.no}</div>
                 <div class="ch-body"><div class="ch-name">${esc(st.name)} <span class="ch-bots">${diffIcon(st.bots)}</span></div>
                     <div class="ch-desc">${esc(st.desc)} · ${reward}</div></div>
                 ${btn}</div>`;
@@ -3633,29 +3754,110 @@
             : '<div class="ch-toprow"><span>아직 아무도 못 깼습니데이 — 첫 번째가 되보이소</span></div>';
     });
     socket.on('challengeError', msg => alert(msg));
+    function createCoop() {
+        document.getElementById('challenge-modal').style.display = 'none';
+        socket.emit('createCoopChallenge');
+    }
+    function startCoop(stage) { socket.emit('startCoopChallenge', { stage }); }
+
+    // 🎬 단계 인트로 — "STAGE N" 이 내려꽂히고 상대 이름이 나열된다. 보스전은 경고등 + 화면 흔들림.
     socket.on('challengeStarted', d => {
         _challengeStage = d.stage;
+        _chBotChips = {};
         document.getElementById('challenge-modal').style.display = 'none';
-        const t = document.createElement('div');
-        t.className = 'token-toast';
-        t.innerHTML = '🤖 컴까기 ' + d.stage + '단계 — ' + esc(d.name) + ' <small>(' + esc(d.desc) + ')</small>';
-        document.body.appendChild(t);
-        setTimeout(() => t.remove(), 4200);
+        document.getElementById('result-modal').classList.remove('show');
+        document.querySelectorAll('.ch-intro-fx').forEach(e => e.remove());
+        const el = document.createElement('div');
+        el.className = 'ch-intro-fx' + (d.boss ? ' boss' : '');
+        const names = (d.bots || []).map(n => '<span>' + esc(String(n).replace('🤖', '')) + '</span>').join('');
+        el.innerHTML = (d.boss ? '<div class="ci-warn">⚠ WARNING ⚠</div>' : '') +
+            '<div class="ci-stage">' + (d.boss ? 'BOSS' : 'STAGE ' + d.stage) + '</div>' +
+            '<div class="ci-name">' + esc(d.name) + (d.coop ? ' · 협동' : '') + '</div>' +
+            '<div class="ci-vs">VS</div><div class="ci-bots">' + names + '</div>';
+        document.body.appendChild(el);
+        if (d.boss && !_noMotion()) { document.body.classList.add('ch-quake'); setTimeout(() => document.body.classList.remove('ch-quake'), 1400); }
+        setTimeout(() => el.remove(), d.boss ? 4400 : 3000);
     });
+
+    // 💥 봇 격파 — 칩이 0이 된 순간 그 자리에서 터진다
+    let _chBotChips = {};
+    function challengeFX(data) {
+        const ch = data.challenge;
+        document.body.classList.toggle('challenge-mode', !!ch);
+        document.body.classList.toggle('challenge-boss', !!(ch && ch.boss && !ch.waiting));
+        const hud = document.getElementById('ch-hud');
+        if (!ch) { if (hud) hud.style.display = 'none'; document.getElementById('coop-panel').style.display = 'none'; _chBotChips = {}; return; }
+        // 진행 표시
+        if (hud) {
+            hud.style.display = ch.waiting ? 'none' : 'flex';
+            hud.innerHTML = (ch.boss ? '👹 보스전' : '🤖 ' + ch.stage + '단계') + (ch.coop ? ' · 협동' : '') + ' <b>남은 봇 ' + ch.botsLeft + '</b>';
+        }
+        // 격파 감지 (핸드가 끝나 칩이 0으로 확정된 프레임에서만)
+        if (!ch.waiting) {
+            Object.entries(data.players || {}).forEach(([n, p]) => {
+                if (!p.isBot) return;
+                const before = _chBotChips[n];
+                if (before > 0 && p.chips <= 0 && (p.currentBet || 0) === 0 && (data.gameStage === 5 || data.gameStage === 0)) botKO(n);
+                _chBotChips[n] = (p.chips || 0) + (p.currentBet || 0);
+            });
+        }
+        renderCoopPanel(data);
+        // 대기·인트로 중엔 일반 방 안내("토너먼트 시작 버튼을…")가 뜨면 헷갈린다 — 이 핸들러가 끝난 뒤 덮어쓴다
+        if (data.gameStage === 0) setTimeout(() => {
+            const ind = document.getElementById('turn-indicator');
+            if (ind && document.body.classList.contains('challenge-mode')) ind.innerText = ch.waiting ? '👥 친구를 기다리는 중입니데이' : '🤖 곧 시작합니데이...';
+        }, 0);
+    }
+    function botKO(nick) {
+        const el = document.getElementById('player-' + String(nick).replace(/\s/g, '_'));
+        if (!el || _noMotion()) return;
+        const r = el.getBoundingClientRect(); const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        const boom = document.createElement('div'); boom.className = 'ch-ko'; boom.style.left = cx + 'px'; boom.style.top = cy + 'px';
+        boom.innerHTML = '<i>💥</i><b>격파!</b>';
+        document.body.appendChild(boom); setTimeout(() => boom.remove(), 1500);
+        for (let i = 0; i < 14; i++) {
+            const a = Math.PI * 2 * i / 14, d = 50 + Math.random() * 50;
+            const sp = document.createElement('div'); sp.className = 'fx-spark'; sp.style.left = cx + 'px'; sp.style.top = cy + 'px';
+            sp.style.background = i % 2 ? '#ffb347' : '#5ad1ff';
+            sp.style.setProperty('--dx', Math.round(Math.cos(a) * d) + 'px'); sp.style.setProperty('--dy', Math.round(Math.sin(a) * d) + 'px');
+            document.body.appendChild(sp); setTimeout(() => sp.remove(), 800);
+        }
+    }
+    // 👥 협동 대기 화면 — 방장이 단계를 고르고 시작한다
+    function renderCoopPanel(data) {
+        const panel = document.getElementById('coop-panel');
+        const ch = data.challenge;
+        if (!ch || !ch.coop || !ch.waiting) { panel.style.display = 'none'; return; }
+        const humans = Object.keys(data.players || {}).filter(n => !data.players[n].isBot);
+        const isHost = ch.host === myNickname;
+        const sig = humans.join(',') + '|' + ch.maxStage + '|' + isHost;
+        panel.style.display = 'block';
+        if (panel.dataset.sig === sig) return;   // 같은 내용이면 다시 그리지 않는다(버튼 누르는 중에 갈아엎지 않게)
+        panel.dataset.sig = sig;
+        let stages = '';
+        for (let i = 1; i <= ch.maxStage; i++) stages += '<button class="cp-stage' + (i === ch.total ? ' boss' : '') + '" ' + (isHost ? 'onclick="startCoop(' + i + ')"' : 'disabled') + '>' + (i === ch.total ? '👹 보스' : i + '단계') + '</button>';
+        panel.innerHTML = '<div class="cp-title">👥 컴까기 협동 — ' + humans.length + ' / 3명</div>' +
+            '<div class="cp-members">' + humans.map(n => '<span>' + esc(n) + (n === ch.host ? ' 👑' : '') + '</span>').join('') + '</div>' +
+            '<div class="cp-sub">' + (isHost ? '도전할 단계를 누르면 바로 시작합니데이 (가장 덜 깬 사람 기준으로 열립니데이)' : '방장이 단계를 고르는 중입니데이...') + '</div>' +
+            '<div class="cp-stages">' + stages + '</div>' +
+            '<div class="cp-sub">친구는 대기실의 방 목록이나 위쪽 🔗 초대 링크로 들어옵니데이 · 사람이 많을수록 봇도 강해집니데이</div>';
+    }
     socket.on('challengeResult', r => {
         if (!r) return;
         const modal = document.getElementById('result-modal');
         const inner = document.getElementById('result-inner');
         if (r.win) {
             confetti({ particleCount: r.allClear ? 320 : 180, spread: 100, origin: { y: 0.5 }, zIndex: 4000 });
-            const nextBtn = r.next
-                ? `<button class="btn-join" style="width:100%; margin-bottom:8px;" onclick="startChallenge(${r.next})">▶ ${r.next}단계 도전</button>`
-                : '';
-            inner.innerHTML = `<div class="result-pot-card rw-card">
+            // 협동은 방장이 대기 화면에서 다음 단계를 고른다 — 여기선 닫기만
+            const nextBtn = r.coop
+                ? '<button class="btn-join" style="width:100%; margin-bottom:8px;" onclick="document.getElementById(\'result-modal\').classList.remove(\'show\')">👥 계속 같이 하기</button>'
+                : (r.next ? `<button class="btn-join" style="width:100%; margin-bottom:8px;" onclick="startChallenge(${r.next})">▶ ${r.next}단계 도전</button>` : '');
+            inner.innerHTML = `<div class="result-pot-card rw-card ch-clear ${r.allClear ? 'boss' : ''}">
+                <div class="ch-clear-stamp">${r.allClear ? 'ALL CLEAR' : 'STAGE CLEAR'}</div>
                 <div class="rw-trophy">${r.allClear ? '👑' : '🏆'}</div>
                 <div class="rw-name">${r.stage}단계 클리어!</div>
                 <div class="rw-sub">${esc(r.name)} 격파${r.allClear ? ' — 컴까기 정복!' : ''}</div>
-                <div class="rw-chips">💰 뱅크롤 +${r.reward.toLocaleString()}${r.first ? '' : ' (재도전 보상)'}${r.allClear ? '<br>🤖 칭호 「컴까기 정복자」가 열렸습니데이 (꾸미기 상점 → 칭호)' : ''}</div>
+                <div class="rw-chips">💰 뱅크롤 +${r.reward.toLocaleString()} · 🔷 코어 +${r.cores || 0}${r.first ? '' : ' (재도전 보상)'}${r.allClear ? '<br>🤖 칭호 「컴까기 정복자」가 열렸습니데이 (꾸미기 상점 → 칭호)' : ''}</div>
                 <div style="margin-top:20px;">${nextBtn}
                     <button class="btn-close-modal" style="width:100%;" onclick="leaveChallenge()">대기실로</button></div>
             </div>`;
@@ -3666,7 +3868,9 @@
                 <div class="rw-sub" style="color:#ff8a78 !important;">${esc(r.name)}에게 졌습니데이</div>
                 <div class="rw-chips">몇 번이든 다시 도전할 수 있습니데이</div>
                 <div style="margin-top:20px;">
-                    <button class="btn-join" style="width:100%; margin-bottom:8px;" onclick="startChallenge(${r.stage})">🔄 다시 도전</button>
+                    ${r.coop
+                        ? '<button class="btn-join" style="width:100%; margin-bottom:8px;" onclick="document.getElementById(\'result-modal\').classList.remove(\'show\')">👥 다시 같이 도전</button>'
+                        : `<button class="btn-join" style="width:100%; margin-bottom:8px;" onclick="startChallenge(${r.stage})">🔄 다시 도전</button>`}
                     <button class="btn-close-modal" style="width:100%;" onclick="leaveChallenge()">대기실로</button></div>
             </div>`;
         }
@@ -3765,6 +3969,7 @@
         const grid = document.getElementById('shop-grid');
         if (!grid) return;
         document.getElementById('shop-tokens').innerText = (shopState.tokens || 0).toLocaleString();
+        document.getElementById('shop-cores').innerText = (shopState.cores || 0).toLocaleString();
         document.querySelectorAll('.shop-tab').forEach(b => b.classList.toggle('on', b.dataset.kind === shopKind));
 
         // 🏅 등급 배너 — 지금 등급과 다음 등급 조건
@@ -3800,9 +4005,9 @@
             } else if (it.noBuy || owned.includes(it.id)) {
                 btn = `<button class="sh-btn" onclick="socket.emit('equipCosmetic',{id:'${it.id}'})">장착</button>`;
             } else {
-                btn = `<button class="sh-btn buy" onclick="socket.emit('buyCosmetic',{id:'${it.id}'})">🏆 ${it.price || 0}개</button>`;
+                btn = `<button class="sh-btn buy" onclick="socket.emit('buyCosmetic',{id:'${it.id}'})">${it.cur === 'core' ? '🔷' : '🏆'} ${it.price || 0}개</button>`;
             }
-            return `<div class="sh-item ${isOn ? 'eq' : ''} ${(it.locked && it.id !== 'av_photo') ? 'locked' : ''}">${shopPreview(it)}
+            return `<div class="sh-item ${isOn ? 'eq' : ''} ${(it.locked && it.id !== 'av_photo') ? 'locked' : ''} ${it.cur === 'core' ? 'core-item' : ''}">${shopPreview(it)}
                 <div class="sh-name">${esc(it.name)}</div>
                 <div class="sh-desc">${esc(it.desc || '')}</div>${btn}</div>`;
         }).join('');
@@ -4093,6 +4298,7 @@
     }
 
     socket.on('leftRoom', () => {
+        challengeFX({ challenge: null, players: {} }); // 🤖 보스전 화면 효과가 대기실까지 따라오지 않게
         currentRoomId = null;
         renderEndVote(null);
         window._canEndVote = false;
@@ -4132,10 +4338,11 @@
             // 구버전 호환: 문자열이면 객체로 변환
             const room = (typeof r === 'string') ? { id: r, mode: 'tournament', total: 0, playing: false } : r;
             const isCash = room.mode === 'cash';
-            const badge = isCash
-                ? '<span class="room-badge cash">💵 캐시</span>'
+            const isCoop = room.mode === 'coop';
+            const badge = isCoop ? '<span class="room-badge coop">🤖 컴까기 협동</span>'
+                : isCash ? '<span class="room-badge cash">💵 캐시</span>'
                 : '<span class="room-badge tourney">🏆 토너먼트</span>';
-            const suit = isCash ? '💵' : '♠';
+            const suit = isCoop ? '🤖' : (isCash ? '💵' : '♠');
             const meta = `<span class="room-meta">${room.total || 0}명${room.playing ? ' · 진행중' : ' · 대기중'}</span>`;
             const btn = document.createElement('div');
             btn.className = 'room-item';
@@ -4679,6 +4886,7 @@
             
             let cls = `player-spot pos-${idx}`;
             if (isMe) cls += ' me';
+            if (p.isBot) cls += ' is-bot'; // 🤖 보스전 연출·격파 이펙트가 봇 좌석을 구분하려고
             if (p.isFolded) cls += ' folded';
             if (isActive) cls += ' active-turn';
             if (p.isAllIn) cls += ' all-in';
@@ -4900,6 +5108,7 @@
         if (myPlayer && myPlayer.chips > 0) document.getElementById('rebuy-prompt').style.display = 'none';
         renderFoldShow(data); // 🃏 죽은 패 공개 선택창
         renderTimeBank(data); // ⏳ 타임뱅크 버튼
+        challengeFX(data);    // 🤖 컴까기 연출·협동 대기 화면
         // 👀 관전 상태가 아니면 관전 바를 숨긴다 (myPlayer 선언 이후여야 한다)
         if (!(myPlayer && myPlayer.isSpectator && data.youSpectate)) {
             const _sb = document.getElementById('spectate-bar');

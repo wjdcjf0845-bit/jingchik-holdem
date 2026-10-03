@@ -81,6 +81,14 @@ const COSMETICS = {
     av_photo:  { kind: 'avatar', price: 0, noBuy: true, photo: true, name: '내 사진', desc: '직접 올린 프로필 사진' },
     // ── 칭호 (이미지 없음 — 닉네임 옆에 붙는다)
     ti_none:  { kind: 'title', name: '없음',        price: 0,      text: '', desc: '칭호를 떼어 둡니데이' },
+    // 🔷 코어(컴까기에서만 나오는 재화)로 사는 것들 — cur: 'core'
+    back_circuit: { kind: 'back',   cur: 'core', price: 6,  name: '회로 기판',   desc: '푸른 회로가 흐르는 뒷면' },
+    back_neon:    { kind: 'back',   cur: 'core', price: 12, name: '네온 그리드', desc: '신스웨이브 네온 뒷면' },
+    av_robot:     { kind: 'avatar', cur: 'core', price: 5,  name: '로봇',        desc: '컴까기 입문 기념' },
+    av_cyborg:    { kind: 'avatar', cur: 'core', price: 10, name: '사이보그',    desc: '반은 사람, 반은 기계' },
+    av_aicore:    { kind: 'avatar', cur: 'core', price: 18, name: 'AI 코어',     desc: '보스의 심장' },
+    ti_hunter:    { kind: 'title',  cur: 'core', price: 4,  name: '봇 사냥꾼',   text: '🔧 봇 사냥꾼',   desc: '봇 잡는 게 취미' },
+    ti_breaker:   { kind: 'title',  cur: 'core', price: 15, name: '기계 파괴자', text: '⚡ 기계 파괴자', desc: '고수 봇도 부순다' },
     // 🤖 컴까기 10단계를 전부 깨면 열린다 (살 수 없다)
     ti_bot:   { kind: 'title', name: '컴까기 정복자', price: 0, noBuy: true, challenge: true, text: '🤖 컴까기 정복자', desc: '컴까기 10단계를 모두 깬 사람' },
     ti_rookie:{ kind: 'title', name: '입문자',    price: 1,  text: '🌱 입문자', desc: '이제 막 판에 앉았습니데이' },
@@ -409,6 +417,7 @@ const MockDB = {
                 cosmetics: { owned: [], back: 'back_classic', avatar: 'av_none', title: 'ti_none', frame: 'fr_none', frameAuto: true }, // 🎨 꾸미기
                 peakBankroll: 100000, // 🏅 등급 판정용 — 지금까지 모았던 최고 뱅크롤
                 tokens: START_TOKENS, // 🏆 우승 토큰 — 꾸미기는 이걸로만 산다
+                cores: START_TOKENS,  // 🔷 코어 — 컴까기에서만 얻는다 (개발용 시작값은 토큰과 같은 스위치를 쓴다)
                 photo: null,          // 📷 직접 올린 프로필 사진 {b64, mime, ver}
                 h2h: {},              // ⚔️ 상대별 쇼다운 전적 {닉: {w, l}}
                 // 📊 포커 분석 지표 누적 카운터
@@ -443,6 +452,8 @@ const MockDB = {
         if (u.photo === undefined) u.photo = null;                                 // 📷 프로필 사진
         // 🏆 토큰은 우승할 때마다 1개. 이 기능이 생기기 전에 한 우승도 인정해 소급 지급한다.
         if (typeof u.tokens !== 'number') u.tokens = (u.wins || 0) + (u.mttWins || 0);
+        // 🔷 코어가 생기기 전에 깬 단계도 인정한다 (첫 클리어 = 단계 번호만큼 → 1+2+…+best)
+        if (typeof u.cores !== 'number') { const _b = Challenge.progressOf(u).best; u.cores = _b * (_b + 1) / 2; }
         if (!u.h2h || typeof u.h2h !== 'object') u.h2h = {};                       // ⚔️ 상대전적
         normalizeCosmetics(u); // 🎨 꾸미기 — 구버전/손상 레코드 복구
         // 📊 포커 분석 지표 마이그레이션
@@ -962,6 +973,13 @@ class GameRoom {
                 cosMap[nick] = { back: c.back, avatar: c.avatar, title: cosTitleText(c.title), frame: c.frame, ph: hasPhoto(u) ? u.photo.ver : 0 };
             });
 
+            const chInfo = this._challenge ? {
+                stage: this._challenge.stage || 0, coop: !!this._challenge.coop, waiting: !!this._challenge.waiting,
+                boss: this._challenge.stage === Challenge.STAGES.length, total: Challenge.STAGES.length,
+                maxStage: this._challenge.waiting ? this.challengeMaxStage() : 0, host: this.hostNickname,
+                botsLeft: Object.values(this.players).filter(x => x.isBot && x.chips > 0).length
+            } : null;
+
             Object.values(this.players).forEach(recipient => {
                 const sanitizedPlayers = {};
                 Object.keys(this.players).forEach(nick => {
@@ -1026,6 +1044,7 @@ class GameRoom {
                     youTimeBank: !recipient._tbUsed, // ⏳ 이번 핸드에 타임뱅크가 남았나
                     seatsUsed: this.playerOrder.length, seatsMax: TABLE_SEATS,
                     cos: cosMap, // 🎨 자리에 앉은 사람들의 꾸미기 (뒷면/아바타/칭호)
+                    challenge: chInfo, // 🤖 컴까기 방이면 단계·보스 여부·협동 대기 상태
                     endVote: this.endVoteSnapshot(),
                     timeRemaining: this.timeRemaining,
                     turnEndTime: this.turnEndTime,
@@ -1055,8 +1074,14 @@ class GameRoom {
         }, 1000);
     }
 
-    // 🤖 [컴까기] 도전 종료 — winner 가 사람이면 클리어, 아니면(또는 null) 실패
-    finishChallenge(winner) {
+    // 🤖 [컴까기] 협동 대기방에서 고를 수 있는 가장 높은 단계 (가장 덜 깬 사람 기준)
+    challengeMaxStage() {
+        const us = Object.keys(this.players).filter(n => !this.players[n].isBot).map(n => MockDB.users.get(n)).filter(Boolean);
+        return Challenge.partyMaxStage(us);
+    }
+
+    // 🤖 [컴까기] 도전 종료 — 혼자/협동 공용. 협동이면 참가한 사람 전원에게 각자 기준으로 보상한다.
+    finishChallenge(win) {
         const ch = this._challenge;
         if (!ch || ch.done) return;
         ch.done = true;
@@ -1065,26 +1090,46 @@ class GameRoom {
         if (this.tournamentTimer) clearInterval(this.tournamentTimer);
         if (this.turnTimeout) clearTimeout(this.turnTimeout);
         this.turnIndex = -1;
-        const stageInfo = Challenge.STAGES[ch.stage - 1];
-        const human = this.players[ch.nick];
-        const u = MockDB.users.get(ch.nick);
-        let payload = { win: false, stage: ch.stage, name: stageInfo.name };
-        if (winner === ch.nick && u) {
-            const r = Challenge.applyClear(u, ch.stage);
-            if (r) {
-                if (r.allClear) {
-                    const c = normalizeCosmetics(u);
-                    if (!c.owned.includes(Challenge.CLEAR_TITLE)) c.owned.push(Challenge.CLEAR_TITLE);
+        const stage = ch.stage;
+        const stageInfo = Challenge.STAGES[stage - 1];
+        const members = ch.coop ? (ch.members || []) : [ch.nick];
+        members.forEach(nick => {
+            const pl = this.players[nick];
+            const u = MockDB.users.get(nick);
+            let payload = { win: false, stage, name: stageInfo.name, coop: !!ch.coop };
+            if (win && u) {
+                const r = Challenge.applyClear(u, stage);   // 뱅크롤 보상·코어·진행도 (코어는 여기서 이미 적립된다)
+                if (r) {
+                    if (r.allClear) {
+                        const c = normalizeCosmetics(u);
+                        if (!c.owned.includes(Challenge.CLEAR_TITLE)) c.owned.push(Challenge.CLEAR_TITLE);
+                    }
+                    payload = Object.assign({ win: true, name: stageInfo.name, coop: !!ch.coop, coresNow: u.cores || 0 }, r);
+                    MockDB.adjustBankroll(nick, r.reward).then(nb => {
+                        if (pl && pl.socketId) io.to(pl.socketId).emit('bankrollUpdate', { bankroll: nb || 0 });
+                    });
                 }
-                payload = Object.assign({ win: true, name: stageInfo.name }, r);
-                MockDB.adjustBankroll(ch.nick, r.reward).then(nb => {
-                    if (human && human.socketId) io.to(human.socketId).emit('bankrollUpdate', { bankroll: nb || 0 });
-                });
             }
-        }
+            if (pl && pl.socketId) io.to(pl.socketId).emit('challengeResult', payload);
+        });
         MockDB.save();
-        if (human && human.socketId) io.to(human.socketId).emit('challengeResult', payload);
+        if (ch.coop) this.resetCoop();
         this.sendState();
+    }
+
+    // 🤖 [컴까기 협동] 한 판이 끝나면 봇을 치우고 대기 상태로 돌아간다 — 같은 멤버로 바로 다음 단계를 갈 수 있게
+    resetCoop() {
+        const ch = this._challenge;
+        Object.keys(this.players).forEach(n => { if (this.players[n].isBot) delete this.players[n]; });
+        this.playerOrder = Object.keys(this.players);
+        this.playerOrder.forEach(n => {
+            const p = this.players[n];
+            p.chips = this.startingChips; p.currentBet = 0; p.totalInvested = 0; p.hand = [];
+            p.isFolded = false; p.isAllIn = false; p.isSpectator = false; p.hasActed = false; p.role = ''; p.isMucked = false;
+        });
+        this.pot = 0; this.communityCards = []; this.currentHighestBet = 0; this.blindLevel = 0;
+        ch.waiting = true; ch.done = false; ch.stage = 0; ch.members = [];
+        io.emit('roomList', roomListArray());
     }
 
     // ⏳ 시간 만료 시 자동 처리 (체크 가능하면 체크, 아니면 폴드)
@@ -2161,9 +2206,13 @@ class GameRoom {
         if (this.gameStage >= 1 && this.gameStage <= 4) return;
         // 🤖 [컴까기] 끝난 도전방은 더 딜하지 않는다. 사람이 칩을 다 잃었으면 봇끼리 계속 칠 이유가 없으니 바로 실패 처리.
         if (this._challenge) {
-            if (this._challenge.done) return;
-            const _h = this.players[this._challenge.nick];
-            if (this.tournamentStarted && (!_h || _h.chips <= 0)) { this.finishChallenge(null); return; }
+            if (this._challenge.done || this._challenge.waiting) return;
+            if (this.tournamentStarted) {
+                // 협동이면 한 명이라도 살아 있으면 계속, 봇이 다 죽으면 사람끼리 싸울 것 없이 바로 클리어
+                const all = Object.values(this.players);
+                if (!all.some(x => !x.isBot && x.chips > 0)) { this.finishChallenge(false); return; }
+                if (!all.some(x => x.isBot && x.chips > 0)) { this.finishChallenge(true); return; }
+            }
         }
         if (this._nextHandTimer) { clearTimeout(this._nextHandTimer); this._nextHandTimer = null; }
         // 🗳️ 합의 종료가 확정됐으면 새 핸드 대신 정산 — 직전 핸드의 팟이 칩으로 정리된 뒤라 정확
@@ -2315,7 +2364,7 @@ class GameRoom {
                 const winner = this.playerOrder[0];
                 // 🤖 [컴까기] 일반 토너먼트의 우승 처리(우승 횟수·토큰·상금풀)를 타지 않는다.
                 //    봇만 상대한 우승이 등급·토큰으로 이어지면 안 되고, 보상은 단계표대로 따로 준다.
-                if (this._challenge) { this.finishChallenge(winner); return; }
+                if (this._challenge) { this.finishChallenge(!this.players[winner].isBot); return; }
                 this.gameStage = 0;
                 this.tournamentStarted = false;
                 if (this.tournamentTimer) clearInterval(this.tournamentTimer);
@@ -4194,13 +4243,14 @@ function roomListArray() {
     const list = [];
     rooms.forEach((room, roomId) => {
         if (room._mtt || roomId.includes('#')) return; // MTT 내부 테이블 제외
-        if (room._challenge) return;                   // 🤖 컴까기 방은 혼자 치는 방이라 목록에 안 올린다
+        // 🤖 컴까기: 혼자 치는 방은 숨기고, 친구를 기다리는 협동 방만 목록에 올린다
+        if (room._challenge && !(room._challenge.coop && room._challenge.waiting)) return;
         const humans = Object.values(room.players).filter(p => p && !p.isBot).length;
         const bots = Object.values(room.players).filter(p => p && p.isBot).length;
         const playing = (room.gameStage >= 1 && room.gameStage < 5) || room.tournamentStarted || room._cashStarted;
         list.push({
             id: roomId,
-            mode: room.mode || 'tournament',   // 'tournament' | 'cash'
+            mode: room._challenge ? 'coop' : (room.mode || 'tournament'),   // 'tournament' | 'cash' | 'coop'(컴까기 협동)
             humans, bots,
             total: humans + bots,
             playing: !!playing
@@ -4417,7 +4467,13 @@ io.on('connection', (socket) => {
         const nick = socket.nickname;
 
         // 🤖 컴까기 방은 주인 혼자 치는 방이다 (재접속한 주인만 다시 들어올 수 있다)
-        if (room._challenge && room._challenge.nick !== nick) return socket.emit('joinError', '컴까기 방에는 들어갈 수 없습니데이.');
+        if (room._challenge && !room.players[nick]) {   // 이미 멤버(재접속)면 통과
+            const ch = room._challenge;
+            if (!ch.coop) return socket.emit('joinError', '컴까기 방에는 들어갈 수 없습니데이.');
+            if (!ch.waiting) return socket.emit('joinError', '이미 도전이 시작됐습니데이. 끝나면 들어오이소.');
+            const humans = Object.values(room.players).filter(x => x && !x.isBot).length;
+            if (humans >= Challenge.COOP_MAX) return socket.emit('joinError', `협동은 ${Challenge.COOP_MAX}명까지입니데이.`);
+        }
 
         // 🪑 플레이어 정원(6인) 초과 시 → 관전자로 입장 (거부하지 않음)
         const activePlayerCount = Object.values(room.players).filter(pl => pl && !pl.isSpectator).length;
@@ -4618,9 +4674,71 @@ io.on('connection', (socket) => {
         MockDB.save();
 
         socket.emit('joinRoomSuccess', roomId);
-        socket.emit('challengeStarted', { stage, name: st.name, desc: st.desc, total: Challenge.STAGES.length });
+        const boss = stage === Challenge.STAGES.length;
+        socket.emit('challengeStarted', { stage, name: st.name, desc: st.desc, total: Challenge.STAGES.length, boss,
+            bots: room.playerOrder.filter(n => room.players[n].isBot) });
         room.sendState();
-        setTimeout(() => { if (rooms.get(roomId) === room && !room._challenge.done) room.startNextHand(); }, 1500);
+        // 인트로 연출(보스전은 더 길다)이 끝난 뒤에 첫 카드를 돌린다
+        setTimeout(() => { if (rooms.get(roomId) === room && !room._challenge.done) room.startNextHand(); }, boss ? 4600 : 3200);
+    });
+
+    // 🤖 [컴까기 협동] 친구를 기다리는 방 만들기 — 방 목록·초대 링크로 들어온다(최대 3명)
+    socket.on('createCoopChallenge', async () => {
+        if (!socket.nickname) return;
+        const nick = socket.nickname;
+        const cur = socket.currentRoom;
+        if (cur && rooms.has(cur) && rooms.get(cur).players[nick]) { socket.emit('challengeError', '먼저 지금 있는 방에서 나가이소.'); return; }
+        const roomId = `🤖협동_${nick}`;
+        if (rooms.has(roomId)) { try { destroyRoom(roomId); } catch (e) {} }
+        const settings = { startingChips: Challenge.START_CHIPS, blindUpInterval: Challenge.BLIND_UP_MIN, turnTimeLimit: 30, mode: 'tournament', maxRebuys: 0 };
+        const room = new GameRoom(roomId, settings);
+        room._mttFreeChips = true;
+        room._challenge = { coop: true, waiting: true, nick, stage: 0, done: false, members: [] };
+        rooms.set(roomId, room);
+        socket.join(roomId); socket.currentRoom = roomId; leaveLobby(socket);
+        room.hostNickname = nick;
+        await MockDB.getUser(nick);
+        room.players[nick] = {
+            id: nick, socketId: socket.id, chips: settings.startingChips,
+            currentBet: 0, totalInvested: 0, isFolded: false, hasActed: false, role: '',
+            isAllIn: false, isDisconnected: false, isMucked: false, isSpectator: false,
+            hand: [], lastEmoteTime: 0, isBot: false, rebuysUsed: 0
+        };
+        room.playerOrder.push(nick);
+        socket.emit('joinRoomSuccess', roomId);
+        room.sendState();
+        io.emit('roomList', roomListArray());
+    });
+
+    // 🤖 [컴까기 협동] 방장이 단계를 골라 시작
+    socket.on('startCoopChallenge', (data) => {
+        const room = rooms.get(socket.currentRoom);
+        if (!room || !room._challenge || !room._challenge.coop || !room._challenge.waiting) return;
+        if (room.hostNickname !== socket.nickname) return;
+        const ch = room._challenge;
+        const stage = Number(data && data.stage);
+        const humans = Object.keys(room.players).filter(n => !room.players[n].isBot && !room.players[n].isDisconnected);
+        if (humans.length < 1 || humans.length > Challenge.COOP_MAX) return;
+        const users = humans.map(n => MockDB.users.get(n)).filter(Boolean);
+        if (users.length !== humans.length || !users.every(u => Challenge.canPlay(u, stage))) {
+            socket.emit('challengeError', '아직 이 단계를 못 여는 사람이 있습니데이. (가장 덜 깬 사람 기준)');
+            return;
+        }
+        const setup = Challenge.coopSetup(stage, humans.length);
+        const st = Challenge.STAGES[stage - 1];
+        ch.stage = stage; ch.waiting = false; ch.done = false; ch.members = humans.slice();
+        room.playerOrder = humans.slice();
+        humans.forEach(n => { room.players[n].chips = room.startingChips; room.players[n].isSpectator = false; });
+        setup.bots.forEach(d => room.addBot(d));
+        room.playerOrder.forEach(n => { const bp = room.players[n]; if (bp && bp.isBot) bp.chips = Math.round(room.startingChips * setup.mult); });
+        users.forEach(u => { const pr = Challenge.progressOf(u); u.challenge = { best: pr.best, clears: pr.clears, tries: pr.tries + 1 }; });
+        MockDB.save();
+        const boss = stage === Challenge.STAGES.length;
+        io.to(room.roomId).emit('challengeStarted', { stage, name: st.name, desc: st.desc, total: Challenge.STAGES.length, boss, coop: true,
+            bots: room.playerOrder.filter(n => room.players[n].isBot) });
+        room.sendState();
+        io.emit('roomList', roomListArray());
+        setTimeout(() => { if (rooms.get(room.roomId) === room && !ch.done && !ch.waiting) room.startNextHand(); }, boss ? 4600 : 3200);
     });
 
     // 🎓 [학습모드] AI 5명과 1:5 GTO 연습 — 학습 방 생성 + 봇 5명 + 즉시 시작
@@ -4675,6 +4793,7 @@ io.on('connection', (socket) => {
 
     socket.on('startFirstHand', async () => {
         const room = rooms.get(socket.currentRoom);
+        if (room && room._challenge) return; // 🤖 컴까기 방은 전용 시작 경로만 쓴다
         if (room && room.gameStage === 0 && !room.tournamentStarted) {
             if (room.hostNickname !== socket.nickname) return; // 💡 호스트 권한 검증
             const activeCount = room.playerOrder.filter(n => room.players[n] && !room.players[n].isDisconnected).length;
@@ -4704,6 +4823,7 @@ io.on('connection', (socket) => {
     socket.on('addBot', (data) => {
         const room = rooms.get(socket.currentRoom);
         if (!room || room.hostNickname !== socket.nickname) return;
+        if (room._challenge) return; // 🤖 컴까기 방의 봇은 단계표가 정한다
         if (room.gameStage !== 0 || room.tournamentStarted) {
             socket.emit('gameMessage', '🤖 봇은 게임 시작 전 대기실에서만 추가할 수 있습니데이!');
             return;
@@ -4831,7 +4951,7 @@ io.on('connection', (socket) => {
         const myRank = rankIndexOf(u);
         return {
             items: Object.entries(COSMETICS).map(([id, it]) => ({
-                id, kind: it.kind, name: it.name, price: it.price,
+                id, kind: it.kind, name: it.name, price: it.price, cur: it.cur || 'token',
                 desc: it.desc || '', text: it.text || '',
                 noBuy: !!it.noBuy,
                 // 🏅 테두리는 등급으로 열린다 — 잠겨 있으면 무엇이 필요한지 같이 보낸다
@@ -4842,6 +4962,7 @@ io.on('connection', (socket) => {
             equipped: { back: c.back, avatar: c.avatar, title: c.title, frame: c.frame },
             bankroll: u.bankroll || 0,
             tokens: u.tokens || 0, // 🏆 우승 토큰
+            cores: u.cores || 0,   // 🔷 컴까기 코어
             // 🏅 내 등급 현황 (다음 등급까지 얼마나 남았는지 보여주려고)
             rank: {
                 idx: myRank, name: RANKS[myRank].name,
@@ -4870,11 +4991,20 @@ io.on('connection', (socket) => {
         // 🏅 테두리는 등급으로만, 📷 사진은 업로드로만 — 돈으로 사는 물건이 아니다
         if (item.noBuy) { socket.emit('shopResult', { ok: false, msg: '이건 돈으로 살 수 있는 게 아닙니데이.' }); return; }
         if (c.owned.includes(id)) { socket.emit('shopResult', { ok: false, msg: '이미 가지고 있습니데이.' }); return; }
-        if ((u.tokens || 0) < item.price) {
-            socket.emit('shopResult', { ok: false, msg: `토큰이 ${item.price - (u.tokens || 0)}개 모자랍니데이. 사람 ${TOKEN_MIN_HUMANS}명 이상 토너먼트에서 우승하면 1개씩 받습니데이.` });
-            return;
+        if (item.cur === 'core') {
+            // 🔷 컴까기 전용 아이템은 코어로만 — 토큰이나 뱅크롤로는 못 산다
+            if ((u.cores || 0) < item.price) {
+                socket.emit('shopResult', { ok: false, msg: `코어가 ${item.price - (u.cores || 0)}개 모자랍니데이. 컴까기 단계를 깨면 받습니데이.` });
+                return;
+            }
+            u.cores = (u.cores || 0) - item.price;
+        } else {
+            if ((u.tokens || 0) < item.price) {
+                socket.emit('shopResult', { ok: false, msg: `토큰이 ${item.price - (u.tokens || 0)}개 모자랍니데이. 사람 ${TOKEN_MIN_HUMANS}명 이상 토너먼트에서 우승하면 1개씩 받습니데이.` });
+                return;
+            }
+            u.tokens = (u.tokens || 0) - item.price; // 🏆 토큰으로만 산다 — 뱅크롤은 건드리지 않는다
         }
-        u.tokens = (u.tokens || 0) - item.price; // 🏆 토큰으로만 산다 — 뱅크롤은 건드리지 않는다
         c.owned.push(id);
         c[item.kind] = id; // 산 건 바로 장착
         MockDB.save();
