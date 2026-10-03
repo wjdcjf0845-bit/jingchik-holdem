@@ -24,9 +24,7 @@ module.exports = function createAdminRouter(deps) {
     const router = express.Router();
     const d = deps || {};
 
-    const USER = process.env.ADMIN_USER || '';
-    const PASS = process.env.ADMIN_PASS || '';
-    const ENABLED = !!(USER && PASS);
+    const USER = d.adminNick || 'admin';
 
     // 세션 비밀키는 부팅할 때마다 새로 만든다 — 저장소에 남지 않고,
     // 서버가 재시작되면 기존 세션이 모두 끊겨서 더 안전하다.
@@ -40,13 +38,21 @@ module.exports = function createAdminRouter(deps) {
         next();
     });
 
-    if (!ENABLED) {
-        console.warn('[admin] ADMIN_USER / ADMIN_PASS 미설정 — /admin 비활성화');
-        router.use((req, res) => {
-            res.status(503).type('html').send(offPage());
-        });
-        return router;
-    }
+    // 🎟️ 게임 로그인 → 관리자 페이지로 넘겨줄 때 쓰는 1회용 입장권.
+    //    소켓 로그인은 쿠키를 심을 수 없어서, 30초짜리 서명 토큰을 주소에 실어 보낸 뒤 여기서 쿠키로 바꾼다.
+    const usedTickets = new Set();
+    router.mintTicket = () => '/admin/enter?t=' + encodeURIComponent(makeToken(SECRET + '|ticket', Date.now() + 30000));
+    const setSession = (req, res) => res.cookie(COOKIE, makeToken(SECRET, Date.now() + SESSION_MS),
+        { httpOnly: true, sameSite: 'strict', maxAge: SESSION_MS, secure: !!req.secure, path: '/admin' });
+
+    router.get('/enter', (req, res) => {
+        const t = String(req.query.t || '');
+        if (!verifyToken(SECRET + '|ticket', t) || usedTickets.has(t)) return res.redirect('/admin/');
+        usedTickets.add(t);
+        if (usedTickets.size > 500) usedTickets.clear(); // 30초면 만료되니 오래 들고 있을 이유가 없다
+        setSession(req, res);
+        res.redirect('/admin/');
+    });
 
     const clientIp = req => {
         const xf = req.headers['x-forwarded-for'];
@@ -62,6 +68,7 @@ module.exports = function createAdminRouter(deps) {
         res.status(401).type('html').send(loginPage(''));
     };
 
+    router.limiter = limiter; // 게임 로그인 쪽 admin 시도도 같은 제한기를 쓴다
     router.use(express.urlencoded({ extended: false, limit: '4kb' }));
 
     // ── 로그인 ────────────────────────────────────────────────
@@ -74,8 +81,8 @@ module.exports = function createAdminRouter(deps) {
         }
         const u = (req.body && req.body.user) || '';
         const p = (req.body && req.body.pass) || '';
-        // 둘 다 상수시간으로 비교한 뒤 & 로 합친다 (한쪽만 맞았는지 시간으로 못 재게)
-        const ok = safeEqual(u, USER) & safeEqual(p, PASS);
+        // 비밀번호 확인은 게임 로그인과 같은 함수(server.js 의 verifyAdmin)에 맡긴다 — 기준이 둘이면 언젠가 어긋난다
+        const ok = safeEqual(u, USER) && d.verify && d.verify(p) === true;
         if (!ok) {
             const n = limiter.fail(ip);
             d.accessLog && d.accessLog.push({ type: 'adminfail', ip, nick: String(u).slice(0, 24), detail: `실패 ${n}/${FAIL_MAX}` });
@@ -83,9 +90,7 @@ module.exports = function createAdminRouter(deps) {
         }
         limiter.reset(ip);
         d.accessLog && d.accessLog.push({ type: 'admin', ip, nick: USER, ua: shortUA(req.headers['user-agent']), detail: '관리자 로그인' });
-        res.cookie
-            ? res.cookie(COOKIE, makeToken(SECRET, Date.now() + SESSION_MS), { httpOnly: true, sameSite: 'strict', maxAge: SESSION_MS, secure: !!req.secure, path: '/admin' })
-            : res.set('Set-Cookie', `${COOKIE}=${makeToken(SECRET, Date.now() + SESSION_MS)}; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=${SESSION_MS / 1000}`);
+        setSession(req, res);
         res.redirect('/admin/');
     });
 
@@ -179,37 +184,39 @@ module.exports = function createAdminRouter(deps) {
 
 // ── 페이지들 (public/ 에 두지 않는다 — 인증을 통과해야만 나간다) ──
 const STYLE = `
-:root { --paper:#f0e7d2; --paper-hi:#f7f0e0; --paper-lo:#e6dbc2; --ink:#221d15; --verm:#c8501f; --dim:#7a6f5d; }
+:root { --paper:#0b1020; --paper-hi:#171f36; --paper-lo:#0f1528; --ink:#eef2fb; --verm:#ffc857; --dim:#8d98b3; --edge:rgba(255,255,255,0.13); }
 * { box-sizing:border-box; }
-body { margin:0; background:var(--paper); color:var(--ink); font-family:"Pretendard","Malgun Gothic",system-ui,sans-serif; }
+input, select, button { color:var(--ink); }
+th { background:var(--paper-hi) !important; }
+body { margin:0; background:radial-gradient(ellipse 90% 50% at 50% -10%, rgba(64,110,255,0.18), transparent 60%), var(--paper); min-height:100vh; color:var(--ink); font-family:"Pretendard","Malgun Gothic",system-ui,sans-serif; }
 a { color:var(--verm); }
 .wrap { max-width:1100px; margin:0 auto; padding:22px 16px 60px; }
 h1 { font-size:22px; margin:0 0 4px; letter-spacing:-0.5px; }
 .sub { color:var(--dim); font-size:12.5px; margin-bottom:18px; }
-.card { background:var(--paper-hi); border:2px solid var(--ink); border-radius:14px; padding:14px 16px; margin-bottom:14px; box-shadow:5px 5px 0 rgba(34,29,21,0.28); }
+.card { background:var(--paper-hi); border:1px solid var(--edge); border-radius:14px; padding:14px 16px; margin-bottom:14px; box-shadow:0 10px 28px rgba(0,0,0,0.45); }
 .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:10px; }
-.kpi { background:var(--paper-lo); border:1.5px solid var(--ink); border-radius:10px; padding:10px 12px; }
+.kpi { background:var(--paper-lo); border:1px solid var(--edge); border-radius:10px; padding:10px 12px; }
 .kpi .v { font-size:21px; font-weight:900; }
 .kpi .k { font-size:11px; color:var(--dim); margin-top:2px; }
 .tabs { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
-.tabs button { flex:1; min-width:110px; padding:9px 10px; font:inherit; font-weight:800; font-size:13px; cursor:pointer; background:transparent; color:var(--ink); border:2px solid var(--ink); border-radius:9px; }
-.tabs button.on { background:var(--ink); color:var(--paper-hi); box-shadow:3px 3px 0 rgba(200,80,31,0.9); }
+.tabs button { flex:1; min-width:110px; padding:9px 10px; font:inherit; font-weight:800; font-size:13px; cursor:pointer; background:transparent; color:var(--ink); border:1px solid var(--edge); border-radius:9px; }
+.tabs button.on { background:linear-gradient(180deg,#ffe7a8,#ffc857); color:#2c1c00; border-color:transparent; box-shadow:0 0 0 1px rgba(255,200,87,0.55); }
 .filters { display:flex; gap:7px; flex-wrap:wrap; margin-bottom:10px; }
-.filters input, .filters select { font:inherit; font-size:13px; padding:7px 10px; border:1.5px solid var(--ink); border-radius:8px; background:var(--paper-hi); color:var(--ink); }
+.filters input, .filters select { font:inherit; font-size:13px; padding:7px 10px; border:1px solid var(--edge); border-radius:8px; background:var(--paper-hi); color:var(--ink); }
 .filters input { min-width:120px; }
 table { width:100%; border-collapse:collapse; font-size:12.5px; }
-th, td { text-align:left; padding:7px 8px; border-bottom:1px solid rgba(34,29,21,0.18); white-space:nowrap; }
+th, td { text-align:left; padding:7px 8px; border-bottom:1px solid rgba(255,255,255,0.09); white-space:nowrap; }
 th { font-size:11px; color:var(--dim); text-transform:none; position:sticky; top:0; background:var(--paper-hi); }
 td.num { text-align:right; font-variant-numeric:tabular-nums; }
 .scroll { max-height:60vh; overflow:auto; }
-.tag { display:inline-block; padding:1px 7px; border-radius:999px; font-size:10.5px; font-weight:800; border:1.5px solid var(--ink); }
-.t-login { background:#cfe8d8; } .t-logout { background:var(--paper-lo); } .t-fail { background:#f3c7b6; }
-.t-join { background:#d8def0; } .t-admin { background:#efd9a6; } .t-adminfail { background:#f0b0a0; } .t-etc { background:var(--paper-lo); }
+.tag { display:inline-block; padding:1px 7px; border-radius:999px; font-size:10.5px; font-weight:800; border:1px solid var(--edge); }
+.tag { color:#10162a; } .t-login { background:#7fe0b0; } .t-logout { background:#aab4cc; } .t-fail { background:#ff9d8a; }
+.t-join { background:#9fc4ff; } .t-admin { background:#ffd98a; } .t-adminfail { background:#ff8a78; } .t-etc { background:#aab4cc; }
 .dot { width:8px; height:8px; border-radius:50%; background:#2e9e5b; display:inline-block; margin-right:5px; }
 .empty { color:var(--dim); padding:18px 4px; font-size:13px; }
 .topbar { display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .topbar form { margin:0; }
-.btn { font:inherit; font-weight:800; font-size:12px; padding:7px 14px; border:2px solid var(--ink); border-radius:8px; background:var(--paper-hi); color:var(--ink); cursor:pointer; }
+.btn { font:inherit; font-weight:800; font-size:12px; padding:7px 14px; border:1px solid var(--edge); border-radius:8px; background:var(--paper-hi); color:var(--ink); cursor:pointer; }
 .note { font-size:11.5px; color:var(--dim); margin-top:10px; line-height:1.6; }
 code { background:var(--paper-lo); padding:1px 5px; border-radius:4px; font-size:12px; }
 @media (max-width:620px){ th,td{ padding:6px 5px; font-size:11.5px; } h1{ font-size:19px; } }
@@ -222,24 +229,6 @@ function shell(title, body) {
 <title>${title}</title><style>${STYLE}</style></head><body><div class="wrap">${body}</div></body></html>`;
 }
 
-function offPage() {
-    return shell('관리자 — 미설정', `
-<h1>🛡️ 관리자 페이지가 꺼져 있습니데이</h1>
-<div class="sub">아이디·비밀번호가 설정되지 않아 열리지 않습니다.</div>
-<div class="card">
-  <p style="margin:0 0 10px; font-size:13.5px; line-height:1.7">
-    이 저장소는 <b>공개(public)</b>라 아이디·비밀번호를 코드에 적으면 누구나 볼 수 있습니다.
-    그래서 <b>환경변수로만</b> 받도록 해두었습니다.
-  </p>
-  <p style="margin:0 0 6px; font-size:13px"><b>Render</b> → 해당 서비스 → <b>Environment</b> 에 두 개를 추가하고 재배포하이소:</p>
-  <p style="margin:0 0 10px"><code>ADMIN_USER = admin</code> &nbsp; <code>ADMIN_PASS = 1004</code></p>
-  <p style="margin:0; font-size:13px"><b>내 컴퓨터</b>에서 켤 때는:</p>
-  <p style="margin:6px 0 0"><code>ADMIN_USER=admin ADMIN_PASS=1004 node server.js</code></p>
-</div>
-<div class="note">비밀번호 4자리는 경우의 수가 1만 개뿐이라 언제든 뚫릴 수 있습니다.
-바깥에 열려 있는 주소라면 더 긴 비밀번호를 권합니다 — 환경변수 값만 바꾸면 됩니다.</div>`);
-}
-
 function loginPage(err) {
     const msg = err ? `<div style="color:var(--verm); font-weight:800; font-size:13px; margin-bottom:10px">${String(err).replace(/[<>&"]/g, '')}</div>` : '';
     return shell('관리자 로그인', `
@@ -249,13 +238,13 @@ function loginPage(err) {
   ${msg}
   <form method="post" action="/admin/login">
     <div style="margin-bottom:8px"><input name="user" placeholder="아이디" autocomplete="username" autofocus
-      style="width:100%; font:inherit; padding:10px; border:1.5px solid var(--ink); border-radius:8px; background:var(--paper-hi)"></div>
+      style="width:100%; font:inherit; padding:10px; border:1px solid var(--edge); border-radius:8px; background:var(--paper-hi)"></div>
     <div style="margin-bottom:12px"><input name="pass" type="password" placeholder="비밀번호" autocomplete="current-password"
-      style="width:100%; font:inherit; padding:10px; border:1.5px solid var(--ink); border-radius:8px; background:var(--paper-hi)"></div>
-    <button class="btn" style="width:100%; padding:11px; background:var(--ink); color:var(--paper-hi)">로그인</button>
+      style="width:100%; font:inherit; padding:10px; border:1px solid var(--edge); border-radius:8px; background:var(--paper-hi)"></div>
+    <button class="btn" style="width:100%; padding:11px; background:linear-gradient(180deg,#ffe7a8,#ffc857); color:#2c1c00; border:none">로그인</button>
   </form>
 </div>
-<div class="note">로그인 실패는 기록에 남습니다. 연속 ${FAIL_MAX}회 틀리면 ${FAIL_WINDOW_MS / 60000}분 동안 막힙니다.</div>`);
+<div class="note">게임 로그인 화면에서 <b>admin</b> 으로 로그인해도 바로 이 페이지로 옵니다.<br>비밀번호는 admin 계정에 처음 등록한 4자리입니다. 연속 ${FAIL_MAX}회 틀리면 ${FAIL_WINDOW_MS / 60000}분 동안 막힙니다.</div>`);
 }
 
 function dashboardPage() {

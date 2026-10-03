@@ -39,6 +39,9 @@ const THROW_ITEMS = ['🍅', '🌹', '🥚', '👏']; // 🍅 상대에게 던�
 const PHOTO_MAX_BYTES = 24000;   // 📷 프로필 사진 원본 상한 (클라가 128px 로 줄여 보내면 5~10KB)
 const PHOTO_MAX_B64 = 40000;     // 📷 data URL 문자열 상한 — 파싱 전에 먼저 걸러낸다
 const photoRate = new Map();     // 📷 닉네임 → 마지막 업로드 시각 (도배 방지)
+// 🛡️ 관리자 계정 닉네임. 이 닉네임으로 로그인하면 게임이 아니라 관리자 페이지로 간다.
+const ADMIN_NICK = (process.env.ADMIN_USER || 'admin');
+let adminRouter = null;          // 아래에서 /admin 을 붙일 때 채워진다
 
 // 🎨 [상점] 뱅크롤로 사는 꾸미기 — 카드 뒷면 / 아바타 / 칭호.
 //    kind 별로 하나씩만 장착된다. price 0 은 기본 지급품이라 따로 살 필요가 없다.
@@ -182,6 +185,16 @@ function clampInt(v, min, max, def) {
 }
 
 // 🔒 4자리 PIN 검증 + 해시 (단방향 SHA-256, 평문 저장 안 함)
+// 🛡️ 관리자 비밀번호 확인 — 게임 로그인과 /admin 로그인 폼이 같이 쓴다.
+//    ADMIN_PASS 환경변수가 있으면 그 값, 없으면 admin 계정에 처음 등록된 비밀번호(해시).
+function verifyAdmin(pin) {
+    const { safeEqual } = require('./lib/adminauth');
+    if (typeof pin !== 'string' || !pin) return false;
+    if (process.env.ADMIN_PASS) return safeEqual(pin, process.env.ADMIN_PASS);
+    const au = MockDB.users.get(ADMIN_NICK);
+    if (!au || !au.pinHash || !isValidPin(pin)) return false;
+    return safeEqual(au.pinHash, hashPin(pin));
+}
 function isValidPin(pin) {
     return typeof pin === 'string' && /^\d{4}$/.test(pin);
 }
@@ -4085,6 +4098,39 @@ io.on('connection', (socket) => {
             // 🔒 4자리 PIN 검증 (재접속 자동 로그인은 PIN 생략 허용)
             const pin = data && data.pin;
             const isReconnect = data && data.reconnect === true;
+
+            // 🛡️ [관리자] admin 으로 로그인하면 게임에 들이지 않고 관리자 페이지로 보낸다.
+            //    ⚠️ 재접속(PIN 생략) 경로는 관리자에겐 절대 허용하지 않는다 — 비밀번호 없이 들어오는 문이 된다.
+            if (safeNick === ADMIN_NICK) {
+                const ip = socketIp(socket);
+                const lim = adminRouter && adminRouter.limiter;
+                if (lim && lim.blocked(ip)) {
+                    socket.emit('loginError', '시도가 너무 많습니데이. 15분 뒤에 다시 해보이소.');
+                    return;
+                }
+                if (!isValidPin(pin) || isReconnect) {
+                    socket.emit('loginError', '비밀번호는 숫자 4자리로 입력해주세요.');
+                    return;
+                }
+                const au = await MockDB.getUser(ADMIN_NICK);
+                let first = false;
+                if (!process.env.ADMIN_PASS && !au.pinHash) { await MockDB.setPin(ADMIN_NICK, pin); first = true; }
+                if (!verifyAdmin(pin)) {
+                    const n = lim ? lim.fail(ip) : 0;
+                    accessLog.push({ type: 'adminfail', nick: ADMIN_NICK, ip, detail: `게임 로그인 실패 ${n}` });
+                    socket.emit('loginError', '비밀번호가 일치하지 않습니데이. 다시 확인해주세요.');
+                    return;
+                }
+                if (lim) lim.reset(ip);
+                accessLog.push({
+                    type: 'admin', nick: ADMIN_NICK, ip,
+                    ua: shortUA(socket.handshake && socket.handshake.headers && socket.handshake.headers['user-agent']),
+                    detail: first ? '관리자 비밀번호 최초 등록' : '게임 로그인으로 입장'
+                });
+                socket.emit('adminRedirect', { url: adminRouter ? adminRouter.mintTicket() : '/admin/' });
+                return;
+            }
+
             const existed = MockDB.users.has(safeNick);
             const user = await MockDB.getUser(safeNick);
 
@@ -5154,7 +5200,8 @@ io.on('connection', (socket) => {
 
 // 🛡️ 관리자 페이지 — MockDB·rooms·io 가 다 만들어진 뒤에 붙인다(위에서 붙이면 참조가 비어 있다)
 try {
-    app.use('/admin', require('./admin')({ accessLog, MockDB, rooms, io }));
+    adminRouter = require('./admin')({ accessLog, MockDB, rooms, io, adminNick: ADMIN_NICK, verify: verifyAdmin });
+    app.use('/admin', adminRouter);
 } catch (e) {
     console.error('🛡️ [관리자] 마운트 실패(게임에는 영향 없음):', e && e.message);
 }
