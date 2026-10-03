@@ -31,7 +31,9 @@ const { chipChop } = require('./lib/chop'); // 🤝 토너먼트 합의 종료 �
 const Postflop = require('./lib/postflop'); // 🎯 레인지 기반 포스트플랍 전략 (C벳·MDF·블러프캐치·SPR)
 const RangeEq = require('./lib/rangeeq'); // 🎯 "벳하는 상대의 레인지" 대비 내 핸드 강도
 const TABLE_SEATS = 6;           // 🪑 테이블 정원 — 클라이언트 좌석 레이아웃(pos-0~pos-5)과 반드시 일치
-const SHOWDOWN_REVEAL_MS = 3000; // 🃏 올인 쇼다운 — 카드 한 장을 보고 나서 다음 장까지의 간격
+// 🔬 DEV_FAST_HANDS: 봇끼리 수천 판을 돌려 전략을 재는 측정 전용 스위치(연출 대기를 없앤다). 운영에선 설정하지 않는다.
+const DEV_FAST = !!process.env.DEV_FAST_HANDS;
+const SHOWDOWN_REVEAL_MS = DEV_FAST ? 40 : 3000; // 🃏 올인 쇼다운 — 카드 한 장을 보고 나서 다음 장까지의 간격
 const MUCK_CHOICE_MS = 6000;     // 🃏 진 사람이 패를 공개할지 정하는 시간
 const END_VOTE_MS = 30000; // 🗳️ 합의 종료 투표 제한시간
 const TIME_BANK_MS = 15000;      // ⏳ 타임뱅크 — 핸드당 1회, 더 쓸 수 있는 시간
@@ -91,6 +93,8 @@ const COSMETIC_DEFAULTS = { back: 'back_classic', avatar: 'av_none', title: 'ti_
 // 🏅 [등급] 돈으로 살 수 없는 것 — 우승 횟수나 "최고로 모았던 뱅크롤"로만 열린다.
 //    판정 기준과 임계값은 lib/rank.js 에 있다 (단위 테스트로 오름차순을 지킨다).
 const { RANKS, rankIndexOf, rankNeedText } = require('./lib/rank');
+const ShortStack = require('./lib/shortstack'); // 🤖 숏스택 푸시/폴드 · 올인 콜 레인지
+const OppModel = require('./lib/oppmodel');     // 🧠 상대 읽기 — 세션 표본 + 계정 누적 전적
 // 칭호는 화면에 그대로 찍히는 문구라 id 대신 문구를 내려보낸다 (클라이언트에 카탈로그 사본을 두지 않으려고)
 // ⚠️ COSMETICS 는 평범한 객체라 COSMETICS['__proto__'] 같은 상속 키가 걸려든다.
 //    클라이언트가 보낸 id 는 반드시 이 함수로만 조회할 것 (자기 소유 키만 통과).
@@ -1252,9 +1256,17 @@ class GameRoom {
                 // 🎯 디펜스 폭 조정 컨텍스트: 살아있는 인원 수 + 리레이즈(3벳+) 여부
                 //    인원 적을수록(HU/3way) 넓게, 단일 오픈보다 리레이즈엔 타이트하게 방어
                 const _numActive = this.playerOrder.filter(n => !this.players[n].isFolded).length;
-                const _threeBetPlus = (this.raiseCountThisStreet || 0) >= 2;
+                // 🔬 운영에선 항상 고쳐진 카운터. BOT_AB 측정 때만 "옛 봇"이 고치기 전 값을 본다.
+                const _rc = this.botV2(nick) ? (this.raiseCountThisStreet || 0) : (this._legacyRaiseCount || 0);
+                const _threeBetPlus = _rc >= 2;
                 const rt = preflopRangeTier(code, p.position || '', facingRaise, { numActive: _numActive, threeBetPlus: _threeBetPlus });
                 const isBB = p.role && p.role.includes('BB');
+
+                // 🤖 [숏스택·올인] 스택이 짧거나 올인을 마주하면 일반 로직보다 먼저 푸시/폴드 판단을 한다
+                if (persona.proStrategy && this.botV2(nick)) {
+                    const ssd = this.shortStackDecision(nick, { code, toCall, bb, totalPot, facingRaise, isBB });
+                    if (ssd) return ssd;
+                }
 
                 // 표준 오픈 사이즈로 "raise to" 금액 계산 (2.4~3.1bb, 최소레이즈·스택 보정)
                 const openRaiseDecision = () => {
@@ -1291,7 +1303,7 @@ class GameRoom {
                         const target = Math.min(p.currentBet + p.chips, Math.max(want, minRaiseTo));
                         return (target > this.currentHighestBet) ? { type: 'raise', amount: target } : { type: 'call' };
                     };
-                    const _singleRaise = (this.raiseCountThisStreet || 0) <= 1 && persona.proStrategy;
+                    const _singleRaise = _rc <= 1 && persona.proStrategy;
                     if (rt.tier === 'fold') {
                         if (!(isBB && toCall <= bb * 0.5) && r < 0.88 * skill + 0.1) return { type: 'fold' };
                         equity *= 0.78;
@@ -1593,6 +1605,84 @@ class GameRoom {
     //    몬테카를로(랜덤 상대 가정)는 7-8-2 보드의 AK 하이를 52.7%로 평가한다 — 그래서
     //    봇이 벳에 5~13%밖에 안 접었다. 벳 레인지 대비로 재면 24%로 떨어진다.
     //    반환: 0~1, 계산 불가(보드 없음 등)면 null.
+    // 🔬 A/B 측정용 스위치. BOT_AB 가 없으면(운영) 고수 봇 전원이 새 전략을 쓴다.
+    //    BOT_AB=1 이면 닉네임 해시 비트로 절반만, 2 면 반대쪽 절반만 — 같은 테이블에서 신·구 전략을 맞붙여 잰다.
+    botV2(nick) {
+        const ab = process.env.BOT_AB;
+        if (!ab) return true;
+        const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
+        return ab === '2' ? !bit : bit;
+    }
+
+    // 🤖 [숏스택 푸시/폴드 + 올인 콜]
+    //    반환: 결정 객체, 또는 null(일반 프리플랍 로직에 맡김)
+    shortStackDecision(nick, c) {
+        const p = this.players[nick];
+        const { code, toCall, bb, totalPot, facingRaise, isBB } = c;
+        const live = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded);
+        if (!live.length) return null;
+        const stackOf = n => this.players[n].chips + (this.players[n].currentBet || 0);
+        const myStack = p.chips + p.currentBet;
+        const effBB = Math.min(myStack, Math.max(...live.map(stackOf))) / bb;
+        const pct = ShortStack.handPercentile(code);
+        const allInTo = p.currentBet + p.chips;
+        const shove = () => (allInTo > this.currentHighestBet ? { type: 'raise', amount: allInTo } : { type: 'call' });
+        const isTourney = this.mode !== 'cash';
+        const raises = this.raiseCountThisStreet || 0;
+
+        // 마지막으로 레이즈한 사람(=지금 최고액을 낸 사람)
+        const aggr = live.find(n => (this.players[n].currentBet || 0) === this.currentHighestBet && this.currentHighestBet > bb) || null;
+        const aggrP = aggr ? this.players[aggr] : null;
+        const aggrAllIn = !!(aggrP && (aggrP.isAllIn || aggrP.chips === 0));
+
+        // ── (가) 올인(또는 내 스택의 큰 몫)을 받아야 하는 상황 ──
+        //    "아무 패 상대 승률"이 아니라 "올인하는 사람의 레인지 상대 승률"로 판단한다.
+        if (facingRaise && toCall > 0 && (toCall >= p.chips * 0.4 || (aggrAllIn && toCall >= bb * 3))) {
+            const aggrBB = aggr ? stackOf(aggr) / bb : effBB;
+            let x;
+            if (aggrAllIn) x = ShortStack.shoverPct(aggrBB, Math.max(1, live.length), raises);
+            else x = raises >= 3 ? 0.03 : raises === 2 ? 0.07 : ShortStack.openPct(aggrP ? aggrP.position : '');
+            // 상대 성향 반영: 평소에 많이 넣는 사람은 레인지가 넓다
+            const rd = this.getPrimaryOpponentRead ? this.getPrimaryOpponentRead(nick) : null;
+            if (rd && rd.aggression != null) x *= rd.aggression > 0.55 ? 1.3 : (rd.aggression < 0.2 ? 0.8 : 1);
+            const potOdds = toCall / (totalPot + toCall);
+            // 토너먼트는 탈락하면 끝이라 조금 더 요구한다. 뒤에 사람이 남았으면 더.
+            const behind = live.filter(n => n !== aggr && !this.players[n].isAllIn && !this.players[n].hasActed).length;
+            const edge = (isTourney ? 0.025 : 0) + behind * 0.02;
+            const res = ShortStack.shouldCallShove(code, Math.min(1, x), potOdds, edge);
+            this._lastBotEdge = res.equity - potOdds - edge;
+            if (!res.call) return { type: 'fold' };
+            // 받을 만한 패인데 내 칩이 남으면 — 아주 강할 때만 얹어 올인, 아니면 콜
+            if (p.chips > toCall && res.equity > 0.60) return shove();
+            return { type: 'call' };
+        }
+
+        // ── (나) 12bb 이하: 올인 아니면 폴드 ──
+        if (effBB <= 12) {
+            if (!facingRaise) {
+                const behind = Math.max(1, live.filter(n => !this.players[n].hasActed && !this.players[n].isAllIn).length);
+                const limped = live.some(n => (this.players[n].currentBet || 0) >= bb && this.players[n].hasActed);
+                let range = ShortStack.pushPct(effBB, behind) * (limped ? 0.8 : 1);
+                if (pct <= range) return shove();
+                if (toCall === 0) return { type: 'check' };              // BB 무료 체크
+                if (isBB && toCall <= bb * 0.5) return null;              // 거의 공짜면 평소대로
+                return { type: 'fold' };
+            }
+            // 오픈을 마주함 → 리쉬브 아니면 폴드 (숏스택 콜은 플랍에서 할 수 있는 게 없다)
+            const openX = raises >= 2 ? 0.07 : ShortStack.openPct(aggrP ? aggrP.position : '');
+            if (pct <= ShortStack.reshovePct(openX, effBB)) return shove();
+            if (isBB && toCall <= bb * 1.5 && effBB >= 6) return null;    // BB 는 싸게 볼 수 있으면 평소 방어
+            return { type: 'fold' };
+        }
+
+        // ── (다) 13~20bb: 늦은 포지션 스틸에 리쉬브 (스택 대비 팟이 커서 접게 만들면 큰 이득) ──
+        if (effBB <= 20 && facingRaise && raises <= 1 && aggrP && !aggrAllIn) {
+            const openX = ShortStack.openPct(aggrP.position);
+            if (pct <= ShortStack.reshovePct(openX, effBB) && Math.random() < 0.75) return shove();
+        }
+        return null;
+    }
+
     equityVsBettingRange(nick, betFrac, aggroStreets) {
         const p = this.players[nick];
         const cc = this.communityCards;
@@ -2018,6 +2108,7 @@ class GameRoom {
     scheduleNextHand(ms) {
         if (!rooms.has(this.roomId)) return false;
         if (this._nextHandTimer) return false; // 이미 누가 예약함
+        if (DEV_FAST) ms = Math.min(ms, 120);
         this._nextHandTimer = setTimeout(() => {
             this._nextHandTimer = null;
             this.startNextHand();
@@ -2308,6 +2399,11 @@ class GameRoom {
         const bl = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)];
         this.currentHighestBet = bl.bb;
         this.lastFullRaiseAmount = bl.bb;
+        // 🐛 레이즈 횟수는 "새 스트리트"에서만 0으로 돌아갔고 "새 핸드"에서는 안 돌아갔다.
+        //    프리플랍에서 끝난 핸드의 레이즈가 다음 핸드로 계속 쌓여(실측: 오픈도 없는데 9, 11),
+        //    봇이 평범한 오픈을 3벳·4벳 팟으로 착각해 너무 좁게 방어하고 밸류 3벳도 못 했다.
+        //    3벳 통계와 학습모드 조언도 같은 값을 써서 함께 틀어져 있었다.
+        this.raiseCountThisStreet = 0;
 
         this.playerOrder.forEach(nick => {
             this.players[nick].hand = [this.deck.pop(), this.deck.pop()];
@@ -2420,6 +2516,7 @@ class GameRoom {
         this.currentHighestBet = 0;
         this.lastFullRaiseAmount = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
         this.raiseCountThisStreet = 0; // 📊 새 스트리트 — 레이즈 카운트 리셋
+        this._legacyRaiseCount = 0;
 
         // 🎲 [런잇트와이스] 카드를 깔기 전에 판정 — 올인으로 액션이 끝났고 아직 깔 카드가 남았으면
         //    보드를 두 번 깐다. (이미 발동했으면 재진입 금지 — ritBoards가 증거)
@@ -2556,6 +2653,7 @@ class GameRoom {
                 const raiseDiff = p.currentBet - this.currentHighestBet;
                 this.currentHighestBet = p.currentBet;
                 this.raiseCountThisStreet = (this.raiseCountThisStreet || 0) + 1; // 📊 3벳 감지
+                this._legacyRaiseCount = (this._legacyRaiseCount || 0) + 1;       // 🔬 A/B 전용: 고치기 전 동작 재현
                 if (raiseDiff >= this.lastFullRaiseAmount) {
                     this.lastFullRaiseAmount = raiseDiff;
                     this.playerOrder.forEach(n => {
@@ -2623,6 +2721,13 @@ class GameRoom {
 
     // 🧠 [#2] 특정 상대의 성향 요약 (봇 의사결정 입력)
     getOpponentRead(nick) {
+        // 🧠 세션 표본이 모자라도, 사람이면 계정 누적 전적으로 첫 판부터 성향을 안다
+        const session = this._sessionRead(nick);
+        const pl = this.players[nick];
+        if (!pl || pl.isBot) return session;
+        return OppModel.blendRead(session, OppModel.lifetimeRead(MockDB.users.get(nick)));
+    }
+    _sessionRead(nick) {
         const s = this.oppStats[nick];
         if (!s || s.samples < 6) return null; // 표본 부족 시 기본 전략
         return {
