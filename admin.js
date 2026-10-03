@@ -8,7 +8,7 @@
 //    여기 적는 순간 누구나 읽을 수 있다. 환경변수 ADMIN_USER / ADMIN_PASS 로만 받고,
 //    설정이 없으면 라우터 자체를 꺼서 관리자 페이지가 아예 열리지 않게 한다.
 //
-// 이 페이지는 "보기 전용"이다. 계정을 고치거나 지우는 기능은 없다 —
+// 이 페이지에서 바꿀 수 있는 건 "뱅크롤 지급/회수" 하나뿐이다(운영자가 요청해서 추가). 계정을 지우는 기능은 없다 —
 // 실수 한 번으로 남의 기록이 날아가는 버튼은 요청받은 적이 없으므로 만들지 않았다.
 // ════════════════════════════════════════════════════════════
 const express = require('express');
@@ -157,6 +157,29 @@ module.exports = function createAdminRouter(deps) {
         res.json({ rows, labels: TYPE_LABEL });
     });
 
+    // 💰 뱅크롤 지급/회수 — 이 페이지에서 유일하게 "바꾸는" 기능.
+    //    · 있는 계정에만 (조회하다 새 계정이 생기면 안 된다) · 한 번에 ±1,000만 이내 · 전부 접속 기록에 남긴다
+    //    · peakBankroll 은 건드리지 않는다 — 운영자가 준 돈으로 등급 테두리가 열리면 등급의 뜻이 없어진다
+    router.post('/api/grant', needAuth, express.json({ limit: '2kb' }), (req, res) => {
+        const nick = String((req.body && req.body.nick) || '');
+        const amount = Number(req.body && req.body.amount);
+        if (!d.MockDB || !d.MockDB.users.has(nick)) return res.status(404).json({ error: '그런 계정이 없습니데이.' });
+        if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 10000000) {
+            return res.status(400).json({ error: '금액은 0이 아닌 정수, 한 번에 ±1,000만 이내로 넣으이소.' });
+        }
+        const u = d.MockDB.users.get(nick);
+        const before = u.bankroll || 0;
+        u.bankroll = Math.max(0, before + amount);
+        d.MockDB.save();
+        d.accessLog && d.accessLog.push({
+            type: 'admin', nick: USER, ip: clientIp(req),
+            detail: `${nick} 뱅크롤 ${amount > 0 ? '+' : ''}${amount.toLocaleString()} → ${u.bankroll.toLocaleString()}`
+        });
+        // 접속 중이면 화면의 잔고도 바로 맞춰준다
+        try { d.io.sockets.sockets.forEach(sk => { if (sk.nickname === nick) sk.emit('bankrollUpdate', { bankroll: u.bankroll }); }); } catch (e) {}
+        res.json({ ok: true, nick, before, after: u.bankroll });
+    });
+
     router.get('/api/users', needAuth, (req, res) => {
         if (!d.MockDB) return res.json({ rows: [] });
         const q = String(req.query.q || '').toLowerCase();
@@ -265,7 +288,7 @@ function dashboardPage() {
 
 <div class="card" id="panel"></div>
 <div class="note">기록은 최근 3,000건 · 최대 60일까지만 보관되고 오래된 것부터 자동으로 지워집니다.<br>
-이 페이지는 보기 전용입니다 — 여기서 계정을 고치거나 지울 수 없습니다.</div>
+바꿀 수 있는 건 계정 탭의 뱅크롤 지급/회수뿐이고, 한 건 한 건 접속 기록에 남습니다.</div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -366,11 +389,26 @@ async function render() {
       if (r.status === 401) { location.reload(); return; }
       const { rows } = await r.json();
       holder.textContent = '';
-      holder.appendChild(table(['닉네임','뱅크롤','최고','우승','핸드','비번','사진','마지막 접속'], rows, (tr, u) => {
+      holder.appendChild(table(['닉네임','뱅크롤','최고','우승','핸드','비번','사진','마지막 접속','지급'], rows, (tr, u) => {
         td(tr, u.nick); td(tr, num(u.bankroll), 'num'); td(tr, num(u.peak), 'num');
         td(tr, String(u.wins), 'num'); td(tr, num(u.hands), 'num');
         td(tr, u.hasPin ? '○' : '-'); td(tr, u.hasPhoto ? '○' : '-');
         td(tr, u.lastSeen ? fmt(u.lastSeen) + ' (' + ago(u.lastSeen) + ' 전)' : '-');
+        const gc = document.createElement('td'); const gb = document.createElement('button');
+        gb.className = 'btn'; gb.textContent = '💰 지급'; gb.style.padding = '3px 9px';
+        gb.onclick = async () => {
+          const raw = prompt(u.nick + ' 에게 줄 뱅크롤 (빼려면 음수, 예: 200000)');
+          if (raw === null) return;
+          const amount = Number(String(raw).replace(/[,s]/g, ''));
+          if (!Number.isInteger(amount) || amount === 0) { alert('0이 아닌 정수로 넣으이소.'); return; }
+          if (!confirm(u.nick + ' 뱅크롤 ' + (amount > 0 ? '+' : '') + amount.toLocaleString() + ' — 진행할까예?')) return;
+          const r = await fetch('/admin/api/grant', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ nick: u.nick, amount }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) { alert(j.error || '실패했습니데이.'); return; }
+          alert(j.nick + ': ' + num(j.before) + ' → ' + num(j.after));
+          run();
+        };
+        gc.appendChild(gb); tr.appendChild(gc);
       }));
     };
     $('#u-go').onclick = run;
