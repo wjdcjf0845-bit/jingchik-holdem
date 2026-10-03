@@ -3088,6 +3088,186 @@
             text-shadow: 0 1px 2px rgba(0,0,0,0.8); box-shadow: 0 4px 12px rgba(0,0,0,0.7) !important;
         }
         .equity-badge.eq-lead { background: linear-gradient(180deg, #2fd88a, #0f8f54) !important; color: #ffffff !important; border-color: #b8ffd9 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.7), 0 0 14px rgba(47,216,138,0.6) !important; }
+    
+        /* ═══════════════════════════════════════════════════════════════
+           🎨 힉스필드 재디자인 — 배경·펠트·로고 그림(/skins/ui_*.webp) + 간소화한 좌석 상태창
+           ═══════════════════════════════════════════════════════════════ */
+
+        /* ── 게임 화면 바탕: 어두운 카지노 플로어 ── */
+        body {
+            background:
+                linear-gradient(180deg, rgba(5,8,16,0.30) 0%, rgba(5,8,16,0.62) 100%),
+                url(/skins/ui_room.webp) center / cover no-repeat fixed,
+                #070b16 !important;
+        }
+
+        /* ── 테이블: 색은 변수(--felt-*)가 정하고, 흑백 펠트 그림을 overlay 로 얹어 천의 결만 입힌다
+              (그래야 컴까기의 파란 테이블·보스전의 붉은 테이블이 그대로 산다) ── */
+        .poker-table {
+            background:
+                radial-gradient(ellipse 60% 50% at 50% 36%, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0) 62%) padding-box,
+                url(/skins/ui_felt.webp) center / cover no-repeat padding-box,
+                radial-gradient(ellipse at center, var(--felt-1) 0%, var(--felt-2) 55%, var(--felt-3) 100%) padding-box,
+                linear-gradient(180deg, #4b5266 0%, #1c2030 18%, #090b12 55%, #262b3c 100%) border-box !important;
+            background-blend-mode: normal, overlay, normal, normal;
+            box-shadow:
+                inset 0 0 0 2px rgba(255,214,120,0.95),
+                inset 0 0 0 6px rgba(0,0,0,0.5),
+                inset 0 0 0 7px rgba(255,214,120,0.22),
+                inset 0 20px 80px rgba(0,0,0,0.5),
+                inset 0 0 130px rgba(0,0,0,0.6),
+                0 0 0 1px rgba(255,255,255,0.12),
+                0 34px 80px rgba(0,0,0,0.8),
+                0 0 90px rgba(0,0,0,0.5) !important;
+        }
+
+        /* ── 로그인·대기실 바탕: 라운지 ── */
+        #login-overlay {
+            background:
+                radial-gradient(ellipse 70% 60% at 50% 45%, rgba(5,8,16,0.35) 0%, rgba(5,8,16,0.86) 100%),
+                url(/skins/ui_lounge.webp) center / cover no-repeat !important;
+        }
+        #lobby-overlay {
+            background:
+                linear-gradient(180deg, rgba(5,8,16,0.72) 0%, rgba(5,8,16,0.90) 100%),
+                url(/skins/ui_lounge.webp) center / cover no-repeat !important;
+        }
+        #login-overlay .suit-float, #lobby-overlay .suit-float { display: none; }
+
+        /* ── 로그인 카드 ── */
+        .login-box.login-card {
+            background: linear-gradient(170deg, rgba(24,31,58,0.90) 0%, rgba(8,11,22,0.95) 100%) !important;
+            border: 1px solid rgba(255,214,120,0.38) !important;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.7), 0 0 60px rgba(255,200,87,0.10), inset 0 1px 0 rgba(255,255,255,0.12) !important;
+            -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+            padding-top: 22px;
+        }
+        .login-logo { display: block; width: 190px; height: auto; margin: -8px auto 2px; filter: drop-shadow(0 12px 26px rgba(0,0,0,0.6)); pointer-events: none; }
+        .login-card h1 { margin-top: 0; }
+        @media screen and (max-height: 520px) { .login-logo { width: 84px; margin: -4px auto 0; } }
+        @media screen and (max-width: 520px) { .login-logo { width: 132px; } }
+
+        /* ── 대기실 ── */
+        #lobby-overlay .login-box.lobby-shell {
+            width: min(1040px, 96vw) !important; max-width: none; min-width: 0; box-sizing: border-box;
+            padding: 20px 24px 22px; text-align: left;
+            background: linear-gradient(170deg, rgba(20,26,48,0.86) 0%, rgba(7,10,20,0.93) 100%) !important;
+            border: 1px solid rgba(255,214,120,0.28) !important;
+            -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+        }
+        .lb-head { display: flex; align-items: center; gap: 14px; padding-bottom: 14px; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.09); }
+        .lb-logo { flex: 0 0 auto; width: 74px; height: auto; filter: drop-shadow(0 6px 14px rgba(0,0,0,0.6)); pointer-events: none; }
+        .lb-titles { flex: 1 1 auto; min-width: 0; }
+        #lobby-overlay .lb-titles h2 {
+            margin: 0 0 4px !important; padding: 0; border: none; font-size: 26px; line-height: 1.15; letter-spacing: 1px;
+            background: linear-gradient(100deg, #ffe7a8, #ffc857 55%, #d6951a);
+            -webkit-background-clip: text; background-clip: text;
+            color: transparent !important; -webkit-text-fill-color: transparent !important;
+        }
+        #lobby-overlay .lb-titles h2 small { font-family: var(--font-body); font-size: 13px; font-weight: 800; letter-spacing: 2px; color: #8d98b3; -webkit-text-fill-color: #8d98b3; margin-left: 6px; }
+        #lobby-nick { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; font-size: 15px; color: #fff; }
+        #lobby-nick b { font-weight: 900; }
+        .lb-bank { font-family: var(--font-num); font-weight: 700; font-size: 14px; color: #4be3a0; background: rgba(35,201,122,0.12); border: 1px solid rgba(75,227,160,0.4); border-radius: 999px; padding: 2px 11px; white-space: nowrap; }
+        .lb-head #lobby-profile { flex: 0 1 auto; margin: 0; padding: 8px 12px; gap: 11px; }
+        .lb-head #lp-avatar { width: 52px; height: 52px; font-size: 22px; }
+        .lb-head #lp-msg { display: none; }
+        .lb-head #lp-msg[style*="color"] { display: block; }   /* 올리기 결과(성공·실패)가 나왔을 때만 보인다 */
+
+        .lb-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+        @media screen and (min-width: 760px) { .lb-main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; } }
+        .lb-col { min-width: 0; }
+        .lb-sec { font-size: 13px; font-weight: 900; letter-spacing: 1px; color: #c3cbe0; margin: 0 0 9px; }
+        .lb-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 12px; }
+        #lobby-overlay .lb-tile {
+            position: relative; display: flex; align-items: center; gap: 10px; text-align: left;
+            width: auto !important; margin: 0 !important; padding: 11px 12px !important; min-width: 0;
+            font-size: 14px !important; letter-spacing: 0 !important; border-radius: 14px !important;
+            background: linear-gradient(165deg, rgba(44,56,92,0.92), rgba(18,24,44,0.96)) !important;
+            border: 1px solid rgba(255,255,255,0.12) !important; color: #fff !important;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.10) !important;
+        }
+        #lobby-overlay .lb-tile:hover { transform: translateY(-2px); border-color: var(--tile, #ffc857) !important; filter: none; color: #fff !important; }
+        #lobby-overlay .lb-tile .lt-ico {
+            flex: 0 0 auto; width: 40px; height: 40px; border-radius: 12px; font-size: 21px;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--tile-grad); box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 4px 10px rgba(0,0,0,0.4);
+        }
+        #lobby-overlay .lb-tile .lt-txt { display: flex; flex-direction: column; min-width: 0; }
+        #lobby-overlay .lb-tile b { font-weight: 900; font-size: 14.5px; color: #fff !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #lobby-overlay .lb-tile small { font-weight: 600; font-size: 11px; color: #9aa6c2 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #challenge-btn.lb-tile { --tile: #5ad1ff; --tile-grad: linear-gradient(180deg, #5ad1ff, #1f86e0); }
+        #learn-btn.lb-tile     { --tile: #2bd389; --tile-grad: linear-gradient(180deg, #2bd389, #12995c); }
+        #daily-btn.lb-tile     { --tile: #ffb84d; --tile-grad: linear-gradient(180deg, #ffb84d, #f08a1c); }
+        #shop-btn.lb-tile      { --tile: #b47bff; --tile-grad: linear-gradient(180deg, #b47bff, #7a45e0); }
+        .lb-tile .daily-badge { top: -6px; right: -6px; }
+        .lobby-shell .rank-row { margin: 0 0 16px; padding: 0; border: none; }
+        .lobby-shell .settings-panel { margin-bottom: 10px; }
+        .lobby-shell #room-input { box-sizing: border-box; margin-bottom: 9px; }
+        .lobby-shell #btn-create-room { margin-bottom: 0 !important; }
+        .lobby-shell .lb-col > br { display: none; }
+        .lobby-shell .room-list-box { margin-bottom: 14px; }
+        .lobby-shell #lobby-social { margin-top: 0; }
+        @media screen and (max-width: 520px) {
+            #lobby-overlay .login-box.lobby-shell { padding: 14px 13px 16px; }
+            .lb-head { flex-wrap: wrap; gap: 10px; }
+            .lb-logo { width: 54px; }
+            #lobby-overlay .lb-titles h2 { font-size: 21px; }
+            .lb-head #lobby-profile { flex: 1 1 100%; }
+            #lobby-overlay .lb-tile { padding: 9px 9px !important; gap: 8px; }
+            #lobby-overlay .lb-tile .lt-ico { width: 34px; height: 34px; font-size: 18px; border-radius: 10px; }
+            #lobby-overlay .lb-tile b { font-size: 13px; }
+            #lobby-overlay .lb-tile small { font-size: 10px; }
+        }
+        @media screen and (max-width: 960px) and (orientation: landscape) {
+            #lobby-overlay .login-box.lobby-shell { padding: 12px 16px 14px; }
+            .lb-head { padding-bottom: 9px; margin-bottom: 10px; }
+            .lb-logo { width: 50px; }
+            #lobby-overlay .lb-titles h2 { font-size: 20px; }
+            .lb-head #lp-avatar { width: 42px; height: 42px; font-size: 18px; }
+        }
+
+        /* ═══ 🪪 좌석 상태창 — 간소화 ═══
+           칭호줄·ME/폴드 태그·왕관 칸을 걷어내고 닉네임 · 칩 · 카드만 남겼다.
+           · 넓은 화면(PC): 한 줄에 [아바타] [닉네임 / 칩] [카드]
+           · 폰: 폭이 모자라 닉네임이 잘리므로 예전 격자(닉네임 줄 / 아바타·칩 | 카드)를 그대로 쓴다.
+             ⚠️ 폰에서는 좌석의 폭·키를 바꾸지 않는다 — 실측으로 맞춰 둔 배치가 틀어진다. */
+        .player-spot .ps-row {
+            display: grid; align-items: center; row-gap: 2px;
+            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-areas: "nick nick" "av cards" "chips cards";
+        }
+        .player-spot .ps-info { display: contents; }
+        .ps-row > .avatar { grid-area: av; justify-self: start; }
+        .ps-row > .ps-cards { grid-area: cards; }
+        .ps-line { display: flex; align-items: center; gap: 4px; min-width: 0; }
+        .ps-l1 { grid-area: nick; }
+        .ps-l2 { grid-area: chips; }
+        .ps-line .ps-nick { flex: 0 1 auto; line-height: 1.25; }
+        /* 포지션(UTG·CO…)은 D/SB/BB 배지가 없는 좌석에만, 같은 모서리에 작은 알약으로 — 닉네임 칸을 안 잡아먹는다 */
+        .player-spot > .pos-badge { position: absolute; top: -8px; right: 8px; z-index: 2; line-height: 1.35; background: #1a2238 !important; }
+        .chips-info.zero { display: none; }
+        .ps-state { flex: 0 0 auto; font-size: 0.74em; font-weight: 900; letter-spacing: 0.3px; color: #aeb9d4; white-space: nowrap; }
+        .ps-state.allin { color: #fff; background: linear-gradient(180deg, #ff5a4d, #c9261a); border-radius: 999px; padding: 1px 7px; font-family: var(--font-num); box-shadow: 0 0 10px rgba(240,72,58,0.55); }
+        /* 폰: 칩 옆에 '폴드'까지 붙이면 칸이 넘친다 — 흐려진 좌석이 이미 말해 주니 올인·탈락·관전만 남긴다 */
+        @media screen and (max-width: 960px) {
+            .chips-info:not(.zero) + .ps-state:not(.allin) { display: none; }
+            .ps-state { font-size: 0.8em; }
+            .ps-state.allin { padding: 0 5px; }
+        }
+        @media screen and (min-width: 961px) {
+            .player-spot { min-width: 196px; max-width: 214px; padding: 8px 11px 8px 9px; border-radius: 14px; }
+            .player-spot .ps-row {
+                column-gap: 9px; row-gap: 3px;
+                grid-template-columns: auto minmax(0, 1fr) auto;
+                grid-template-areas: "av nick cards" "av chips cards";
+            }
+            .player-spot.me { max-width: 252px; }
+            .ps-l1 { align-self: end; } .ps-l2 { align-self: start; }
+            .player-spot .avatar { width: 40px; height: 40px; font-size: 17px; }
+            .ps-state { font-size: 11px; }
+            /* 상대 카드는 겹쳐서 폭을 아낀다 (뒷면이라 정보가 없다 · 쇼다운 때도 왼쪽 위 숫자는 둘 다 보인다) */
+            .player-spot:not(.me) .cards .card-container + .card-container { margin-left: -18px; }
+        }
     </style>
 </head>
 <body>
@@ -3215,7 +3395,8 @@
     <div class="suit-float sf-2">♥</div>
     <div class="suit-float sf-3">♣</div>
     <div class="suit-float sf-4">♦</div>
-    <div class="login-box">
+    <div class="login-box login-card">
+        <img class="login-logo" src="/skins/ui_logo.webp" alt="" width="440" height="390">
         <h1>징칡홀덤</h1>
         <div class="logo-sub"><span class="s-wht">♠</span> TEXAS HOLD'EM <span class="s-red">♥</span> PREMIUM <span class="s-red">♦</span> EDITION <span class="s-wht">♣</span></div>
         <input type="text" id="nick-input" class="login-input" placeholder="닉네임 입력" maxlength="12" autocomplete="off"><br>
@@ -3230,8 +3411,13 @@
 <div id="lobby-overlay" class="overlay" style="display:none;">
     <div class="suit-float sf-1">♠</div>
     <div class="suit-float sf-2">♦</div>
-    <div class="login-box" style="width: 560px; max-width: 96vw;">
-        <h2 style="color:white; margin-top:0; font-family: var(--font-disp); font-weight:400; letter-spacing:1px;">대기실 <br><span id="lobby-nick" style="color:var(--gold); font-size:19px;"></span></h2>
+    <div class="login-box lobby-shell">
+      <div class="lb-head">
+        <img class="lb-logo" src="/skins/ui_logo.webp" alt="" width="440" height="390">
+        <div class="lb-titles">
+            <h2>징칡홀덤 <small>대기실</small></h2>
+            <div id="lobby-nick"></div>
+        </div>
 
         <!-- 📷 내 프로필 사진 — 대기실에서 바로 올린다 (상점까지 들어갈 필요 없이) -->
         <div id="lobby-profile">
@@ -3244,7 +3430,29 @@
                 <div id="lp-msg">이미지 파일(JPG·PNG·WEBP)을 고르면 프로필 사진이 됩니데이</div>
             </div>
         </div>
-        
+      </div>
+
+      <div class="lb-main">
+       <div class="lb-col lb-play">
+        <div class="lb-sec">🎮 바로 즐기기</div>
+        <div class="lb-tiles">
+            <button id="challenge-btn" class="btn-join lb-tile" onclick="openChallenge()"><span class="lt-ico">🤖</span><span class="lt-txt"><b>컴까기</b><small>AI 도장깨기 10단계</small></span></button>
+            <button id="learn-btn" class="btn-join lb-tile" onclick="startLearnMode()"><span class="lt-ico">🎓</span><span class="lt-txt"><b>GTO 학습</b><small>AI 5명과 실전 코칭</small></span></button>
+            <button id="daily-btn" class="btn-join lb-tile" onclick="openDaily()"><span class="lt-ico">🎁</span><span class="lt-txt"><b>출석 · 미션</b><small>매일 뱅크롤 보상</small></span><span id="daily-badge" class="daily-badge" style="display:none;">!</span></button>
+            <button id="shop-btn" class="btn-join lb-tile" onclick="openShop()"><span class="lt-ico">🎨</span><span class="lt-txt"><b>꾸미기 상점</b><small>뒷면 · 아바타 · 칭호</small></span></button>
+        </div>
+
+        <!-- 🏆 순위·전당 -->
+        <div class="rank-row">
+            <button class="rank-btn" onclick="socket.emit('getHallOfFame')" title="명예의 전당">🏆<span>전당</span></button>
+            <button class="rank-btn" onclick="socket.emit('getSeasonBoard')" title="시즌 랭킹">📅<span>시즌</span></button>
+            <button class="rank-btn" onclick="socket.emit('getBankrollBoard')" title="뱅크롤 순위">💰<span>뱅크롤</span></button>
+            <button class="rank-btn" onclick="socket.emit('getMttChampions')" title="MTT 챔피언">👑<span>챔피언</span></button>
+            <button class="rank-btn report" onclick="openSessionReport()" title="내 세션 리포트">📊<span>리포트</span></button>
+            <button class="rank-btn help" onclick="openHelp()" title="족보·규칙 도움말">📖<span>도움말</span></button>
+        </div>
+
+        <div class="lb-sec">♠ 방 만들기</div>
         <div class="settings-panel">
             <div class="setting-row">
                 <span>🎮 게임 모드</span>
@@ -3289,36 +3497,9 @@
         <input type="text" id="room-input" class="login-input" placeholder="생성할 방 이름" maxlength="20" autocomplete="off" style="width:100%;"><br>
         <button class="btn-join" id="btn-create-room" onclick="createRoom()" style="width: 100%; margin-bottom: 14px;">♠ 새 방 만들기</button>
 
-        <!-- 🏆 순위·전당 — 작은 아이콘 줄로 압축 -->
-        <div class="rank-row">
-            <button class="rank-btn" onclick="socket.emit('getHallOfFame')" title="명예의 전당">🏆<span>전당</span></button>
-            <button class="rank-btn" onclick="socket.emit('getSeasonBoard')" title="시즌 랭킹">📅<span>시즌</span></button>
-            <button class="rank-btn" onclick="socket.emit('getBankrollBoard')" title="뱅크롤 순위">💰<span>뱅크롤</span></button>
-            <button class="rank-btn" onclick="socket.emit('getMttChampions')" title="MTT 챔피언">👑<span>챔피언</span></button>
-            <button class="rank-btn report" onclick="openSessionReport()" title="내 세션 리포트">📊<span>리포트</span></button>
-            <button class="rank-btn help" onclick="openHelp()" title="족보·규칙 도움말">📖<span>도움말</span></button>
-        </div>
+       </div>
 
-        <!-- 🎓 GTO 학습 모드 -->
-        <button id="learn-btn" class="btn-join" onclick="startLearnMode()" style="width:100%; margin-bottom:14px; background: linear-gradient(180deg, #2c5f4a, #18443a 60%, #0e2c22); color:#7bedaa; box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 6px 16px rgba(0,0,0,0.5); text-shadow:none; font-weight:900;">
-            🎓 GTO 학습 모드 <span style="font-size:11px; color:var(--txt-dim); font-weight:400;">(AI 5명과 1:5 실전 코칭)</span>
-        </button>
-
-        <!-- 🤖 컴까기 — AI 도장깨기 -->
-        <button id="challenge-btn" class="btn-join" onclick="openChallenge()" style="width:100%; margin-bottom:14px;">
-            🤖 컴까기 <span style="font-size:11px; font-weight:400;">(AI 도장깨기 — 10단계를 깨고 보상 받기)</span>
-        </button>
-
-        <!-- 🎁 일일 보상 -->
-        <button id="daily-btn" class="btn-join" onclick="openDaily()" style="width:100%; margin-bottom:14px; background: linear-gradient(180deg, #5f4a2c, #443218 60%, #2c1f0e); color:#ffd97a; box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 6px 16px rgba(0,0,0,0.5); text-shadow:none; position:relative;">
-            🎁 출석 · 일일 미션 <span id="daily-badge" class="daily-badge" style="display:none;">!</span>
-        </button>
-
-        <!-- 🎨 꾸미기 상점 -->
-        <button id="shop-btn" class="btn-join" onclick="openShop()" style="width:100%; margin-bottom:14px; background: linear-gradient(180deg, #5f2c3a, #44182a 60%, #2c0e1c); color:#ffb0c4; box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 6px 16px rgba(0,0,0,0.5); text-shadow:none; font-weight:900;">
-            🎨 꾸미기 상점 <span style="font-size:11px; color:var(--txt-dim); font-weight:400;">(우승 토큰으로 — 뒷면 · 아바타 · 칭호)</span>
-        </button>
-
+       <div class="lb-col lb-rooms">
         <!-- 🎮 열린 방 목록 (박스 경계 + 헤더) -->
         <div class="room-list-box">
             <div class="room-list-header">🎮 열린 방 <span id="room-count" class="room-count">0</span></div>
@@ -3340,6 +3521,8 @@
                 </div>
             </div>
         </div>
+       </div>
+      </div>
     </div>
 </div>
 
@@ -4144,7 +4327,7 @@
 
     function updateLobbyBankroll() {
         const el = document.getElementById('lobby-nick');
-        if (el) el.innerHTML = `[${esc(myNickname)}] <span style="color:#7bedaa;">💰 보유 ${myBankroll.toLocaleString()}</span>`;
+        if (el) el.innerHTML = `<b>${esc(myNickname)}</b><span class="lb-bank">💰 ${myBankroll.toLocaleString()}</span>`;
     }
     socket.on('bankrollUpdate', d => {
         myBankroll = d.bankroll || 0;
@@ -4968,16 +5151,17 @@
             div.className = cls;
             const _cos = cosOf(nick);
             const _av = avatarAttrs(nick, _cos);
-            const _titleHtml = _cos.title ? `<div class="ps-title">${esc(_cos.title)}</div>` : '';
-            div.innerHTML = `${roleHtml}${betChipHtml}
-                <div class="ps-namebar">${hostCrown ? `<span class="ps-crown">${hostCrown}</span>` : ''}<span class="ps-nick">${title}</span>${posHtml}</div>${_titleHtml}
+            // 🪪 간소화한 상태창 — 한 줄에 [아바타] [닉네임 / 칩] [카드]. 칭호는 프로필(좌석을 누르면)에서 본다.
+            //    상태는 칩 옆에 한 단어로만: 올인이면 칩(0) 대신 ALL IN, 탈락·관전이면 그 말만 남긴다.
+            const _state = p.isDisconnected ? '자리비움' : p.isSpectator ? '관전' : p.isAllIn ? 'ALL IN' : (p.chips <= 0 ? '탈락' : (p.isFolded ? '폴드' : ''));
+            const _stateHtml = _state ? `<span class="ps-state${_state === 'ALL IN' ? ' allin' : ''}">${_state}</span>` : '';
+            const _zero = (p.chips <= 0 && _state && _state !== '폴드' && _state !== '자리비움') ? ' zero' : '';
+            div.innerHTML = `${roleHtml || posHtml}${betChipHtml}
                 <div class="ps-row">
+                    <div class="avatar${_av.cls}" style="${_av.style}">${avatarInitial(nick)}</div>
                     <div class="ps-info">
-                        <div class="ps-head">
-                            <div class="avatar${_av.cls}" style="${_av.style}">${avatarInitial(nick)}</div>
-                            ${tag ? `<span class="ps-tag">${tag}</span>` : ''}
-                        </div>
-                        <div class="chips-info"><span class="chip-ico"></span>${p.chips.toLocaleString()}</div>
+                        <div class="ps-line ps-l1"><span class="ps-nick">${hostCrown}${title}</span></div>
+                        <div class="ps-line ps-l2"><div class="chips-info${_zero}"><span class="chip-ico"></span>${p.chips.toLocaleString()}</div>${_stateHtml}</div>
                     </div>
                     ${cardsHtml ? `<div class="ps-cards">${cardsHtml}</div>` : ''}
                 </div>
