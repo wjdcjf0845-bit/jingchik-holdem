@@ -35,6 +35,8 @@ const SHOWDOWN_REVEAL_MS = 3000; // 🃏 올인 쇼다운 — 카드 한 장을 
 const MUCK_CHOICE_MS = 6000;     // 🃏 진 사람이 패를 공개할지 정하는 시간
 const END_VOTE_MS = 30000; // 🗳️ 합의 종료 투표 제한시간
 const TIME_BANK_MS = 15000;      // ⏳ 타임뱅크 — 핸드당 1회, 더 쓸 수 있는 시간
+// 🏆 새 계정이 받는 토큰. 운영에선 0 — 시뮬레이션에서만 DEV_START_TOKENS 로 넣어 구매 흐름을 검증한다.
+const START_TOKENS = Math.max(0, parseInt(process.env.DEV_START_TOKENS, 10) || 0);
 const THROW_ITEMS = ['🍅', '🌹', '🥚', '👏']; // 🍅 상대에게 던질 수 있는 것 (연출 전용)
 const PHOTO_MAX_BYTES = 24000;   // 📷 프로필 사진 원본 상한 (클라가 128px 로 줄여 보내면 5~10KB)
 const PHOTO_MAX_B64 = 40000;     // 📷 data URL 문자열 상한 — 파싱 전에 먼저 걸러낸다
@@ -43,26 +45,27 @@ const photoRate = new Map();     // 📷 닉네임 → 마지막 업로드 시�
 const ADMIN_NICK = (process.env.ADMIN_USER || 'admin');
 let adminRouter = null;          // 아래에서 /admin 을 붙일 때 채워진다
 
-// 🎨 [상점] 뱅크롤로 사는 꾸미기 — 카드 뒷면 / 아바타 / 칭호.
+// 🎨 [상점] 우승 토큰으로 사는 꾸미기 — 카드 뒷면 / 아바타 / 칭호. (price = 토큰 개수)
+//    뱅크롤로 팔면 캐시에서 딴 돈으로 다 사버려 "우승의 증표"가 못 된다. 토너먼트 1승 = 토큰 1개.
 //    kind 별로 하나씩만 장착된다. price 0 은 기본 지급품이라 따로 살 필요가 없다.
 //    ⚠️ id 는 클라이언트 CSS(public/skins/<id>.webp)와 1:1로 묶여 있으니 바꾸지 말 것.
 const COSMETICS = {
     // ── 카드 뒷면 (이미지: public/skins/<id>.webp)
     back_classic: { kind: 'back', name: '기본 문양',   price: 0,      desc: '처음부터 주어지는 기본 뒷면' },
-    back_verm:    { kind: 'back', name: '버밀리언 데코', price: 30000,  desc: '주홍 잉크로 찍어낸 아르데코 태양' },
-    back_jade:    { kind: 'back', name: '옥빛 물결',   price: 50000,  desc: '청해파 문양을 새긴 목판화' },
-    back_noir:    { kind: 'back', name: '느와르',      price: 80000,  desc: '1920년대 흑백 개츠비' },
-    back_peony:   { kind: 'back', name: '목단',        price: 120000, desc: '겨자빛 모란이 만발한 뒷면' },
-    back_star:    { kind: 'back', name: '별자리',      price: 200000, desc: '한밤의 은빛 천문도' },
-    back_royal:   { kind: 'back', name: '황금 왕관',   price: 350000, desc: '감청 바탕에 금박을 올린 세공' },
+    back_verm:    { kind: 'back', name: '버밀리언 데코', price: 1,  desc: '주홍 잉크로 찍어낸 아르데코 태양' },
+    back_jade:    { kind: 'back', name: '옥빛 물결',   price: 1,  desc: '청해파 문양을 새긴 목판화' },
+    back_noir:    { kind: 'back', name: '느와르',      price: 2,  desc: '1920년대 흑백 개츠비' },
+    back_peony:   { kind: 'back', name: '목단',        price: 2, desc: '겨자빛 모란이 만발한 뒷면' },
+    back_star:    { kind: 'back', name: '별자리',      price: 3, desc: '한밤의 은빛 천문도' },
+    back_royal:   { kind: 'back', name: '황금 왕관',   price: 5, desc: '감청 바탕에 금박을 올린 세공' },
     // ── 아바타
     av_none:   { kind: 'avatar', name: '이니셜',  price: 0,      desc: '닉네임 첫 글자' },
-    av_fox:    { kind: 'avatar', name: '여우',    price: 20000,  desc: '얍삽한 블러퍼' },
-    av_cat:    { kind: 'avatar', name: '고양이',  price: 20000,  desc: '표정을 안 주는 쪽' },
-    av_owl:    { kind: 'avatar', name: '올빼미',  price: 40000,  desc: '길게 보고 판단하는 쪽' },
-    av_wolf:   { kind: 'avatar', name: '늑대',    price: 60000,  desc: '물면 안 놓는다' },
-    av_shark:  { kind: 'avatar', name: '상어',    price: 100000, desc: '테이블의 포식자' },
-    av_dragon: { kind: 'avatar', name: '용',      price: 250000, desc: '아무나 못 다는 것' },
+    av_fox:    { kind: 'avatar', name: '여우',    price: 1,  desc: '얍삽한 블러퍼' },
+    av_cat:    { kind: 'avatar', name: '고양이',  price: 1,  desc: '표정을 안 주는 쪽' },
+    av_owl:    { kind: 'avatar', name: '올빼미',  price: 1,  desc: '길게 보고 판단하는 쪽' },
+    av_wolf:   { kind: 'avatar', name: '늑대',    price: 2,  desc: '물면 안 놓는다' },
+    av_shark:  { kind: 'avatar', name: '상어',    price: 3, desc: '테이블의 포식자' },
+    av_dragon: { kind: 'avatar', name: '용',      price: 5, desc: '아무나 못 다는 것' },
     // ── 🏅 등급 테두리 (살 수 없다 — 등급이 오르면 열린다. rank = 필요한 등급 번호)
     fr_none:   { kind: 'frame', price: 0, noBuy: true, rank: 0, name: '없음',      desc: '기본 테두리' },
     fr_bronze: { kind: 'frame', price: 0, noBuy: true, rank: 1, name: '구릿빛',    desc: '동네 고수의 증표' },
@@ -73,12 +76,12 @@ const COSMETICS = {
     av_photo:  { kind: 'avatar', price: 0, noBuy: true, photo: true, name: '내 사진', desc: '직접 올린 프로필 사진' },
     // ── 칭호 (이미지 없음 — 닉네임 옆에 붙는다)
     ti_none:  { kind: 'title', name: '없음',        price: 0,      text: '', desc: '칭호를 떼어 둡니데이' },
-    ti_rookie:{ kind: 'title', name: '입문자',    price: 10000,  text: '🌱 입문자', desc: '이제 막 판에 앉았습니데이' },
-    ti_bluff: { kind: 'title', name: '블러프 장인', price: 70000,  text: '🎭 블러프 장인', desc: '없는 패로 이기는 사람' },
-    ti_allin: { kind: 'title', name: '올인 러버',  price: 70000,  text: '🔥 올인 러버', desc: '고민은 짧게, 베팅은 크게' },
-    ti_rock:  { kind: 'title', name: '바위',      price: 90000,  text: '🪨 바위', desc: '좋은 패만 골라 칩니데이' },
-    ti_shark: { kind: 'title', name: '테이블 상어', price: 150000, text: '🦈 테이블 상어', desc: '앉은 자리가 곧 사냥터' },
-    ti_king:  { kind: 'title', name: '판의 지배자', price: 400000, text: '👑 판의 지배자', desc: '뱅크롤로 증명하는 자리' }
+    ti_rookie:{ kind: 'title', name: '입문자',    price: 1,  text: '🌱 입문자', desc: '이제 막 판에 앉았습니데이' },
+    ti_bluff: { kind: 'title', name: '블러프 장인', price: 2,  text: '🎭 블러프 장인', desc: '없는 패로 이기는 사람' },
+    ti_allin: { kind: 'title', name: '올인 러버',  price: 2,  text: '🔥 올인 러버', desc: '고민은 짧게, 베팅은 크게' },
+    ti_rock:  { kind: 'title', name: '바위',      price: 2,  text: '🪨 바위', desc: '좋은 패만 골라 칩니데이' },
+    ti_shark: { kind: 'title', name: '테이블 상어', price: 3, text: '🦈 테이블 상어', desc: '앉은 자리가 곧 사냥터' },
+    ti_king:  { kind: 'title', name: '판의 지배자', price: 6, text: '👑 판의 지배자', desc: '뱅크롤로 증명하는 자리' }
 };
 const COSMETIC_DEFAULTS = { back: 'back_classic', avatar: 'av_none', title: 'ti_none', frame: 'fr_none' };
 
@@ -395,6 +398,7 @@ const MockDB = {
                 pinHash: null, bankroll: 100000, deviceId: null,
                 cosmetics: { owned: [], back: 'back_classic', avatar: 'av_none', title: 'ti_none', frame: 'fr_none', frameAuto: true }, // 🎨 꾸미기
                 peakBankroll: 100000, // 🏅 등급 판정용 — 지금까지 모았던 최고 뱅크롤
+                tokens: START_TOKENS, // 🏆 우승 토큰 — 꾸미기는 이걸로만 산다
                 photo: null,          // 📷 직접 올린 프로필 사진 {b64, mime, ver}
                 h2h: {},              // ⚔️ 상대별 쇼다운 전적 {닉: {w, l}}
                 // 📊 포커 분석 지표 누적 카운터
@@ -427,6 +431,8 @@ const MockDB = {
         //    최소 10만은 찍었다고 보고, 지금 잔고가 그보다 크면 그 값을 쓴다.
         if (typeof u.peakBankroll !== 'number') u.peakBankroll = Math.max(u.bankroll || 0, 100000);
         if (u.photo === undefined) u.photo = null;                                 // 📷 프로필 사진
+        // 🏆 토큰은 우승할 때마다 1개. 이 기능이 생기기 전에 한 우승도 인정해 소급 지급한다.
+        if (typeof u.tokens !== 'number') u.tokens = (u.wins || 0) + (u.mttWins || 0);
         if (!u.h2h || typeof u.h2h !== 'object') u.h2h = {};                       // ⚔️ 상대전적
         normalizeCosmetics(u); // 🎨 꾸미기 — 구버전/손상 레코드 복구
         // 📊 포커 분석 지표 마이그레이션
@@ -453,6 +459,7 @@ const MockDB = {
         if (typeof nickname === 'string' && nickname.startsWith('🤖')) return; // 봇 제외
         const user = await this.getUser(nickname);
         user.wins = (user.wins || 0) + 1;
+        user.tokens = (user.tokens || 0) + 1; // 🏆 우승 토큰
         user.totalChips += 50000;
         user.seasonPoints = (user.seasonPoints || 0) + 100; // 🏆 우승 시즌 포인트
         this.save();
@@ -614,6 +621,7 @@ const MockDB = {
         if (typeof nickname === 'string' && nickname.startsWith('🤖')) return;
         const user = await this.getUser(nickname);
         user.mttWins = (user.mttWins || 0) + 1;
+        user.tokens = (user.tokens || 0) + 1; // 🏆 우승 토큰
         user.mttBestField = Math.max(user.mttBestField || 0, entrants || 0);
         user.seasonPoints = (user.seasonPoints || 0) + 300; // MTT 우승 시즌 보너스
         this.save();
@@ -2174,7 +2182,11 @@ class GameRoom {
                 this.tournamentStarted = false;
                 if (this.tournamentTimer) clearInterval(this.tournamentTimer);
 
-                MockDB.addWin(winner);
+                MockDB.addWin(winner).then(() => {
+                    const wp = this.players[winner];
+                    const wu = MockDB.users.get(winner);
+                    if (wp && !wp.isBot && wp.socketId && wu) io.to(wp.socketId).emit('tokenEarned', { tokens: wu.tokens || 0 });
+                });
                 // 💰 상금풀을 우승자 뱅크롤로 지급 (봇 우승이면 소멸)
                 const prize = this.prizePool || (this.startingChips * Object.keys(this.players).length);
                 if (!this.players[winner].isBot) {
@@ -4134,7 +4146,10 @@ io.on('connection', (socket) => {
             const existed = MockDB.users.has(safeNick);
             const user = await MockDB.getUser(safeNick);
 
-            if (!isReconnect) {
+            // 🔒 재접속이라고 PIN 확인을 건너뛰지 않는다.
+            //    예전엔 { reconnect: true } 한 줄로 남의 계정에 비밀번호 없이 들어올 수 있었다.
+            //    (isReconnect 는 이제 "세션 스냅샷을 새로 뜰지" 판단에만 쓴다)
+            {
                 if (!isValidPin(pin)) {
                     socket.emit('loginError', '비밀번호는 숫자 4자리로 입력해주세요.');
                     return;
@@ -4151,10 +4166,6 @@ io.on('connection', (socket) => {
                     socket.emit('loginError', '비밀번호가 일치하지 않습니데이. 다시 확인해주세요.');
                     return;
                 }
-            } else if (!user.pinHash) {
-                // 재접속인데 PIN 미설정 레코드면 거부 (정상 흐름 아님)
-                socket.emit('loginError', '비밀번호 인증이 필요합니다. 다시 로그인해주세요.');
-                return;
             }
 
             socket.nickname = user.nickname;
@@ -4608,6 +4619,7 @@ io.on('connection', (socket) => {
             owned: c.owned.slice(),
             equipped: { back: c.back, avatar: c.avatar, title: c.title, frame: c.frame },
             bankroll: u.bankroll || 0,
+            tokens: u.tokens || 0, // 🏆 우승 토큰
             // 🏅 내 등급 현황 (다음 등급까지 얼마나 남았는지 보여주려고)
             rank: {
                 idx: myRank, name: RANKS[myRank].name,
@@ -4636,15 +4648,14 @@ io.on('connection', (socket) => {
         // 🏅 테두리는 등급으로만, 📷 사진은 업로드로만 — 돈으로 사는 물건이 아니다
         if (item.noBuy) { socket.emit('shopResult', { ok: false, msg: '이건 돈으로 살 수 있는 게 아닙니데이.' }); return; }
         if (c.owned.includes(id)) { socket.emit('shopResult', { ok: false, msg: '이미 가지고 있습니데이.' }); return; }
-        if ((u.bankroll || 0) < item.price) {
-            socket.emit('shopResult', { ok: false, msg: `뱅크롤이 ${(item.price - (u.bankroll || 0)).toLocaleString()} 모자랍니데이.` });
+        if ((u.tokens || 0) < item.price) {
+            socket.emit('shopResult', { ok: false, msg: `토큰이 ${item.price - (u.tokens || 0)}개 모자랍니데이. 토너먼트에서 우승하면 1개씩 받습니데이.` });
             return;
         }
-        await MockDB.adjustBankroll(socket.nickname, -item.price);
+        u.tokens = (u.tokens || 0) - item.price; // 🏆 토큰으로만 산다 — 뱅크롤은 건드리지 않는다
         c.owned.push(id);
         c[item.kind] = id; // 산 건 바로 장착
         MockDB.save();
-        socket.emit('bankrollUpdate', { bankroll: u.bankroll || 0 });
         socket.emit('shopResult', { ok: true, msg: `${item.name} 구매 완료! 바로 장착했습니데이.` });
         socket.emit('shopData', shopPayload(u));
         const room = rooms.get(socket.currentRoom);

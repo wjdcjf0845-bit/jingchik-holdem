@@ -2763,7 +2763,7 @@
         .sh-item.eq { border-color: rgba(255,200,87,0.7) !important; box-shadow: 0 0 18px rgba(255,200,87,0.16) !important; }
         .shop-bank, .shop-rank, .pf-rank, .pf-h2h, .sh-prev.title { background: rgba(0,0,0,0.35) !important; border: 1px solid rgba(255,200,87,0.3) !important; color: #ffe7a8 !important; }
         .shop-rank .sr-next { color: #9aa6c2 !important; }
-        .shop-title, .sh-name { font-family: var(--font-body) !important; color: #fff; }
+        .shop-title, .sh-name, .shop-rank .sr-badge { font-family: var(--font-body) !important; color: #fff; }
         .pf-h2h b.w { color: #4be3a0 !important; }
         #throw-hint { background: rgba(12,16,30,0.95) !important; color: #fff !important; border: 1px solid rgba(255,200,87,0.5); }
         .checkin-day.done, .checkin-day.today, .btn-claim { background: var(--gold-grad) !important; color: #2c1c00 !important; border-color: transparent !important; }
@@ -2800,6 +2800,108 @@
         @media screen and (min-width: 961px) and (max-width: 1420px) {
             .poker-table { width: clamp(520px, calc(100vw - 600px), 820px); }
         }
+    
+        /* ═══ ✨ 금장·은장: 테두리가 돌면서 번쩍인다 ═══
+           전설(무지개)과 같은 방식 — 아바타 뒤에 살짝 큰 원(::after)을 깔고 돌린다.
+           z-index:0 으로 쌓임맥락을 만들어야 그 원이 좌석 뒤로 사라지지 않는다.
+           ⚠️ 광채는 box-shadow 가 아니라 filter 로 준다. 기존 테두리 규칙이 box-shadow 를
+              !important 로 잡고 있어서, 애니메이션으로는 덮어쓸 수 없다(!important 가 애니메이션을 이긴다). */
+        .avatar.fr-gold, .pf-avatar.fr-gold, .sh-prev.av.fr-gold,
+        .avatar.fr-silver, .pf-avatar.fr-silver, .sh-prev.av.fr-silver {
+            position: relative; z-index: 0; border-color: transparent !important;
+        }
+        .avatar.fr-gold::after, .pf-avatar.fr-gold::after, .sh-prev.av.fr-gold::after,
+        .avatar.fr-silver::after, .pf-avatar.fr-silver::after, .sh-prev.av.fr-silver::after {
+            content: ''; position: absolute; inset: -3px; border-radius: 50%; z-index: -1;
+            animation: frSpin 2.4s linear infinite;
+        }
+        .avatar.fr-gold::after, .pf-avatar.fr-gold::after, .sh-prev.av.fr-gold::after {
+            background: conic-gradient(#8a6410, #ffd76a, #fffbe6, #ffc857, #8a6410, #ffd76a, #fffbe6, #ffc857, #8a6410);
+        }
+        .avatar.fr-silver::after, .pf-avatar.fr-silver::after, .sh-prev.av.fr-silver::after {
+            background: conic-gradient(#5f6878, #dfe6f1, #ffffff, #a9b3c4, #5f6878, #dfe6f1, #ffffff, #a9b3c4, #5f6878);
+            animation-duration: 3.2s;
+        }
+        .avatar.fr-gold, .pf-avatar.fr-gold, .sh-prev.av.fr-gold { animation: frGlowGold 1.8s ease-in-out infinite; }
+        .avatar.fr-silver, .pf-avatar.fr-silver, .sh-prev.av.fr-silver { animation: frGlowSilver 2.4s ease-in-out infinite; }
+        @keyframes frGlowGold   { 0%, 100% { filter: drop-shadow(0 0 2px rgba(255,200,87,0.55)); } 50% { filter: drop-shadow(0 0 9px rgba(255,215,106,1)) brightness(1.12); } }
+        @keyframes frGlowSilver { 0%, 100% { filter: drop-shadow(0 0 2px rgba(220,230,245,0.45)); } 50% { filter: drop-shadow(0 0 8px rgba(255,255,255,0.95)) brightness(1.1); } }
+        /* 얼굴 위를 비스듬히 훑고 지나가는 빛줄기 */
+        .avatar.fr-gold::before, .pf-avatar.fr-gold::before, .sh-prev.av.fr-gold::before,
+        .avatar.fr-silver::before, .pf-avatar.fr-silver::before, .sh-prev.av.fr-silver::before,
+        .avatar.fr-legend::before, .pf-avatar.fr-legend::before, .sh-prev.av.fr-legend::before {
+            content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+            background: linear-gradient(115deg, transparent 45%, rgba(255,255,255,0.7) 50%, transparent 55%) no-repeat;
+            background-size: 260% 100%; background-position: 130% 0;
+            animation: frSweep 2.8s ease-in-out infinite;
+        }
+        @keyframes frSweep { 0%, 55% { background-position: 130% 0; } 100% { background-position: -130% 0; } }
+
+        /* ═══ 🏆 토큰 ═══ */
+        .token-toast {
+            position: fixed; left: 50%; top: 70px; transform: translateX(-50%); z-index: 4600;
+            background: linear-gradient(165deg, rgba(60,46,14,0.98), rgba(26,20,6,0.98)); color: #ffe7a8;
+            border: 1px solid rgba(255,200,87,0.75); border-radius: 999px; padding: 10px 20px;
+            font-weight: 900; font-size: 15px; white-space: nowrap; pointer-events: none;
+            box-shadow: 0 12px 34px rgba(0,0,0,0.6), 0 0 34px rgba(255,200,87,0.4);
+            animation: tokenToast 4.2s cubic-bezier(0.2, 1.3, 0.3, 1) forwards;
+        }
+        .token-toast small { font-size: 11px; font-weight: 600; color: #c9b27a; margin-left: 6px; }
+        .token-toast .tk-coin { display: inline-block; animation: tkSpin 1.1s ease-out; }
+        @keyframes tokenToast { 0% { opacity: 0; transform: translate(-50%, -24px) scale(0.8); } 10%, 85% { opacity: 1; transform: translate(-50%, 0) scale(1); } 100% { opacity: 0; transform: translate(-50%, -12px) scale(0.98); } }
+        @keyframes tkSpin { from { transform: rotateY(0) scale(1.6); } to { transform: rotateY(720deg) scale(1); } }
+        @media screen and (max-width: 560px) { .token-toast { font-size: 13px; padding: 8px 14px; } .token-toast small { display: none; } }
+
+        /* ═══ 💥 액션 연출 ═══ */
+        .action-bubble { box-shadow: 0 6px 16px rgba(0,0,0,0.5) !important; border: 1px solid rgba(255,255,255,0.25) !important; }
+        .fx-ring {
+            position: fixed; z-index: 2400; pointer-events: none; box-sizing: border-box;
+            width: var(--w, 100px); height: var(--h, 70px); margin: 0; border-radius: 14px;
+            transform: translate(-50%, -50%); opacity: 0;
+            animation: fxRing 0.75s ease-out forwards;
+        }
+        .fx-check { border: 2px solid rgba(255,255,255,0.85); }
+        .fx-call  { border: 2px solid #4be3a0; box-shadow: 0 0 18px rgba(75,227,160,0.7); }
+        .fx-raise { border: 3px solid #ffb347; box-shadow: 0 0 24px rgba(255,179,71,0.85); animation-duration: 0.85s; }
+        .fx-allin { border: 4px solid #ff5a4d; box-shadow: 0 0 34px rgba(255,90,77,0.95), inset 0 0 20px rgba(255,90,77,0.5); animation: fxRingBig 1s ease-out forwards; }
+        @keyframes fxRing    { 0% { opacity: 0.95; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.45); } }
+        @keyframes fxRingBig { 0% { opacity: 1;    transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(2.6); } }
+        .fx-spark {
+            position: fixed; z-index: 2401; pointer-events: none; width: 7px; height: 7px; border-radius: 50%;
+            transform: translate(-50%, -50%); box-shadow: 0 0 10px currentColor;
+            animation: fxSpark 0.7s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+        }
+        @keyframes fxSpark { 0% { opacity: 1; transform: translate(-50%, -50%) scale(1.3); } 100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.2); } }
+        .fx-foldcard {
+            position: fixed; z-index: 2400; pointer-events: none; width: 20px; height: 28px; border-radius: 3px;
+            background: repeating-linear-gradient(45deg, #1c2a55 0 3px, #14204a 3px 6px); border: 1px solid #ffc857;
+            transform: translate(-50%, -50%); box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            animation: fxFold 0.6s cubic-bezier(0.4, 0, 0.8, 0.6) forwards;
+        }
+        @keyframes fxFold { 0% { opacity: 0.95; transform: translate(-50%, -50%) rotate(0) scale(1); } 100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--rot)) scale(0.55); } }
+        .poker-table.fx-shake { animation: fxShake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+        @keyframes fxShake { 10%, 90% { translate: -2px 0; } 20%, 80% { translate: 4px 0; } 30%, 50%, 70% { translate: -6px 0; } 40%, 60% { translate: 6px 0; } }
+        .fx-allin-banner {
+            position: fixed; z-index: 3400; pointer-events: none; transform: translate(-50%, -50%);
+            text-align: center; white-space: nowrap; animation: fxAllin 1.45s cubic-bezier(0.2, 1.4, 0.3, 1) forwards;
+        }
+        .fx-allin-banner b {
+            display: block; font-family: var(--font-num); font-size: clamp(44px, 9vw, 92px); font-weight: 700; letter-spacing: 6px; line-height: 1;
+            background: linear-gradient(180deg, #fff3e0 0%, #ffb347 38%, #ff5a4d 70%, #b3120f 100%);
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+            filter: drop-shadow(0 0 22px rgba(255,90,77,0.9)) drop-shadow(0 6px 0 rgba(0,0,0,0.5));
+        }
+        .fx-allin-banner span { display: block; margin-top: 4px; font-weight: 900; font-size: clamp(13px, 2.4vw, 20px); color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.8); letter-spacing: 2px; }
+        @keyframes fxAllin {
+            0%   { opacity: 0; transform: translate(-50%, -50%) scale(2.6) rotate(-6deg); }
+            18%  { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-3deg); }
+            70%  { opacity: 1; transform: translate(-50%, -50%) scale(1.06) rotate(-3deg); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5) rotate(-3deg); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .fx-ring, .fx-spark, .fx-foldcard, .fx-allin-banner { display: none !important; }
+            .avatar[class*="fr-"], .pf-avatar[class*="fr-"], .avatar[class*="fr-"]::after, .avatar[class*="fr-"]::before { animation: none !important; }
+        }
     </style>
 </head>
 <body>
@@ -2815,7 +2917,7 @@
     <div class="shop-card">
         <div class="shop-head">
             <div class="shop-title">🎨 꾸미기 상점</div>
-            <div class="shop-bank">💰 <span id="shop-bankroll">0</span></div>
+            <div class="shop-bank" title="토너먼트에서 우승하면 1개씩 받습니데이">🏆 토큰 <span id="shop-tokens">0</span></div>
         </div>
         <div class="shop-tabs">
             <button class="shop-tab on" data-kind="back" onclick="shopTab('back')">🃏 카드 뒷면</button>
@@ -2990,7 +3092,7 @@
 
         <!-- 🎨 꾸미기 상점 -->
         <button id="shop-btn" class="btn-join" onclick="openShop()" style="width:100%; margin-bottom:14px; background: linear-gradient(180deg, #5f2c3a, #44182a 60%, #2c0e1c); color:#ffb0c4; box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 6px 16px rgba(0,0,0,0.5); text-shadow:none; font-weight:900;">
-            🎨 꾸미기 상점 <span style="font-size:11px; color:var(--txt-dim); font-weight:400;">(카드 뒷면 · 아바타 · 칭호)</span>
+            🎨 꾸미기 상점 <span style="font-size:11px; color:var(--txt-dim); font-weight:400;">(우승 토큰으로 — 뒷면 · 아바타 · 칭호)</span>
         </button>
 
         <!-- 🎮 열린 방 목록 (박스 경계 + 헤더) -->
@@ -3411,6 +3513,14 @@
     // 🛡️ admin 으로 로그인하면 서버가 1회용 입장권 주소를 준다 → 관리자 페이지로 이동
     socket.on('adminRedirect', d => { if (d && typeof d.url === 'string' && d.url.startsWith('/admin/')) location.href = d.url; });
     socket.on('shopData', d => { shopState = d || shopState; renderShop(); });
+    // 🏆 토너먼트 우승 → 토큰 1개. 화면 위쪽에 잠깐 알려준다.
+    socket.on('tokenEarned', d => {
+        const t = document.createElement('div');
+        t.className = 'token-toast';
+        t.innerHTML = '<span class="tk-coin">🏆</span> 우승 토큰 +1 <small>(보유 ' + (Number(d && d.tokens) || 0) + '개 · 꾸미기 상점에서 사용)</small>';
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 4200);
+    });
     socket.on('shopResult', r => { if (r) shopMsg(r.msg || '', !!r.ok); });
 
     function shopPreview(it) {
@@ -3426,9 +3536,11 @@
                 ? `<div class="sh-prev av" style="background-image:url('${photoUrl(myNickname, (shopState.photoVer || Date.now()))}')"></div>`
                 : '<div class="sh-prev av def" style="display:flex;align-items:center;justify-content:center;font-size:22px">📷</div>';
         }
+        // 카드 뒷면은 카드 모양(직사각), 아바타는 동그라미 — 한때 전부 동그라미로 나왔다
+        const shape = it.kind === 'back' ? 'back' : 'av';
         return hasSkin(it.id)
-            ? `<div class="sh-prev av" style="background-image:url('${skinUrl(it.id)}')"></div>`
-            : '<div class="sh-prev av def"></div>';
+            ? `<div class="sh-prev ${shape}" style="background-image:url('${skinUrl(it.id)}')"></div>`
+            : `<div class="sh-prev ${shape} def"></div>`;
     }
 
     function shopMsg(text, ok) {
@@ -3470,7 +3582,7 @@
     function renderShop() {
         const grid = document.getElementById('shop-grid');
         if (!grid) return;
-        document.getElementById('shop-bankroll').innerText = (shopState.bankroll || 0).toLocaleString();
+        document.getElementById('shop-tokens').innerText = (shopState.tokens || 0).toLocaleString();
         document.querySelectorAll('.shop-tab').forEach(b => b.classList.toggle('on', b.dataset.kind === shopKind));
 
         // 🏅 등급 배너 — 지금 등급과 다음 등급 조건
@@ -3506,7 +3618,7 @@
             } else if (it.noBuy || owned.includes(it.id)) {
                 btn = `<button class="sh-btn" onclick="socket.emit('equipCosmetic',{id:'${it.id}'})">장착</button>`;
             } else {
-                btn = `<button class="sh-btn buy" onclick="socket.emit('buyCosmetic',{id:'${it.id}'})">💰 ${(it.price || 0).toLocaleString()}</button>`;
+                btn = `<button class="sh-btn buy" onclick="socket.emit('buyCosmetic',{id:'${it.id}'})">🏆 ${it.price || 0}개</button>`;
             }
             return `<div class="sh-item ${isOn ? 'eq' : ''} ${(it.locked && it.id !== 'av_photo') ? 'locked' : ''}">${shopPreview(it)}
                 <div class="sh-name">${esc(it.name)}</div>
@@ -6501,8 +6613,69 @@
         setTimeout(() => bub.remove(), 1500);
     }
 
+    // 💥 [액션 연출] 누가 무엇을 했는지 소리·말풍선에 더해 "움직임"으로도 보여준다.
+    //    전부 body 에 띄우는 일회성 요소라 좌석이 다시 그려져도 끊기지 않고, 게임 상태엔 영향이 없다.
+    function playActionFX(nick, type) {
+        if (_noMotion()) return;
+        const el = document.getElementById('player-' + String(nick).replace(/\s/g, '_'));
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        if (!r.width) return;
+        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        const put = (cls, x, y, ms, html) => {
+            const d = document.createElement('div');
+            d.className = cls; d.style.left = x + 'px'; d.style.top = y + 'px';
+            if (html) d.innerHTML = html;
+            document.body.appendChild(d);
+            setTimeout(() => d.remove(), ms);
+            return d;
+        };
+        const ring = (kind, delay) => {
+            const d = put('fx-ring fx-' + kind, cx, cy, 950 + (delay || 0));
+            d.style.setProperty('--w', Math.round(r.width) + 'px');
+            d.style.setProperty('--h', Math.round(r.height) + 'px');
+            if (delay) d.style.animationDelay = delay + 'ms';
+        };
+        const sparks = (n, color, spread) => {
+            for (let i = 0; i < n; i++) {
+                const a = (Math.PI * 2 * i) / n + Math.random() * 0.5;
+                const dist = spread * (0.6 + Math.random() * 0.6);
+                const d = put('fx-spark', cx, cy, 800);
+                d.style.background = color;
+                d.style.setProperty('--dx', Math.round(Math.cos(a) * dist) + 'px');
+                d.style.setProperty('--dy', Math.round(Math.sin(a) * dist) + 'px');
+            }
+        };
+        if (type === 'check') ring('check');
+        else if (type === 'call') { ring('call'); sparks(5, '#4be3a0', 34); }
+        else if (type === 'raise') { ring('raise'); ring('raise', 130); sparks(9, '#ffb347', 52); }
+        else if (type === 'fold') {
+            // 카드 두 장이 테이블 가운데로 미끄러지며 사라진다 (머크 더미로 던지는 느낌)
+            const tb = document.querySelector('.poker-table');
+            const t = tb ? tb.getBoundingClientRect() : null;
+            if (!t) return;
+            const tx = t.left + t.width / 2, ty = t.top + t.height / 2;
+            [0, 1].forEach(i => {
+                const d = put('fx-foldcard', cx + (i ? 9 : -9), cy, 700);
+                d.style.setProperty('--dx', Math.round(tx - cx + (i ? 12 : -12)) + 'px');
+                d.style.setProperty('--dy', Math.round(ty - cy) + 'px');
+                d.style.setProperty('--rot', (i ? 200 : -160) + 'deg');
+                d.style.animationDelay = (i * 70) + 'ms';
+            });
+        } else if (type === 'allin') {
+            ring('allin'); ring('allin', 160); ring('allin', 320);
+            sparks(16, '#ff6557', 90);
+            const tb = document.querySelector('.poker-table');
+            if (tb) { tb.classList.remove('fx-shake'); void tb.offsetWidth; tb.classList.add('fx-shake'); setTimeout(() => tb.classList.remove('fx-shake'), 520); }
+            const b = put('fx-allin-banner', window.innerWidth / 2, window.innerHeight * 0.4, 1500,
+                '<b>ALL IN</b><span>' + esc(String(nick).replace('🤖', '').trim()) + '</span>');
+            b.style.left = '50%';
+        }
+    }
+
     socket.on('actionSound', data => {
         showActionBubble(data.nick, data.type);
+        playActionFX(data.nick, data.type);
 
         const volInput = document.getElementById('vol-voice');
         const volVal = volInput ? parseFloat(volInput.value) : 1.0;
