@@ -2826,14 +2826,15 @@
         .avatar.fr-silver, .pf-avatar.fr-silver, .sh-prev.av.fr-silver { animation: frGlowSilver 2.4s ease-in-out infinite; }
         @keyframes frGlowGold   { 0%, 100% { filter: drop-shadow(0 0 2px rgba(255,200,87,0.55)); } 50% { filter: drop-shadow(0 0 9px rgba(255,215,106,1)) brightness(1.12); } }
         @keyframes frGlowSilver { 0%, 100% { filter: drop-shadow(0 0 2px rgba(220,230,245,0.45)); } 50% { filter: drop-shadow(0 0 8px rgba(255,255,255,0.95)) brightness(1.1); } }
-        /* 얼굴 위를 비스듬히 훑고 지나가는 빛줄기 */
-        .avatar.fr-gold::before, .pf-avatar.fr-gold::before, .sh-prev.av.fr-gold::before,
-        .avatar.fr-silver::before, .pf-avatar.fr-silver::before, .sh-prev.av.fr-silver::before,
-        .avatar.fr-legend::before, .pf-avatar.fr-legend::before, .sh-prev.av.fr-legend::before {
-            content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
-            background: linear-gradient(115deg, transparent 45%, rgba(255,255,255,0.7) 50%, transparent 55%) no-repeat;
-            background-size: 260% 100%; background-position: 130% 0;
-            animation: frSweep 2.8s ease-in-out infinite;
+        /* 🐛 링(::after)은 z-index:-1 이어도 "아바타 자신의 배경(=사진)"보다는 위에 그려진다.
+              그래서 금·은·무지개 링이 사진을 통째로 덮고 있었다. 가운데를 마스크로 뚫어
+              사진 바깥 4px 고리만 남긴다. 얼굴 위를 훑던 빛줄기도 사진을 가려서 없앴다. */
+        .avatar.fr-gold::after, .pf-avatar.fr-gold::after, .sh-prev.av.fr-gold::after,
+        .avatar.fr-silver::after, .pf-avatar.fr-silver::after, .sh-prev.av.fr-silver::after,
+        .avatar.fr-legend::after, .pf-avatar.fr-legend::after, .sh-prev.av.fr-legend::after {
+            inset: -4px !important;
+            -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4.5px), #000 calc(100% - 3.5px));
+                    mask: radial-gradient(farthest-side, transparent calc(100% - 4.5px), #000 calc(100% - 3.5px));
         }
         @keyframes frSweep { 0%, 55% { background-position: 130% 0; } 100% { background-position: -130% 0; } }
 
@@ -3074,6 +3075,19 @@
         .cp-stage[disabled] { opacity: 0.45; cursor: default; }
         @media screen and (max-width: 960px) and (orientation: landscape) { #coop-panel { left: auto; right: 8px; bottom: 8px; transform: none; width: 34vw; min-width: 230px; padding: 9px 10px; } .cp-title { font-size: 13px; } .cp-stage { padding: 6px 9px; font-size: 11.5px; } }
         @media (prefers-reduced-motion: reduce) { .ch-intro-fx, .ch-ko { animation-duration: 0.01s !important; } body.challenge-boss .poker-table, body.challenge-boss::before, #ch-hud { animation: none !important; } }
+    
+        /* ═══ ⏱ 타임바 ═══
+           좌석은 상태가 올 때마다 다시 그려져서 바가 100%로 돌아갔다가 0.1초 동안 미끄러져 내려왔다(깜빡임) → 전환 제거 */
+        .time-bar-fill { transition: none !important; }
+        .time-bar-fill.danger { background: linear-gradient(90deg, #ff3b30, #ff8a4d) !important; box-shadow: 0 0 10px rgba(255,59,48,0.7); }
+
+        /* ═══ 📊 쇼다운 승률 배지 — 밝은 바탕에 노란 글자라 안 보였다 ═══ */
+        .equity-badge {
+            background: rgba(8,12,24,0.96) !important; color: #ffffff !important;
+            border: 1.5px solid rgba(255,255,255,0.55) !important; font-weight: 800; font-size: 13.5px;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8); box-shadow: 0 4px 12px rgba(0,0,0,0.7) !important;
+        }
+        .equity-badge.eq-lead { background: linear-gradient(180deg, #2fd88a, #0f8f54) !important; color: #ffffff !important; border-color: #b8ffd9 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.7), 0 0 14px rgba(47,216,138,0.6) !important; }
     </style>
 </head>
 <body>
@@ -3092,7 +3106,7 @@
             <div class="shop-title">🤖 컴까기 — AI 도장깨기</div>
             <div class="shop-bank" id="ch-progress">0 / 10</div>
         </div>
-        <div class="ch-intro">봇들과 토너먼트를 쳐서 <b>이기면</b> 다음 단계가 열립니데이. 참가비는 없고, 깨면 뱅크롤과 <b>🔷 코어</b>(컴까기 전용 재화)를 받습니데이.</div>
+        <div class="ch-intro"><b>원하는 단계를 바로 골라</b> 봇들과 토너먼트를 칩니데이. 참가비는 없고, 깨면 뱅크롤과 <b>🔷 코어</b>(컴까기 전용 재화)를 받습니데이.</div>
         <button class="ch-coop-btn" onclick="createCoop()">👥 친구랑 같이 깨기 <small>(최대 3명 · 방을 만들고 친구를 기다립니데이)</small></button>
         <div id="ch-ladder"></div>
         <div class="ch-top-title">🏅 컴까기 순위</div>
@@ -3733,7 +3747,7 @@
     }
     socket.on('challengeData', d => {
         if (!d) return;
-        document.getElementById('ch-progress').innerText = `${d.progress.best} / ${d.total} 단계`;
+        document.getElementById('ch-progress').innerText = `${d.progress.count} / ${d.total} 클리어`;
         const diffIcon = n => '🤖'.repeat(Math.min(5, n));
         document.getElementById('ch-ladder').innerHTML = d.ladder.map(st => {
             const state = st.cleared ? 'cleared' : (st.open ? 'open' : 'locked');
@@ -3750,7 +3764,7 @@
                 ${btn}</div>`;
         }).join('');
         document.getElementById('ch-top').innerHTML = (d.top && d.top.length)
-            ? d.top.map((t, i) => `<div class="ch-toprow"><span>${i + 1}. ${esc(t.nickname)}</span><span>${t.best}단계 · ${t.tries}번 도전</span></div>`).join('')
+            ? d.top.map((t, i) => `<div class="ch-toprow"><span>${i + 1}. ${esc(t.nickname)}</span><span>${t.count}개 클리어 · 최고 ${t.best}단계</span></div>`).join('')
             : '<div class="ch-toprow"><span>아직 아무도 못 깼습니데이 — 첫 번째가 되보이소</span></div>';
     });
     socket.on('challengeError', msg => alert(msg));
@@ -3838,7 +3852,7 @@
         for (let i = 1; i <= ch.maxStage; i++) stages += '<button class="cp-stage' + (i === ch.total ? ' boss' : '') + '" ' + (isHost ? 'onclick="startCoop(' + i + ')"' : 'disabled') + '>' + (i === ch.total ? '👹 보스' : i + '단계') + '</button>';
         panel.innerHTML = '<div class="cp-title">👥 컴까기 협동 — ' + humans.length + ' / 3명</div>' +
             '<div class="cp-members">' + humans.map(n => '<span>' + esc(n) + (n === ch.host ? ' 👑' : '') + '</span>').join('') + '</div>' +
-            '<div class="cp-sub">' + (isHost ? '도전할 단계를 누르면 바로 시작합니데이 (가장 덜 깬 사람 기준으로 열립니데이)' : '방장이 단계를 고르는 중입니데이...') + '</div>' +
+            '<div class="cp-sub">' + (isHost ? '도전할 단계를 누르면 바로 시작합니데이' : '방장이 단계를 고르는 중입니데이...') + '</div>' +
             '<div class="cp-stages">' + stages + '</div>' +
             '<div class="cp-sub">친구는 대기실의 방 목록이나 위쪽 🔗 초대 링크로 들어옵니데이 · 사람이 많을수록 봇도 강해집니데이</div>';
     }
@@ -4527,9 +4541,20 @@
     document.getElementById('center-message').addEventListener('click', function () { this.style.display = 'none'; });
 
     let lastTickSec = -1;
+    // ⏱ [시계 보정] 마감시각은 "서버 시계" 기준인데 남은 시간은 "폰 시계"로 빼고 있었다.
+    //    폰 시계가 서버와 몇 초만 어긋나도 바가 처음부터 반쯤 비어 있거나, 다 줄기도 전에 자동 폴드가 났다.
+    //    서버가 보내주는 현재 시각과의 차이를 기억해 두고 그만큼 보정한다.
+    //    (네트워크 지연만큼 서버 시각이 늦게 도착하므로, 최근 표본 중 가장 큰 차이가 실제에 가장 가깝다)
+    let _clockOff = 0; const _clockSamples = [];
+    function noteServerClock(serverNow) {
+        if (!Number.isFinite(serverNow)) return;
+        _clockSamples.push(serverNow - Date.now());
+        if (_clockSamples.length > 12) _clockSamples.shift();
+        _clockOff = Math.max(..._clockSamples);
+    }
     function renderTimer() {
         if (serverTurnEndTime > 0) {
-            const left = Math.max(0, (serverTurnEndTime - Date.now()) / 1000);
+            const left = Math.max(0, (serverTurnEndTime - (Date.now() + _clockOff)) / 1000);
             const limit = myTurnLimit > 0 ? myTurnLimit : 20;
 
             // 액션 콘솔의 숫자 표시(있을 때만 — 관전자는 콘솔이 없음)
@@ -4545,14 +4570,14 @@
                     barFill.style.width = pct + '%';
 
                     if (left <= 5.0 && left > 0) {
-                        barFill.style.background = '#e74c3c';
+                        barFill.classList.add('danger'); // 색은 클래스로 — 테마가 !important 라 인라인 색은 안 먹는다
                         spot.classList.add('danger-pulse');
                         if (spot.classList.contains('me')) { // 🎧 내 좌석 위기 틱 (초당 1회)
                             const sec = Math.ceil(left);
                             if (sec !== lastTickSec) { lastTickSec = sec; SFX.tick(); }
                         }
                     } else {
-                        barFill.style.background = '#2ecc71';
+                        barFill.classList.remove('danger');
                         spot.classList.remove('danger-pulse');
                     }
                 }
@@ -4799,7 +4824,11 @@
         }
 
         const animCountBefore = playedAnimations.size; // 🎧 딜링음용
-        serverTurnEndTime = data.turnEndTime || 0;
+        // ⏱ 서버 시각으로 시계를 맞춘 뒤, "아직 안 지난" 마감시각만 받아들인다.
+        //    (턴이 넘어가는 순간의 상태에는 직전 턴의 지난 마감시각이 실려 와서 바가 잠깐 텅 비었다)
+        if (data.serverNow) noteServerClock(data.serverNow);
+        if (!data.turnPlayerId) serverTurnEndTime = 0;
+        else if (data.turnEndTime > (data.serverNow || 0)) serverTurnEndTime = data.turnEndTime;
         if (data.turnTimeLimit) myTurnLimit = data.turnTimeLimit;
         
         if (data.turnPlayerId === myNickname && lastTurnPlayer !== myNickname) {
@@ -5211,6 +5240,7 @@
         if (window._feltInfo) { window._feltInfo.time = t; paintFeltBlinds(); }
     });
     socket.on('updateTurnTimer', endTime => { serverTurnEndTime = endTime; });
+    socket.on('serverClock', t => noteServerClock(t));
 
     function appendChat(nick, msg, type) {
         const log = document.getElementById('chat-log');

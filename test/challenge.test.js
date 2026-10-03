@@ -13,11 +13,9 @@ test('단계표: 10단계, 봇은 1~5명(6인 테이블), 보상은 단계가 �
     });
 });
 
-test('새 계정은 1단계만 열려 있다 — 건너뛰기 금지', () => {
+test('잠금 없음 — 새 계정도 1~10단계 아무거나 바로 들어갈 수 있다', () => {
     const u = {};
-    assert.strictEqual(C.canPlay(u, 1), true);
-    assert.strictEqual(C.canPlay(u, 2), false);
-    assert.strictEqual(C.canPlay(u, 10), false);
+    for (let s = 1; s <= 10; s++) assert.strictEqual(C.canPlay(u, s), true, s + '단계');
 });
 
 test('이상한 단계 번호는 전부 거절', () => {
@@ -29,8 +27,7 @@ test('깨면 다음 단계가 열리고, 첫 클리어는 보상 전액', () => 
     const u = {};
     const r = C.applyClear(u, 1);
     assert.deepStrictEqual({ first: r.first, reward: r.reward, best: r.best, next: r.next }, { first: true, reward: C.STAGES[0].reward, best: 1, next: 2 });
-    assert.strictEqual(C.canPlay(u, 2), true);
-    assert.strictEqual(C.canPlay(u, 3), false);
+    assert.deepStrictEqual(u.challenge.cleared, [1]);
 });
 
 test('이미 깬 단계를 다시 깨면 보상은 20%만 — 반복으로 뱅크롤을 찍어내지 못하게', () => {
@@ -43,10 +40,35 @@ test('이미 깬 단계를 다시 깨면 보상은 20%만 — 반복으로 뱅�
     assert.strictEqual(u.challenge.clears, 3);
 });
 
-test('열리지 않은 단계는 클리어 처리 자체가 안 된다 (보상 없음, 진행도 불변)', () => {
+test('높은 단계를 먼저 깨도 낮은 단계의 첫 클리어 보상은 살아 있다 (단계별로 따로 기록)', () => {
     const u = {};
-    assert.strictEqual(C.applyClear(u, 5), null);
-    assert.strictEqual(C.progressOf(u).best, 0);
+    const boss = C.applyClear(u, 10);
+    assert.strictEqual(boss.first, true);
+    assert.strictEqual(boss.reward, C.STAGES[9].reward);
+    assert.strictEqual(boss.allClear, true);
+    const one = C.applyClear(u, 1);
+    assert.strictEqual(one.first, true, '10단계를 먼저 깼다고 1단계가 깬 걸로 쳐지면 안 된다');
+    assert.strictEqual(one.reward, C.STAGES[0].reward);
+    assert.deepStrictEqual(u.challenge.cleared, [1, 10]);
+    assert.strictEqual(C.progressOf(u).count, 2);
+    assert.strictEqual(C.applyClear(u, 10).first, false);
+});
+
+test('없는 단계는 클리어 처리 자체가 안 된다', () => {
+    const u = {};
+    assert.strictEqual(C.applyClear(u, 11), null);
+    assert.strictEqual(C.applyClear(u, 0), null);
+    assert.strictEqual(C.progressOf(u).count, 0);
+});
+
+test('예전 기록(best 만 있는 계정)은 1~best 를 깬 것으로 읽는다', () => {
+    const p = C.progressOf({ challenge: { best: 3, clears: 4, tries: 9 } });
+    assert.deepStrictEqual(p.cleared, [1, 2, 3]);
+    assert.strictEqual(p.count, 3);
+    const u = { challenge: { best: 3, clears: 4, tries: 9 } };
+    assert.strictEqual(C.applyClear(u, 2).first, false);   // 이미 깬 단계
+    assert.strictEqual(C.applyClear(u, 5).first, true);
+    assert.deepStrictEqual(u.challenge.cleared, [1, 2, 3, 5]);
 });
 
 test('10단계를 처음 깨면 allClear, 그 뒤로는 아니다', () => {
@@ -59,17 +81,19 @@ test('10단계를 처음 깨면 allClear, 그 뒤로는 아니다', () => {
 });
 
 test('손상된 진행 값이 들어와도 안전한 값으로 읽는다', () => {
-    assert.deepStrictEqual(C.progressOf(null), { best: 0, clears: 0, tries: 0 });
-    assert.deepStrictEqual(C.progressOf({ challenge: 'x' }), { best: 0, clears: 0, tries: 0 });
+    assert.deepStrictEqual(C.progressOf(null), { cleared: [], best: 0, count: 0, clears: 0, tries: 0 });
+    assert.deepStrictEqual(C.progressOf({ challenge: 'x' }), { cleared: [], best: 0, count: 0, clears: 0, tries: 0 });
     assert.strictEqual(C.progressOf({ challenge: { best: 999 } }).best, 10);
     assert.strictEqual(C.progressOf({ challenge: { best: -3, clears: -1, tries: 1.5 } }).best, 0);
+    assert.deepStrictEqual(C.progressOf({ challenge: { cleared: [3, 3, 'x', 99, 0, 7] } }).cleared, [3, 7]);
 });
 
 test('단계표 화면 데이터: 깬 것/열린 것/잠긴 것이 구분된다', () => {
     const u = {}; C.applyClear(u, 1); C.applyClear(u, 2);
     const l = C.ladder(u);
     assert.strictEqual(l.length, 10);
-    assert.deepStrictEqual(l.slice(0, 4).map(x => [x.cleared, x.open]), [[true, true], [true, true], [false, true], [false, false]]);
+    assert.deepStrictEqual(l.slice(0, 4).map(x => [x.cleared, x.open]), [[true, true], [true, true], [false, true], [false, true]]);
+    assert.ok(l.every(x => x.open), '전 단계가 열려 있어야 한다');
 });
 
 // ══════════════ 코어(컴까기 전용 재화) ══════════════
@@ -87,7 +111,7 @@ test('코어: 첫 클리어는 단계 번호만큼, 다시 깨면 1~3개', () =>
 
 test('코어는 열리지 않은 단계로는 못 번다 / 손상된 값에서도 음수·NaN 이 안 된다', () => {
     const u = { cores: 'abc' };
-    assert.strictEqual(C.applyClear(u, 4), null);
+    assert.strictEqual(C.applyClear(u, 44), null);
     assert.strictEqual(u.cores, 'abc');                    // 거절이면 건드리지 않는다
     C.applyClear(u, 1);
     assert.strictEqual(u.cores, 1);
@@ -123,9 +147,7 @@ test('협동: 인원 범위를 벗어나도 안전하게 1~3명으로 본다', (
     assert.deepStrictEqual(C.coopSetup(3, 99), C.coopSetup(3, 3));
 });
 
-test('협동: 고를 수 있는 단계는 가장 덜 깬 사람 기준', () => {
-    assert.strictEqual(C.partyMaxStage([{ challenge: { best: 7 } }, { challenge: { best: 2 } }, {}]), 1);
-    assert.strictEqual(C.partyMaxStage([{ challenge: { best: 7 } }, { challenge: { best: 4 } }]), 5);
-    assert.strictEqual(C.partyMaxStage([{ challenge: { best: 10 } }]), 10);   // 끝까지 깬 사람도 10 을 넘지 않는다
-    assert.strictEqual(C.partyMaxStage([]), 1);
+test('협동도 잠금 없이 전 단계를 고를 수 있다', () => {
+    assert.strictEqual(C.partyMaxStage([{ challenge: { best: 7 } }, {}]), 10);
+    assert.strictEqual(C.partyMaxStage([]), 10);
 });

@@ -90,7 +90,7 @@ const COSMETICS = {
     ti_hunter:    { kind: 'title',  cur: 'core', price: 4,  name: '봇 사냥꾼',   text: '🔧 봇 사냥꾼',   desc: '봇 잡는 게 취미' },
     ti_breaker:   { kind: 'title',  cur: 'core', price: 15, name: '기계 파괴자', text: '⚡ 기계 파괴자', desc: '고수 봇도 부순다' },
     // 🤖 컴까기 10단계를 전부 깨면 열린다 (살 수 없다)
-    ti_bot:   { kind: 'title', name: '컴까기 정복자', price: 0, noBuy: true, challenge: true, text: '🤖 컴까기 정복자', desc: '컴까기 10단계를 모두 깬 사람' },
+    ti_bot:   { kind: 'title', name: '컴까기 정복자', price: 0, noBuy: true, challenge: true, text: '🤖 컴까기 정복자', desc: '컴까기 보스전을 깬 사람' },
     ti_rookie:{ kind: 'title', name: '입문자',    price: 1,  text: '🌱 입문자', desc: '이제 막 판에 앉았습니데이' },
     ti_bluff: { kind: 'title', name: '블러프 장인', price: 2,  text: '🎭 블러프 장인', desc: '없는 패로 이기는 사람' },
     ti_allin: { kind: 'title', name: '올인 러버',  price: 2,  text: '🔥 올인 러버', desc: '고민은 짧게, 베팅은 크게' },
@@ -453,7 +453,7 @@ const MockDB = {
         // 🏆 토큰은 우승할 때마다 1개. 이 기능이 생기기 전에 한 우승도 인정해 소급 지급한다.
         if (typeof u.tokens !== 'number') u.tokens = (u.wins || 0) + (u.mttWins || 0);
         // 🔷 코어가 생기기 전에 깬 단계도 인정한다 (첫 클리어 = 단계 번호만큼 → 1+2+…+best)
-        if (typeof u.cores !== 'number') { const _b = Challenge.progressOf(u).best; u.cores = _b * (_b + 1) / 2; }
+        if (typeof u.cores !== 'number') u.cores = Challenge.progressOf(u).cleared.reduce((a, n) => a + n, 0);
         if (!u.h2h || typeof u.h2h !== 'object') u.h2h = {};                       // ⚔️ 상대전적
         normalizeCosmetics(u); // 🎨 꾸미기 — 구버전/손상 레코드 복구
         // 📊 포커 분석 지표 마이그레이션
@@ -1048,6 +1048,7 @@ class GameRoom {
                     endVote: this.endVoteSnapshot(),
                     timeRemaining: this.timeRemaining,
                     turnEndTime: this.turnEndTime,
+                    serverNow: Date.now(), // ⏱ 타임바 보정용 — 폰 시계가 서버와 몇 초 어긋나면 바가 처음부터 비거나 안 줄었다
                     turnTimeLimit: this.turnTimeLimit, // 💡 [수정 #4] 클라이언트 타임바 동기화용
                     handId: this.handId,
                     hostNickname: this.hostNickname,
@@ -1161,6 +1162,7 @@ class GameRoom {
         this.turnEndTime = Date.now() + remain;
         if (this.turnTimeout) clearTimeout(this.turnTimeout);
         this.turnTimeout = setTimeout(() => this._autoAct(nick), remain);
+        io.to(this.roomId).emit('serverClock', Date.now()); // ⏱ 타임바 시계 보정
         io.to(this.roomId).emit('updateTurnTimer', this.turnEndTime);
         io.to(this.roomId).emit('gameMessage', `⏳ ${nick} 님이 시간을 ${Math.round(addMs / 1000)}초 더 씁니데이`);
         return true;
@@ -1176,6 +1178,7 @@ class GameRoom {
         //    (0ms가 아닌 1초: 끊긴 사람이 연달아 있어도 스택 재귀 없이 순차 처리 + 흐름 자연스러움)
         const msLimit = (_tp && !_tp.isBot && _tp.isDisconnected) ? 1000 : this.turnTimeLimit * 1000;
         this.turnEndTime = Date.now() + msLimit;
+        io.to(this.roomId).emit('serverClock', Date.now()); // ⏱ 타임바 시계 보정
         io.to(this.roomId).emit('updateTurnTimer', this.turnEndTime);
 
         const expectedNick = _turnNick;
@@ -4625,10 +4628,10 @@ io.on('connection', (socket) => {
         const u = await MockDB.getUser(socket.nickname);
         const top = Array.from(MockDB.users.values())
             .map(x => ({ nickname: x.nickname, p: Challenge.progressOf(x) }))
-            .filter(x => x.nickname && !x.nickname.startsWith('🤖') && x.p.best > 0)
-            .sort((a, b) => b.p.best - a.p.best || a.p.tries - b.p.tries)
+            .filter(x => x.nickname && !x.nickname.startsWith('🤖') && x.p.count > 0)
+            .sort((a, b) => b.p.count - a.p.count || b.p.best - a.p.best || a.p.tries - b.p.tries)
             .slice(0, 10)
-            .map(x => ({ nickname: x.nickname, best: x.p.best, tries: x.p.tries }));
+            .map(x => ({ nickname: x.nickname, best: x.p.best, count: x.p.count, tries: x.p.tries }));
         socket.emit('challengeData', { ladder: Challenge.ladder(u), progress: Challenge.progressOf(u), top, total: Challenge.STAGES.length });
     });
 
@@ -4639,7 +4642,7 @@ io.on('connection', (socket) => {
         const nick = socket.nickname;
         const stage = Number(data && data.stage);
         const u = await MockDB.getUser(nick);
-        if (!Challenge.canPlay(u, stage)) { socket.emit('challengeError', '아직 열리지 않은 단계입니데이.'); return; }
+        if (!Challenge.canPlay(u, stage)) { socket.emit('challengeError', '없는 단계입니데이.'); return; }
         const roomId = `🤖컴까기_${nick}`;
         const cur = socket.currentRoom;
         if (cur && cur !== roomId && rooms.has(cur) && rooms.get(cur).players[nick]) {
@@ -4670,7 +4673,7 @@ io.on('connection', (socket) => {
             room.playerOrder.forEach(n => { const bp = room.players[n]; if (bp && bp.isBot) bp.chips = Math.round(settings.startingChips * st.botChipsMult); });
         }
         const pr = Challenge.progressOf(u);
-        u.challenge = { best: pr.best, clears: pr.clears, tries: pr.tries + 1 };
+        u.challenge = { cleared: pr.cleared, best: pr.best, clears: pr.clears, tries: pr.tries + 1 };
         MockDB.save();
 
         socket.emit('joinRoomSuccess', roomId);
@@ -4721,7 +4724,7 @@ io.on('connection', (socket) => {
         if (humans.length < 1 || humans.length > Challenge.COOP_MAX) return;
         const users = humans.map(n => MockDB.users.get(n)).filter(Boolean);
         if (users.length !== humans.length || !users.every(u => Challenge.canPlay(u, stage))) {
-            socket.emit('challengeError', '아직 이 단계를 못 여는 사람이 있습니데이. (가장 덜 깬 사람 기준)');
+            socket.emit('challengeError', '없는 단계입니데이.');
             return;
         }
         const setup = Challenge.coopSetup(stage, humans.length);
@@ -4731,7 +4734,7 @@ io.on('connection', (socket) => {
         humans.forEach(n => { room.players[n].chips = room.startingChips; room.players[n].isSpectator = false; });
         setup.bots.forEach(d => room.addBot(d));
         room.playerOrder.forEach(n => { const bp = room.players[n]; if (bp && bp.isBot) bp.chips = Math.round(room.startingChips * setup.mult); });
-        users.forEach(u => { const pr = Challenge.progressOf(u); u.challenge = { best: pr.best, clears: pr.clears, tries: pr.tries + 1 }; });
+        users.forEach(u => { const pr = Challenge.progressOf(u); u.challenge = { cleared: pr.cleared, best: pr.best, clears: pr.clears, tries: pr.tries + 1 }; });
         MockDB.save();
         const boss = stage === Challenge.STAGES.length;
         io.to(room.roomId).emit('challengeStarted', { stage, name: st.name, desc: st.desc, total: Challenge.STAGES.length, boss, coop: true,
@@ -4956,7 +4959,7 @@ io.on('connection', (socket) => {
                 noBuy: !!it.noBuy,
                 // 🏅 테두리는 등급으로 열린다 — 잠겨 있으면 무엇이 필요한지 같이 보낸다
                 locked: it.kind === 'frame' ? (it.rank > myRank) : (it.photo ? !hasPhoto(u) : (it.challenge ? !c.owned.includes(id) : false)),
-                need: it.kind === 'frame' ? rankNeedText(it.rank) : (it.photo ? '사진을 올리면 열립니데이' : (it.challenge ? '컴까기 10단계를 깨면 열립니데이' : ''))
+                need: it.kind === 'frame' ? rankNeedText(it.rank) : (it.photo ? '사진을 올리면 열립니데이' : (it.challenge ? '컴까기 보스전(10단계)을 깨면 열립니데이' : ''))
             })),
             owned: c.owned.slice(),
             equipped: { back: c.back, avatar: c.avatar, title: c.title, frame: c.frame },
