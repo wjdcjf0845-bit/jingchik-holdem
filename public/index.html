@@ -2902,6 +2902,26 @@
             .fx-ring, .fx-spark, .fx-foldcard, .fx-allin-banner { display: none !important; }
             .avatar[class*="fr-"], .pf-avatar[class*="fr-"], .avatar[class*="fr-"]::after, .avatar[class*="fr-"]::before { animation: none !important; }
         }
+    
+        /* ═══ 📷 대기실 프로필 카드 ═══ */
+        #lobby-profile {
+            display: flex; align-items: center; gap: 14px; margin: 0 0 14px; padding: 12px 14px; text-align: left;
+            background: rgba(6,9,18,0.45); border: 1px solid rgba(255,255,255,0.10); border-radius: 16px;
+        }
+        #lp-avatar { width: 64px; height: 64px; font-size: 28px; margin: 0; flex: 0 0 auto; cursor: pointer; transition: transform 0.12s; }
+        #lp-avatar:hover { transform: scale(1.05); }
+        #lobby-profile .lp-side { flex: 1 1 auto; min-width: 0; }
+        #lobby-profile .lp-btns { display: flex; gap: 7px; flex-wrap: wrap; }
+        #lobby-profile button {
+            font: inherit; font-weight: 800; font-size: 13px; padding: 8px 14px; border-radius: 10px; cursor: pointer;
+            background: linear-gradient(180deg, #33405f, #222b44); color: #e8edf9; border: 1px solid rgba(255,255,255,0.14);
+        }
+        #lobby-profile button:first-child { background: var(--gold-grad); color: #2c1c00; border-color: transparent; }
+        #lp-msg { margin-top: 6px; font-size: 11.5px; color: #8d98b3; word-break: keep-all; }
+        @media screen and (max-width: 960px) and (orientation: landscape) {
+            #lobby-profile { padding: 8px 10px; margin-bottom: 8px; gap: 10px; }
+            #lp-avatar { width: 46px; height: 46px; font-size: 20px; }
+        }
     </style>
 </head>
 <body>
@@ -2917,7 +2937,7 @@
     <div class="shop-card">
         <div class="shop-head">
             <div class="shop-title">🎨 꾸미기 상점</div>
-            <div class="shop-bank" title="토너먼트에서 우승하면 1개씩 받습니데이">🏆 토큰 <span id="shop-tokens">0</span></div>
+            <div class="shop-bank" title="사람 3명 이상 참가한 토너먼트에서 우승하면 1개씩 받습니데이">🏆 토큰 <span id="shop-tokens">0</span></div>
         </div>
         <div class="shop-tabs">
             <button class="shop-tab on" data-kind="back" onclick="shopTab('back')">🃏 카드 뒷면</button>
@@ -3025,6 +3045,18 @@
     <div class="suit-float sf-2">♦</div>
     <div class="login-box" style="width: 560px; max-width: 96vw;">
         <h2 style="color:white; margin-top:0; font-family: var(--font-disp); font-weight:400; letter-spacing:1px;">대기실 <br><span id="lobby-nick" style="color:var(--gold); font-size:19px;"></span></h2>
+
+        <!-- 📷 내 프로필 사진 — 대기실에서 바로 올린다 (상점까지 들어갈 필요 없이) -->
+        <div id="lobby-profile">
+            <div class="pf-avatar" id="lp-avatar" onclick="pickPhoto()" title="눌러서 사진 바꾸기">?</div>
+            <div class="lp-side">
+                <div class="lp-btns">
+                    <button type="button" onclick="pickPhoto()">📷 내 사진 올리기</button>
+                    <button type="button" id="lp-remove" onclick="removePhoto()" style="display:none;">내리기</button>
+                </div>
+                <div id="lp-msg">이미지 파일(JPG·PNG·WEBP)을 고르면 프로필 사진이 됩니데이</div>
+            </div>
+        </div>
         
         <div class="settings-panel">
             <div class="setting-row">
@@ -3512,7 +3544,7 @@
 
     // 🛡️ admin 으로 로그인하면 서버가 1회용 입장권 주소를 준다 → 관리자 페이지로 이동
     socket.on('adminRedirect', d => { if (d && typeof d.url === 'string' && d.url.startsWith('/admin/')) location.href = d.url; });
-    socket.on('shopData', d => { shopState = d || shopState; renderShop(); });
+    socket.on('shopData', d => { shopState = d || shopState; renderShop(); renderLobbyProfile(); });
     // 🏆 토너먼트 우승 → 토큰 1개. 화면 위쪽에 잠깐 알려준다.
     socket.on('tokenEarned', d => {
         const t = document.createElement('div');
@@ -3544,10 +3576,25 @@
     }
 
     function shopMsg(text, ok) {
-        const el = document.getElementById('shop-msg');
-        if (!el) return;
-        el.innerText = text || '';
-        el.style.color = ok ? '#1f7a4a' : 'var(--verm)';
+        // 상점 안과 대기실 프로필 카드 양쪽에 같은 안내를 띄운다 (사진은 두 곳 어디서든 올릴 수 있다)
+        ['shop-msg', 'lp-msg'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el || !text) return;
+            el.innerText = text;
+            el.style.color = ok ? '#4be3a0' : '#ff8a78';
+        });
+    }
+    // 📷 대기실 프로필 카드: 지금 장착한 아바타·테두리·사진을 그대로 보여준다
+    function renderLobbyProfile() {
+        const el = document.getElementById('lp-avatar');
+        if (!el || !myNickname) return;
+        const eq = shopState.equipped || {};
+        const a = avatarAttrs(myNickname, { avatar: eq.avatar, frame: eq.frame, ph: shopState.photoVer || 0 });
+        el.className = 'pf-avatar' + a.cls;
+        el.setAttribute('style', a.style);
+        el.innerText = avatarInitial(myNickname);
+        const rm = document.getElementById('lp-remove');
+        if (rm) rm.style.display = shopState.hasPhoto ? '' : 'none';
     }
 
     // 📷 파일을 고르면 브라우저에서 128px 정사각으로 줄여서 보낸다.
@@ -3723,6 +3770,7 @@
         myNickname = data.nickname;
         myBankroll = data.bankroll || 0;
         hadSession = true;
+        socket.emit('getShop'); // 📷 대기실 프로필 카드에 내 아바타·사진을 띄우려고
         document.getElementById('login-overlay').style.display = 'none';
         document.getElementById('login-error').style.display = 'none';
         if (data.rejoinedRoomId) socket.emit('joinRoom', { roomId: data.rejoinedRoomId });

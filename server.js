@@ -37,6 +37,9 @@ const END_VOTE_MS = 30000; // 🗳️ 합의 종료 투표 제한시간
 const TIME_BANK_MS = 15000;      // ⏳ 타임뱅크 — 핸드당 1회, 더 쓸 수 있는 시간
 // 🏆 새 계정이 받는 토큰. 운영에선 0 — 시뮬레이션에서만 DEV_START_TOKENS 로 넣어 구매 흐름을 검증한다.
 const START_TOKENS = Math.max(0, parseInt(process.env.DEV_START_TOKENS, 10) || 0);
+// 🏆 토큰은 "사람" 이 이만큼 이상 참가한 토너먼트에서만 준다.
+//    봇만 앉혀 놓고 혼자 우승을 찍어내면 토큰이 우승의 증표가 못 된다.
+const TOKEN_MIN_HUMANS = 3;
 const THROW_ITEMS = ['🍅', '🌹', '🥚', '👏']; // 🍅 상대에게 던질 수 있는 것 (연출 전용)
 const PHOTO_MAX_BYTES = 24000;   // 📷 프로필 사진 원본 상한 (클라가 128px 로 줄여 보내면 5~10KB)
 const PHOTO_MAX_B64 = 40000;     // 📷 data URL 문자열 상한 — 파싱 전에 먼저 걸러낸다
@@ -455,11 +458,11 @@ const MockDB = {
         const b = l.h2h[winner] || (l.h2h[winner] = { w: 0, l: 0 });
         a.w++; b.l++;
     },
-    async addWin(nickname) {
+    async addWin(nickname, giveToken) {
         if (typeof nickname === 'string' && nickname.startsWith('🤖')) return; // 봇 제외
         const user = await this.getUser(nickname);
         user.wins = (user.wins || 0) + 1;
-        user.tokens = (user.tokens || 0) + 1; // 🏆 우승 토큰
+        if (giveToken) user.tokens = (user.tokens || 0) + 1; // 🏆 우승 토큰 (사람 3명 이상일 때만)
         user.totalChips += 50000;
         user.seasonPoints = (user.seasonPoints || 0) + 100; // 🏆 우승 시즌 포인트
         this.save();
@@ -617,11 +620,11 @@ const MockDB = {
         this.save();
     },
     // 🏆 [MTT] 멀티테이블 토너먼트 우승 기록 (전용 명예의 전당)
-    async addMttWin(nickname, entrants) {
+    async addMttWin(nickname, entrants, giveToken) {
         if (typeof nickname === 'string' && nickname.startsWith('🤖')) return;
         const user = await this.getUser(nickname);
         user.mttWins = (user.mttWins || 0) + 1;
-        user.tokens = (user.tokens || 0) + 1; // 🏆 우승 토큰
+        if (giveToken) user.tokens = (user.tokens || 0) + 1; // 🏆 우승 토큰 (사람 3명 이상일 때만)
         user.mttBestField = Math.max(user.mttBestField || 0, entrants || 0);
         user.seasonPoints = (user.seasonPoints || 0) + 300; // MTT 우승 시즌 보너스
         this.save();
@@ -2182,10 +2185,13 @@ class GameRoom {
                 this.tournamentStarted = false;
                 if (this.tournamentTimer) clearInterval(this.tournamentTimer);
 
-                MockDB.addWin(winner).then(() => {
+                const _tokenOk = (this._humanEntrants || 0) >= TOKEN_MIN_HUMANS;
+                MockDB.addWin(winner, _tokenOk).then(() => {
                     const wp = this.players[winner];
                     const wu = MockDB.users.get(winner);
-                    if (wp && !wp.isBot && wp.socketId && wu) io.to(wp.socketId).emit('tokenEarned', { tokens: wu.tokens || 0 });
+                    if (!wp || wp.isBot || !wp.socketId || !wu) return;
+                    if (_tokenOk) io.to(wp.socketId).emit('tokenEarned', { tokens: wu.tokens || 0 });
+                    else io.to(wp.socketId).emit('gameMessage', `🏆 우승! 다만 토큰은 사람이 ${TOKEN_MIN_HUMANS}명 이상 참가한 토너먼트에서만 나옵니데이.`);
                 });
                 // 💰 상금풀을 우승자 뱅크롤로 지급 (봇 우승이면 소멸)
                 const prize = this.prizePool || (this.startingChips * Object.keys(this.players).length);
@@ -2244,6 +2250,8 @@ class GameRoom {
 
         if (!this.tournamentStarted) {
             this.tournamentStarted = true;
+            // 🏆 시작 시점의 "사람" 수를 적어둔다 — 끝날 땐 탈락자가 나가고 없어서 셀 수 없다
+            this._humanEntrants = this.playerOrder.filter(n => this.players[n] && !this.players[n].isBot).length;
             // 🏆 [MTT 버그픽스] 블라인드 레벨·시계는 MTT 매니저가 단독으로 소유한다.
             //    테이블마다 제 시계를 돌리면, 밸런싱으로 테이블이 새로 만들어질 때마다
             //    블라인드가 레벨 1로 되돌아가 토너먼트가 끝나지 않았다(실측: 8명 4분 31핸드에 2명만 탈락).
@@ -3650,6 +3658,7 @@ class MTTManager {
         if (this.started || this.entrants.length < 2) return false;
         this.started = true;
         this.totalEntrants = this.entrants.length;
+        this.humanEntrants = this.entrants.filter(e => !e.isBot).length; // 🏆 토큰 지급 판정용
 
         const shuffled = this.entrants.slice();
         for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
@@ -3928,7 +3937,7 @@ class MTTManager {
         if (this._heartbeat) clearInterval(this._heartbeat);
         if (this._blindTimer) { clearInterval(this._blindTimer); this._blindTimer = null; }
         const champion = winner.nick;
-        if (!winner.isBot) MockDB.addMttWin(champion, this.totalEntrants);
+        if (!winner.isBot) MockDB.addMttWin(champion, this.totalEntrants, (this.humanEntrants || 0) >= TOKEN_MIN_HUMANS);
 
         // 누락된 탈락자 보완: entrants 중 우승자도, 탈락기록도 없는 사람을 채움
         //   (같은 핸드 동시 탈락 등으로 콜백이 일부 누락된 경우 대비)
@@ -4649,7 +4658,7 @@ io.on('connection', (socket) => {
         if (item.noBuy) { socket.emit('shopResult', { ok: false, msg: '이건 돈으로 살 수 있는 게 아닙니데이.' }); return; }
         if (c.owned.includes(id)) { socket.emit('shopResult', { ok: false, msg: '이미 가지고 있습니데이.' }); return; }
         if ((u.tokens || 0) < item.price) {
-            socket.emit('shopResult', { ok: false, msg: `토큰이 ${item.price - (u.tokens || 0)}개 모자랍니데이. 토너먼트에서 우승하면 1개씩 받습니데이.` });
+            socket.emit('shopResult', { ok: false, msg: `토큰이 ${item.price - (u.tokens || 0)}개 모자랍니데이. 사람 ${TOKEN_MIN_HUMANS}명 이상 토너먼트에서 우승하면 1개씩 받습니데이.` });
             return;
         }
         u.tokens = (u.tokens || 0) - item.price; // 🏆 토큰으로만 산다 — 뱅크롤은 건드리지 않는다
