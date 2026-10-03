@@ -2922,6 +2922,44 @@
             #lobby-profile { padding: 8px 10px; margin-bottom: 8px; gap: 10px; }
             #lp-avatar { width: 46px; height: 46px; font-size: 20px; }
         }
+    
+        /* ═══ 🤖 컴까기(AI 도장깨기) ═══ */
+        #challenge-btn { background: linear-gradient(180deg, #5ad1ff, #1f86e0) !important; color: #03203a !important; box-shadow: 0 8px 20px rgba(31,134,224,0.28), inset 0 1px 0 rgba(255,255,255,0.5) !important; }
+        #challenge-btn span { color: rgba(3,32,58,0.75) !important; }
+        #challenge-modal { align-items: center; justify-content: center; }
+        .ch-card { width: 520px; }
+        .ch-intro { font-size: 12px; color: #9aa6c2; line-height: 1.55; margin-bottom: 12px; word-break: keep-all; }
+        .ch-intro b { color: var(--gold); }
+        #ch-ladder { display: flex; flex-direction: column; gap: 7px; }
+        .ch-stage {
+            display: flex; align-items: center; gap: 11px; padding: 9px 11px; border-radius: 12px;
+            background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.10);
+        }
+        .ch-stage.open:not(.cleared) { border-color: rgba(255,200,87,0.75); background: rgba(255,200,87,0.08); box-shadow: 0 0 18px rgba(255,200,87,0.14); }
+        .ch-stage.locked { opacity: 0.5; }
+        .ch-no {
+            flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-family: var(--font-num); font-weight: 700; font-size: 16px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.16); color: #dfe6f7;
+        }
+        .ch-stage.cleared .ch-no { background: linear-gradient(180deg, #37d68f, #129a5e); color: #03281a; border-color: transparent; }
+        .ch-stage.open:not(.cleared) .ch-no { background: var(--gold-grad); color: #2c1c00; border-color: transparent; }
+        .ch-body { flex: 1 1 auto; min-width: 0; text-align: left; }
+        .ch-name { font-weight: 900; font-size: 14px; color: #fff; }
+        .ch-bots { font-size: 10px; margin-left: 4px; letter-spacing: -2px; }
+        .ch-desc { font-size: 11px; color: #9aa6c2; margin-top: 2px; word-break: keep-all; }
+        .ch-reward { color: var(--gold); font-weight: 800; }
+        .ch-reward.done { color: #4be3a0; }
+        .ch-go {
+            flex: 0 0 auto; font: inherit; font-weight: 900; font-size: 12.5px; padding: 8px 14px; border-radius: 10px; cursor: pointer;
+            background: var(--gold-grad); color: #2c1c00; border: none; box-shadow: 0 4px 12px rgba(255,200,87,0.22);
+        }
+        .ch-stage.cleared .ch-go { background: rgba(255,255,255,0.08); color: #dfe6f7; border: 1px solid rgba(255,255,255,0.16); box-shadow: none; }
+        .ch-lock { flex: 0 0 auto; font-size: 16px; padding: 0 10px; }
+        .ch-top-title { margin: 14px 0 6px; font-weight: 900; font-size: 13px; color: #c3cbe0; text-align: left; }
+        .ch-toprow { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 5px 9px; border-radius: 8px; color: #dfe6f7; }
+        .ch-toprow:nth-child(odd) { background: rgba(255,255,255,0.04); }
+        .ch-toprow span:last-child { color: var(--gold); font-family: var(--font-num); white-space: nowrap; }
+        @media screen and (max-width: 560px) { .ch-go { padding: 7px 10px; font-size: 12px; } .ch-name { font-size: 13px; } }
     </style>
 </head>
 <body>
@@ -2930,6 +2968,20 @@
 
 <div id="fx-flash"></div>
 <div id="rank-banner"><div class="rb-rank"></div><div class="rb-who"></div></div>
+
+<div id="challenge-modal" class="overlay" style="display:none; z-index:4400;">
+    <div class="shop-card ch-card">
+        <div class="shop-head">
+            <div class="shop-title">🤖 컴까기 — AI 도장깨기</div>
+            <div class="shop-bank" id="ch-progress">0 / 10</div>
+        </div>
+        <div class="ch-intro">혼자서 봇들과 토너먼트를 쳐서 <b>1등</b>을 하면 다음 단계가 열립니데이. 참가비는 없고, 깨면 뱅크롤 보상을 받습니데이.</div>
+        <div id="ch-ladder"></div>
+        <div class="ch-top-title">🏅 컴까기 순위</div>
+        <div id="ch-top"></div>
+        <button class="btn-close-modal" style="margin-top:14px; width:100%;" onclick="document.getElementById('challenge-modal').style.display='none'">닫기</button>
+    </div>
+</div>
 
 <div id="throw-hint"><span class="th-t"></span><button onclick="disarmThrow()">취소</button></div>
 
@@ -3115,6 +3167,11 @@
         <!-- 🎓 GTO 학습 모드 -->
         <button id="learn-btn" class="btn-join" onclick="startLearnMode()" style="width:100%; margin-bottom:14px; background: linear-gradient(180deg, #2c5f4a, #18443a 60%, #0e2c22); color:#7bedaa; box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 6px 16px rgba(0,0,0,0.5); text-shadow:none; font-weight:900;">
             🎓 GTO 학습 모드 <span style="font-size:11px; color:var(--txt-dim); font-weight:400;">(AI 5명과 1:5 실전 코칭)</span>
+        </button>
+
+        <!-- 🤖 컴까기 — AI 도장깨기 -->
+        <button id="challenge-btn" class="btn-join" onclick="openChallenge()" style="width:100%; margin-bottom:14px;">
+            🤖 컴까기 <span style="font-size:11px; font-weight:400;">(AI 도장깨기 — 10단계를 깨고 보상 받기)</span>
         </button>
 
         <!-- 🎁 일일 보상 -->
@@ -3536,6 +3593,84 @@
         if (!d) return;
         const idOf = n => 'player-' + String(n).replace(/\s/g, '_');
         flyThrow(document.getElementById(idOf(d.from)), document.getElementById(idOf(d.to)), d.item);
+    });
+
+    // ═══ 🤖 컴까기(AI 도장깨기) ═══
+    let _challengeStage = 0;
+    function openChallenge() {
+        socket.emit('getChallenge');
+        document.getElementById('challenge-modal').style.display = 'flex';
+    }
+    function startChallenge(stage) {
+        document.getElementById('challenge-modal').style.display = 'none';
+        document.getElementById('result-modal').classList.remove('show');
+        socket.emit('startChallenge', { stage });
+    }
+    function leaveChallenge() {
+        document.getElementById('result-modal').classList.remove('show');
+        socket.emit('leaveRoom');
+    }
+    socket.on('challengeData', d => {
+        if (!d) return;
+        document.getElementById('ch-progress').innerText = `${d.progress.best} / ${d.total} 단계`;
+        const diffIcon = n => '🤖'.repeat(Math.min(5, n));
+        document.getElementById('ch-ladder').innerHTML = d.ladder.map(st => {
+            const state = st.cleared ? 'cleared' : (st.open ? 'open' : 'locked');
+            const btn = st.open
+                ? `<button class="ch-go" onclick="startChallenge(${st.no})">${st.cleared ? '다시 도전' : '도전!'}</button>`
+                : '<span class="ch-lock">🔒</span>';
+            const reward = st.cleared
+                ? `<span class="ch-reward done">✔ 클리어 · 재도전 +${st.repeatReward.toLocaleString()}</span>`
+                : `<span class="ch-reward">💰 +${st.reward.toLocaleString()}</span>`;
+            return `<div class="ch-stage ${state}">
+                <div class="ch-no">${st.no}</div>
+                <div class="ch-body"><div class="ch-name">${esc(st.name)} <span class="ch-bots">${diffIcon(st.bots)}</span></div>
+                    <div class="ch-desc">${esc(st.desc)} · ${reward}</div></div>
+                ${btn}</div>`;
+        }).join('');
+        document.getElementById('ch-top').innerHTML = (d.top && d.top.length)
+            ? d.top.map((t, i) => `<div class="ch-toprow"><span>${i + 1}. ${esc(t.nickname)}</span><span>${t.best}단계 · ${t.tries}번 도전</span></div>`).join('')
+            : '<div class="ch-toprow"><span>아직 아무도 못 깼습니데이 — 첫 번째가 되보이소</span></div>';
+    });
+    socket.on('challengeError', msg => alert(msg));
+    socket.on('challengeStarted', d => {
+        _challengeStage = d.stage;
+        document.getElementById('challenge-modal').style.display = 'none';
+        const t = document.createElement('div');
+        t.className = 'token-toast';
+        t.innerHTML = '🤖 컴까기 ' + d.stage + '단계 — ' + esc(d.name) + ' <small>(' + esc(d.desc) + ')</small>';
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 4200);
+    });
+    socket.on('challengeResult', r => {
+        if (!r) return;
+        const modal = document.getElementById('result-modal');
+        const inner = document.getElementById('result-inner');
+        if (r.win) {
+            confetti({ particleCount: r.allClear ? 320 : 180, spread: 100, origin: { y: 0.5 }, zIndex: 4000 });
+            const nextBtn = r.next
+                ? `<button class="btn-join" style="width:100%; margin-bottom:8px;" onclick="startChallenge(${r.next})">▶ ${r.next}단계 도전</button>`
+                : '';
+            inner.innerHTML = `<div class="result-pot-card rw-card">
+                <div class="rw-trophy">${r.allClear ? '👑' : '🏆'}</div>
+                <div class="rw-name">${r.stage}단계 클리어!</div>
+                <div class="rw-sub">${esc(r.name)} 격파${r.allClear ? ' — 컴까기 정복!' : ''}</div>
+                <div class="rw-chips">💰 뱅크롤 +${r.reward.toLocaleString()}${r.first ? '' : ' (재도전 보상)'}${r.allClear ? '<br>🤖 칭호 「컴까기 정복자」가 열렸습니데이 (꾸미기 상점 → 칭호)' : ''}</div>
+                <div style="margin-top:20px;">${nextBtn}
+                    <button class="btn-close-modal" style="width:100%;" onclick="leaveChallenge()">대기실로</button></div>
+            </div>`;
+        } else {
+            inner.innerHTML = `<div class="result-pot-card rw-card">
+                <div class="rw-trophy">💀</div>
+                <div class="rw-name">${r.stage}단계 실패</div>
+                <div class="rw-sub" style="color:#ff8a78 !important;">${esc(r.name)}에게 졌습니데이</div>
+                <div class="rw-chips">몇 번이든 다시 도전할 수 있습니데이</div>
+                <div style="margin-top:20px;">
+                    <button class="btn-join" style="width:100%; margin-bottom:8px;" onclick="startChallenge(${r.stage})">🔄 다시 도전</button>
+                    <button class="btn-close-modal" style="width:100%;" onclick="leaveChallenge()">대기실로</button></div>
+            </div>`;
+        }
+        modal.classList.add('show');
     });
 
     function openShop() { socket.emit('getShop'); document.getElementById('shop-msg').innerText = ''; document.getElementById('shop-modal').style.display = 'flex'; }
@@ -6755,7 +6890,7 @@
 
     // 📱 [모바일] 정보성 모달은 배경(바깥) 탭으로 닫기 — 폰에서 닫기 편의
     (function enableBackdropClose() {
-        const closable = ['hof-modal', 'season-modal', 'session-modal', 'help-modal', 'daily-modal', 'learn-setup-modal', 'bankroll-modal', 'history-modal', 'mttchamp-modal', 'replay-modal', 'shop-modal'];
+        const closable = ['hof-modal', 'season-modal', 'session-modal', 'help-modal', 'daily-modal', 'learn-setup-modal', 'bankroll-modal', 'history-modal', 'mttchamp-modal', 'replay-modal', 'shop-modal', 'challenge-modal'];
         closable.forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
