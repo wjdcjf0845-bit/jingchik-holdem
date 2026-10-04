@@ -2912,7 +2912,8 @@ class GameRoom {
             }
         } catch (e) {}
 
-        io.to(this.roomId).emit('actionSound', { nick, type: finalAction });
+        // amount: 이 스트리트에 그 사람이 내놓은 총액 — 말풍선에 "콜 200 / 레이즈 600"으로 보여준다
+        io.to(this.roomId).emit('actionSound', { nick, type: finalAction, amount: (finalAction === 'fold' || finalAction === 'check') ? 0 : (p.currentBet || 0) });
         this.nextTurn();
         return true;
     }
@@ -4670,6 +4671,15 @@ io.on('connection', (socket) => {
         // 💡 [수정 #8] 방 이름 길이 제한
         const roomId = (typeof data === 'string' ? data : String(data.roomId || '')).trim().slice(0, 20);
         if (!roomId) return socket.emit('joinError', '방 이름을 정확히 입력해주세요.');
+
+        // 🚪 [버그픽스] 한 사람이 두 방에 동시에 들어갈 수 있었다. 재접속으로 원래 방에 복귀한 상태에서
+        //    다른 방(초대 링크 등)에 또 들어가면 두 테이블의 화면 갱신이 번갈아 와서 테이블이 깜빡이고,
+        //    한쪽 방에는 자리만 차지한 유령이 남았다. 다른 방에 자리가 있으면 먼저 나가게 한다.
+        for (const [rid, r] of rooms) {
+            if (rid !== roomId && r.players[socket.nickname] && !r.players[socket.nickname].isBot) {
+                return socket.emit('joinError', `이미 [${rid}] 방에 있습니데이. 먼저 그 방에서 나가이소.`);
+            }
+        }
 
         if (!rooms.has(roomId)) {
             const settings = (data && data.settings) || {};

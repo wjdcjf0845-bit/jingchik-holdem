@@ -3236,6 +3236,10 @@
             grid-template-columns: minmax(0, 1fr) auto;
             grid-template-areas: "nick nick" "av cards" "chips cards";
         }
+        /* 🐛 내 좌석은 왼쪽 칸(아바타·칩)을 내용만큼 반드시 확보한다 — 폰 세로에서 큰 카드가 칸을 0으로 눌러
+           아바타와 칩이 카드 밑에 깔렸다. (상대 좌석은 폭이 고정이라 예전처럼 줄어들게 둔다)
+        */
+        @media screen and (max-width: 960px) { .player-spot.me .ps-row { grid-template-columns: minmax(min-content, 1fr) auto; } }
         .player-spot .ps-info { display: contents; }
         .ps-row > .avatar { grid-area: av; justify-self: start; }
         .ps-row > .ps-cards { grid-area: cards; }
@@ -3445,6 +3449,104 @@
         @media screen and (max-width: 960px) and (orientation: landscape) {
             #run-shop { margin-top: 6px; } .rs-head { margin-bottom: 4px; font-size: 12px; } .rs-head small { display: none; }
             .rs-item { padding: 5px 7px; gap: 6px; } .rs-txt small { display: none; } .rs-ico { font-size: 15px; }
+        }
+    
+        /* ═══════════════════════════════════════════════════════════════
+           🛠 일반 게임 버그 수정 + 🎬 연출 보강
+           ═══════════════════════════════════════════════════════════════ */
+
+        /* 🐛 폰 상단 버튼: 테마의 "#top-hud button" 글자 크기 규칙이 "아이콘만(글자 0)" 규칙을 이겨서
+              아이콘이 두 번(📜 📜 기록) 나오고 버튼이 세 배로 넓어져 블라인드 표시를 밀어냈다. */
+        @media screen and (max-width: 900px) {
+            #top-hud #btn-history, #top-hud #btn-help, #top-hud #btn-invite { font-size: 0 !important; padding: 6px 8px; min-width: 32px; }
+            #top-hud #btn-history::before, #top-hud #btn-help::before, #top-hud #btn-invite::before { font-size: 15px; }
+        }
+
+        /* 🐛 벳 칩: 금액이 길면(5,000) 좌석 쪽으로 자라 아바타·카드를 덮었다 → 항상 테이블 안쪽으로만 자라게 좌석 가장자리에 붙인다 */
+        .players-area .pos-1 .bet-chip, .players-area .pos-2 .bet-chip { left: calc(100% + 6px) !important; right: auto !important; }
+        .players-area .pos-4 .bet-chip, .players-area .pos-5 .bet-chip { right: calc(100% + 6px) !important; left: auto !important; }
+
+        /* 폰 세로: 윗줄 세 좌석이 붙어 있어 옆으로 낸 칩이 이웃 좌석을 덮는다 → 위아래로 낸다 */
+        @media screen and (max-width: 760px) and (orientation: portrait) {
+            .players-area .pos-2 .bet-chip, .players-area .pos-4 .bet-chip { left: 50% !important; right: auto !important; top: calc(100% + 4px) !important; bottom: auto !important; transform: translateX(-50%) !important; }
+            .players-area .pos-1 .bet-chip, .players-area .pos-5 .bet-chip { left: 50% !important; right: auto !important; bottom: calc(100% + 4px) !important; top: auto !important; transform: translateX(-50%) !important; }
+        }
+        /* 폰 가로: 내 벳 칩이 팟 아래 '사이드팟' 안내 글자를 덮었다 → 좌석 오른쪽 위로 비킨다 */
+        @media screen and (max-width: 960px) and (orientation: landscape) { .players-area .pos-0 .bet-chip { left: 88% !important; } }
+        /* 🐛 PC 상단의 블라인드 표시가 6px 모자라 시계가 "00…"로 잘렸다 */
+        @media screen and (min-width: 901px) { #hud-center .tournament-info { overflow: visible; text-overflow: clip; flex: 0 0 auto; white-space: nowrap; } }
+
+        /* 🐛 타임바: 차례가 오면 좌석 키가 14px 늘어 주변이 덜컹거렸다 → 좌석 아래 가장자리에 얹는다(키 불변) */
+        .player-spot .time-bar-wrapper { position: absolute; left: 10px; right: 10px; bottom: 2px; width: auto; height: 4px; margin: 0; }
+
+        /* 🐛 상대 카드 겹치기는 뒷면일 때만 — 공개된 카드는 둘 다 읽혀야 한다 */
+        @media screen and (min-width: 961px) {
+            .player-spot:not(.me) .cards .card-container + .card-container { margin-left: 0; }
+            .player-spot:not(.me) .cards.backs .card-container + .card-container { margin-left: -18px; }
+            .player-spot.shown { max-width: 244px; }
+        }
+
+        /* 👀 좌석에 못 그린 관전자 수 */
+        .spec-count { position: absolute; left: 50%; bottom: 20%; transform: translateX(-50%); z-index: 5; pointer-events: none; font-size: 11px; font-weight: 800; color: #c3cbe0; background: rgba(6,9,18,0.7); border: 1px solid rgba(255,255,255,0.14); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+
+        /* 💬 액션 말풍선 — 화면에 띄운다(좌석이 다시 그려져도 남는다) */
+        .action-bubble.ab-float {
+            position: fixed; z-index: 3200; transform: translate(-50%, -100%); pointer-events: none; white-space: nowrap;
+            padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 900; letter-spacing: 0.3px;
+            color: #fff; background: rgba(12,16,30,0.94);
+            animation: abFloat 1.7s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+        }
+        .ab-float.ab-check { color: #c3cbe0; }
+        .ab-float.ab-call  { color: #4be3a0; border-color: rgba(75,227,160,0.6) !important; }
+        .ab-float.ab-raise { color: #ffc857; border-color: rgba(255,200,87,0.7) !important; }
+        .ab-float.ab-allin { color: #fff; background: linear-gradient(180deg, #ff5a4d, #b81e14); border-color: rgba(255,255,255,0.5) !important; font-size: 14px; }
+        .ab-float.ab-fold  { color: #8d98b3; }
+        @keyframes abFloat { 0% { opacity: 0; margin-top: 14px; transform: translate(-50%, -100%) scale(0.7); } 14% { opacity: 1; margin-top: 0; transform: translate(-50%, -100%) scale(1.08); } 22% { transform: translate(-50%, -100%) scale(1); } 78% { opacity: 1; margin-top: 0; } 100% { opacity: 0; margin-top: -10px; } }
+        @media screen and (max-width: 960px) { .action-bubble.ab-float { font-size: 11px; padding: 2px 9px; } }
+
+        /* 🎬 스트리트 이름 (플랍·턴·리버) */
+        .street-banner {
+            position: fixed; z-index: 2500; transform: translate(-50%, -100%); pointer-events: none;
+            font-family: var(--font-num); font-weight: 700; font-size: 15px; letter-spacing: 6px; padding-left: 6px;
+            color: #fff; text-shadow: 0 0 14px rgba(255,255,255,0.7), 0 2px 6px rgba(0,0,0,0.8);
+            animation: streetIn 1.3s ease-out both;
+        }
+        @keyframes streetIn { 0% { opacity: 0; letter-spacing: 16px; } 22% { opacity: 1; letter-spacing: 6px; } 70% { opacity: 1; } 100% { opacity: 0; margin-top: -8px; } }
+
+        /* 🎬 스택 증감 */
+        .stack-delta {
+            position: fixed; z-index: 3300; transform: translate(-50%, -50%); pointer-events: none; white-space: nowrap;
+            font-family: var(--font-num); font-weight: 700; font-size: 22px;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.9);
+            animation: deltaRise 2.3s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+        }
+        .stack-delta.up { color: #5dffb1; text-shadow: 0 0 16px rgba(75,227,160,0.75), 0 2px 8px rgba(0,0,0,0.9); }
+        .stack-delta.down { color: #ff8a78; font-size: 17px; }
+        @keyframes deltaRise { 0% { opacity: 0; margin-top: 10px; transform: translate(-50%, -50%) scale(0.6); } 12% { opacity: 1; transform: translate(-50%, -50%) scale(1.25); } 22% { transform: translate(-50%, -50%) scale(1); } 75% { opacity: 1; margin-top: -34px; } 100% { opacity: 0; margin-top: -52px; } }
+        @media screen and (max-width: 960px) { .stack-delta { font-size: 15px; } .stack-delta.down { font-size: 12px; } }
+
+        /* 🎬 탈락 도장 */
+        .bust-stamp {
+            position: fixed; z-index: 3250; transform: translate(-50%, -50%) rotate(-12deg); pointer-events: none;
+            font-family: var(--font-num); font-weight: 700; font-size: 26px; letter-spacing: 3px; padding: 2px 12px;
+            color: #ff5a4d; border: 3px solid #ff5a4d; border-radius: 8px; background: rgba(20,4,4,0.55);
+            text-shadow: 0 0 10px rgba(255,90,77,0.6);
+            animation: bustIn 2.6s ease-out both;
+        }
+        @keyframes bustIn { 0% { opacity: 0; transform: translate(-50%, -50%) rotate(-12deg) scale(2.6); } 10% { opacity: 1; transform: translate(-50%, -50%) rotate(-12deg) scale(0.92); } 16% { transform: translate(-50%, -50%) rotate(-12deg) scale(1); } 82% { opacity: 1; } 100% { opacity: 0; } }
+        @media screen and (max-width: 960px) { .bust-stamp { font-size: 16px; border-width: 2px; } }
+
+        /* 🎬 내 차례 시간이 5초 이하 — 화면 가장자리가 붉게 맥동 */
+        body.turn-urgent::after {
+            content: ''; display: block !important; position: fixed; inset: 0; z-index: 1900; pointer-events: none;
+            box-shadow: inset 0 0 90px rgba(255,59,48,0.55), inset 0 0 22px rgba(255,59,48,0.5);
+            animation: urgentPulse 0.9s ease-in-out infinite;
+        }
+        @keyframes urgentPulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+        @media (prefers-reduced-motion: reduce) {
+            .action-bubble.ab-float, .street-banner, .stack-delta, .bust-stamp { animation-duration: 0.01s !important; }
+            body.turn-urgent::after { animation: none; }
         }
     </style>
 </head>
@@ -4951,6 +5053,8 @@
 
     socket.on('joinRoomSuccess', (roomId) => {
         currentRoomId = roomId; // 🔗 초대 링크용
+        // 🐛 핸드 번호는 방마다 1부터라, 방을 옮겼는데 번호가 같으면 "새 핸드" 정리(애니메이션 기록·연출 기준값)가 건너뛰어졌다
+        lastHandId = -1; _fx.hand = -1;
         document.body.classList.remove('learn-mode');
         document.getElementById('lobby-overlay').style.display = 'none';
         document.getElementById('game-container').style.display = 'block';
@@ -5108,6 +5212,7 @@
 
             // 타임바는 관전 여부와 무관하게 항상 갱신
             const activeSpots = document.querySelectorAll('.active-turn');
+            let _urgent = false;
             activeSpots.forEach(spot => {
                 const barFill = spot.querySelector('.time-bar-fill');
                 if (barFill) {
@@ -5118,6 +5223,7 @@
                         barFill.classList.add('danger'); // 색은 클래스로 — 테마가 !important 라 인라인 색은 안 먹는다
                         spot.classList.add('danger-pulse');
                         if (spot.classList.contains('me')) { // 🎧 내 좌석 위기 틱 (초당 1회)
+                            _urgent = true;
                             const sec = Math.ceil(left);
                             if (sec !== lastTickSec) { lastTickSec = sec; SFX.tick(); }
                         }
@@ -5127,25 +5233,26 @@
                     }
                 }
             });
-        }
+            document.body.classList.toggle('turn-urgent', _urgent);
+        } else if (document.body.classList.contains('turn-urgent')) document.body.classList.remove('turn-urgent');
         requestAnimationFrame(renderTimer);
     }
     requestAnimationFrame(renderTimer);
 
     function updateRaiseSlider(val) {
         document.getElementById('raise-display').innerText = Number(val).toLocaleString();
-        let potText = document.getElementById('pot-amount').innerText.replace(/,/g, '');
-        let pot = parseInt(potText) || 0;
-        let pct = pot > 0 ? Math.round((val / pot) * 100) : 0;
-        document.getElementById('raise-percent').innerText = `(${pct}% POT)`;
+        // 🐛 예전엔 화면의 팟 글자를 읽었는데, 그 글자는 숫자가 올라가는 애니메이션 중이라 0이나 중간값이 잡혔다(실측: "0% POT")
+        const pot = potNow();
+        const pct = pot > 0 ? Math.round((val / pot) * 100) : 0;
+        const bbs = lastBB > 0 ? (Math.round(val / lastBB * 10) / 10) + 'BB · ' : '';
+        document.getElementById('raise-percent').innerText = `(${bbs}팟의 ${pct}%)`;
     }
 
     function setQuickBet(multiplier) {
         const slider = document.getElementById('raise-slider');
         if (slider.disabled) return;
         
-        let potText = document.getElementById('pot-amount').innerText.replace(/,/g, '');
-        let pot = parseInt(potText) || 0;
+        const pot = potNow();
         
         let targetValue = 0;
         const min = parseInt(slider.min);
@@ -5157,8 +5264,9 @@
             targetValue = min + (pot * multiplier); 
         }
 
+        // 🐛 10단위로 내린 뒤에 범위를 맞춘다 — 예전 순서로는 최소 레이즈보다 작아져 서버가 거절했다(버튼이 먹통처럼 보임). MAX 는 깎지 않는다.
+        if (multiplier !== 'MAX') targetValue = Math.floor(targetValue / 10) * 10;
         targetValue = Math.max(min, Math.min(max, targetValue));
-        targetValue = Math.floor(targetValue / 10) * 10;
         
         slider.value = targetValue;
         updateRaiseSlider(targetValue);
@@ -5247,6 +5355,8 @@
 
     // 숫자를 목표치까지 굴린다 (요소가 유지되는 #pot-amount 전용)
     const _count = { el: null, cur: 0, target: 0, raf: 0 };
+    // 지금 팟의 실제 값 (화면 글자는 카운트업 중일 수 있다)
+    function potNow() { return _count.target || 0; }
     function setPotAmount(v) {
         const el = document.getElementById('pot-amount');
         if (!el) return;
@@ -5445,13 +5555,24 @@
         //    본인이 항상 하단(pos-0)에 오도록 회전
         let allNicks = (data.playerOrder && data.playerOrder.length)
             ? data.playerOrder.slice()
-            : Object.keys(data.players);
-        // playerOrder에 없는 플레이어(관전자 등)는 뒤에 덧붙임
-        Object.keys(data.players).forEach(n => { if (!allNicks.includes(n)) allNicks.push(n); });
+            : [];
+        // 🪑 [버그픽스] 좌석은 6개(pos-0~5)뿐이다. 예전엔 앉지 않은 사람(관전자·탈락자)을 전부 뒤에 붙여서,
+        //    6명이 앉은 방에 관전으로 들어가면 7번째 좌석(pos-6)이 위치 없이 테이블 왼쪽 위에 겹쳐 그려졌다.
+        //    → 앉은 사람을 먼저 채우고, 남는 자리에만(나를 먼저) 그린다. 못 그린 사람은 "관전 N명"으로 센다.
+        const _unseated = Object.keys(data.players).filter(n => !allNicks.includes(n))
+            .sort((a, b) => (a === myNickname ? -1 : 0) - (b === myNickname ? -1 : 0));
+        _unseated.forEach(n => { if (allNicks.length < 6) allNicks.push(n); });
+        const _hiddenSeats = Object.keys(data.players).length - allNicks.length;
         const myIdx = allNicks.indexOf(myNickname);
         if (myIdx !== -1) allNicks = allNicks.slice(myIdx).concat(allNicks.slice(0, myIdx));
 
         const isIAmHost = (data.hostNickname === myNickname);
+        if (_hiddenSeats > 0) {
+            const sc = document.createElement('div');
+            sc.className = 'spec-count';
+            sc.innerText = '👀 관전 ' + _hiddenSeats + '명';
+            pArea.appendChild(sc);
+        }
 
         allNicks.forEach((nick, idx) => {
             const p = data.players[nick];
@@ -5490,7 +5611,8 @@
                 // 🎴 조이기: 내 카드 + 진행 중 + 아직 공개 안 함 → 드래그로 까기
                 const sq = i => false; // 🎴 조이기 제거 — 받는 즉시 자동 공개
                 const _back = cosOf(nick).back;
-                cardsHtml = `<div class="cards">${getCard(p.hand[0], hideCard, `hand_${nick}_0`, sq(0), _back)}${getCard(p.hand[1], hideCard, `hand_${nick}_1`, sq(1), _back)}</div>`;
+                if (!hideCard && !isMe) cls += ' shown';   // 공개된 상대 카드는 겹치지 않게(둘 다 읽혀야 한다) 좌석을 넓힌다
+                cardsHtml = `<div class="cards${hideCard ? ' backs' : ''}">${getCard(p.hand[0], hideCard, `hand_${nick}_0`, sq(0), _back)}${getCard(p.hand[1], hideCard, `hand_${nick}_1`, sq(1), _back)}</div>`;
             }
 
             const rankKor = {
@@ -5515,7 +5637,7 @@
             const _av = avatarAttrs(nick, _cos);
             // 🪪 간소화한 상태창 — 한 줄에 [아바타] [닉네임 / 칩] [카드]. 칭호는 프로필(좌석을 누르면)에서 본다.
             //    상태는 칩 옆에 한 단어로만: 올인이면 칩(0) 대신 ALL IN, 탈락·관전이면 그 말만 남긴다.
-            const _state = p.isDisconnected ? '자리비움' : p.isSpectator ? '관전' : p.isAllIn ? 'ALL IN' : (p.chips <= 0 ? '탈락' : (p.isFolded ? '폴드' : ''));
+            const _state = p.isDisconnected ? '자리비움' : p.isSpectator ? '관전' : (p.isAllIn && p.chips <= 0) ? 'ALL IN' : (p.chips <= 0 ? '탈락' : (p.isFolded ? '폴드' : ''));
             const _stateHtml = _state ? `<span class="ps-state${_state === 'ALL IN' ? ' allin' : ''}">${_state}</span>` : '';
             const _zero = (p.chips <= 0 && _state && _state !== '폴드' && _state !== '자리비움') ? ' zero' : '';
             div.innerHTML = `${roleHtml || posHtml}${betChipHtml}
@@ -5684,6 +5806,7 @@
         renderFoldShow(data); // 🃏 죽은 패 공개 선택창
         renderTimeBank(data); // ⏳ 타임뱅크 버튼
         challengeFX(data);    // 🤖 컴까기 연출·협동 대기 화면
+        try { tableFX(data); } catch (e) {}   // 🎬 스트리트 배너 · 스택 증감 · 탈락/헤즈업
         // 👀 관전 상태가 아니면 관전 바를 숨긴다 (myPlayer 선언 이후여야 한다)
         if (!(myPlayer && myPlayer.isSpectator && data.youSpectate)) {
             const _sb = document.getElementById('spectate-bar');
@@ -5708,7 +5831,9 @@
                 ind.innerHTML = `👀 관전 중입니데이 — 아래 [자리에 앉기]로 참여하이소`;
             } else {
                 document.getElementById('spectate-bar').style.display = 'none';
-                ind.innerHTML = `👀 현재 진행 중인 토너먼트를 관전 중입니데이... (종료 후 자동 참여)`;
+                ind.innerHTML = data.gameMode === 'cash'
+                    ? `👀 관전 중입니데이 — 자리가 나면 다음 핸드부터 참여합니데이`
+                    : `👀 현재 진행 중인 토너먼트를 관전 중입니데이... (종료 후 자동 참여)`;
             }
         }
         else if (myPlayer && myPlayer.chips <= 0 && data.gameStage > 0) {
@@ -7559,17 +7684,94 @@
         allin: new Audio('/sounds/allin.mp3')
     };
 
+    // 🎬 [테이블 연출] 게임 상태에는 손대지 않고, 상태가 바뀌는 순간만 잡아 화면에 띄운다.
+    //    · 플랍/턴/리버가 깔릴 때 스트리트 이름
+    //    · 핸드가 끝나 칩이 정산된 순간, 좌석마다 이번 핸드의 증감(+1,250 / −600)
+    //    · 토너먼트에서 칩이 0이 된 좌석에 BUST 도장 + 남은 인원, 둘만 남으면 HEADS-UP
+    const _fx = { hand: -1, start: {}, paid: false, comm: 0, alive: 0 };
+    function fxAt(cls, x, y, ms, html) {
+        const d = document.createElement('div');
+        d.className = cls; d.style.left = x + 'px'; d.style.top = y + 'px';
+        d.innerHTML = html;
+        document.body.appendChild(d);
+        setTimeout(() => d.remove(), ms);
+        return d;
+    }
+    function tableFX(data) {
+        const players = data.players || {};
+        const live = data.gameStage >= 1 && data.gameStage <= 4;
+        if (live && data.handId !== _fx.hand) {
+            _fx.hand = data.handId; _fx.paid = false; _fx.comm = (data.communityCards || []).length; _fx.start = {};
+            // 핸드 전 스택 = 지금 칩 + 이 핸드에 넣은 칩 (중간에 들어온 관전자도 맞게 계산된다)
+            Object.keys(players).forEach(n => { _fx.start[n] = (players[n].chips || 0) + (players[n].totalInvested || 0); });
+            _fx.alive = Object.values(players).filter(p => (p.chips || 0) + (p.totalInvested || 0) > 0).length;
+        }
+        if (data.handId !== _fx.hand) return;
+        const motion = !_noMotion();
+        // ── 스트리트 배너 ──
+        const cc = (data.communityCards || []).length;
+        if (cc > _fx.comm) {
+            const name = cc === 3 ? 'FLOP' : cc === 4 ? 'TURN' : cc === 5 ? 'RIVER' : '';
+            const board = document.getElementById('community-area');
+            if (name && board && motion) {
+                const r = board.getBoundingClientRect();
+                if (r.width) fxAt('street-banner', r.left + r.width / 2, r.top - 4, 1300, name);
+            }
+            _fx.comm = cc;
+        }
+        // ── 정산 순간: 증감 + 탈락 ──
+        if (data.gameStage === 5 && !_fx.paid) {
+            _fx.paid = true;
+            const tourney = data.gameMode !== 'cash' && !data.challenge;
+            let busted = 0;
+            Object.keys(_fx.start).forEach(n => {
+                const p = players[n]; if (!p) return;
+                const delta = (p.chips || 0) - _fx.start[n];
+                const seat = document.getElementById('player-' + n.replace(/\s/g, '_'));
+                const r = seat ? seat.getBoundingClientRect() : null;
+                if (!r || !r.width) return;
+                if (delta !== 0 && motion) {
+                    fxAt('stack-delta ' + (delta > 0 ? 'up' : 'down'), r.left + r.width / 2, r.top + r.height / 2, 2300,
+                        (delta > 0 ? '+' : '−') + Math.abs(delta).toLocaleString());
+                }
+                if (tourney && _fx.start[n] > 0 && (p.chips || 0) <= 0) {
+                    busted++;
+                    if (motion) fxAt('bust-stamp', r.left + r.width / 2, r.top + r.height / 2, 2600, 'BUST');
+                }
+            });
+            if (tourney && busted > 0) {
+                const alive = Object.values(players).filter(p => (p.chips || 0) > 0).length;
+                if (alive >= 2) {
+                    const t = document.createElement('div');
+                    t.className = 'token-toast';
+                    t.innerHTML = alive === 2 ? '⚔️ HEADS-UP! <small>둘만 남았습니데이</small>' : '💥 탈락자 발생 <small>남은 인원 ' + alive + '명</small>';
+                    document.body.appendChild(t);
+                    setTimeout(() => t.remove(), 3200);
+                }
+            }
+        }
+    }
+
     // 💬 액션 말풍선
     const ACTION_LABEL = { check: '체크', call: '콜', raise: '레이즈!', allin: '올인!!', fold: '폴드' };
-    function showActionBubble(nick, type) {
+    function showActionBubble(nick, type, amount) {
         const pEl = document.getElementById(`player-${nick.replace(/\s/g, '_')}`);
         if (!pEl || !ACTION_LABEL[type]) return;
-        pEl.querySelectorAll('.action-bubble').forEach(b => b.remove());
+        // 🐛 예전엔 좌석 안에 붙였는데, 액션 직후에 오는 상태 갱신이 좌석을 통째로 다시 그려서 말풍선이 뜨자마자 사라졌다.
+        //    → 화면(body)에 띄우고 좌석 위치만 빌린다.
+        const key = 'ab-' + nick.replace(/\s/g, '_');
+        document.querySelectorAll('.action-bubble[data-k="' + key.replace(/"/g, '') + '"]').forEach(b => b.remove());
+        const r = pEl.getBoundingClientRect();
+        if (!r.width) return;
         const bub = document.createElement('div');
-        bub.className = `action-bubble ab-${type}`;
-        bub.innerText = ACTION_LABEL[type];
-        pEl.appendChild(bub);
-        setTimeout(() => bub.remove(), 1500);
+        bub.className = `action-bubble ab-float ab-${type}`;
+        bub.dataset.k = key;
+        const amt = (amount > 0 && type !== 'check' && type !== 'fold') ? ' ' + Number(amount).toLocaleString() : '';
+        bub.innerText = ACTION_LABEL[type].replace(/!+$/, '') + amt + (type === 'allin' ? '!' : '');
+        bub.style.left = (r.left + r.width / 2) + 'px';
+        bub.style.top = (r.top - 6) + 'px';
+        document.body.appendChild(bub);
+        setTimeout(() => bub.remove(), 1700);
     }
 
     // 💥 [액션 연출] 누가 무엇을 했는지 소리·말풍선에 더해 "움직임"으로도 보여준다.
@@ -7633,7 +7835,7 @@
     }
 
     socket.on('actionSound', data => {
-        showActionBubble(data.nick, data.type);
+        showActionBubble(data.nick, data.type, data.amount);
         playActionFX(data.nick, data.type);
 
         const volInput = document.getElementById('vol-voice');
