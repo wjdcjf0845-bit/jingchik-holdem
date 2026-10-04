@@ -3408,6 +3408,16 @@
         .pr-v { font-family: var(--font-num); font-weight: 700; color: var(--gold); }
         .pf-more .pf-adv-legend { margin-top: 10px; }
         .pf-card .btn-close-modal { margin-top: 12px !important; }
+    
+        /* 🎨 증강 카드 그림 (힉스필드 · /skins/aug_*.webp) */
+        .ac-pic { width: 104px; height: 104px; border-radius: 20px; background: #10162c center / cover no-repeat; border: 1px solid var(--tc); box-shadow: 0 6px 16px rgba(0,0,0,0.5), 0 0 16px var(--tg); }
+        .aug-chip, .ri-ico { background-position: center !important; background-size: cover !important; background-repeat: no-repeat !important; }
+        .aug-chip { width: 32px; height: 32px; }
+        .ri-ico { width: 38px; height: 38px; border-radius: 10px; }
+        .rh-augs { display: inline-flex; align-items: center; gap: 2px; }
+        .rh-augs i { flex: 0 0 auto; width: 19px; height: 19px; border-radius: 5px; background: #10162c center / cover no-repeat; border: 1px solid rgba(255,255,255,0.3); }
+        @media screen and (max-width: 560px) { .ac-pic { width: 62px; height: 62px; border-radius: 14px; } }
+        @media screen and (max-width: 960px) and (orientation: landscape) { .ac-pic { width: 62px; height: 62px; border-radius: 14px; } .rh-augs i { width: 15px; height: 15px; } }
     </style>
 </head>
 <body>
@@ -3431,7 +3441,7 @@
             <span class="cr-ico">🍀</span>
             <span class="cr-txt"><b>증강 컴까기 <i>NEW</i></b><small>10층 탑 · 층마다 기한 안에 목표 칩 달성 → 증강 3개 중 1개 선택</small><small id="cr-best"></small></span>
         </button>
-        <button class="ch-coop-btn" onclick="createCoop()">👥 친구랑 같이 깨기 <small>(최대 3명 · 방을 만들고 친구를 기다립니데이)</small></button>
+        <button class="ch-coop-btn" onclick="createCoop()">👥 친구랑 같이 깨기 <small>(최대 4명 · 방을 만들고 친구를 기다립니데이)</small></button>
         <div id="ch-ladder"></div>
         <div class="ch-top-title">🏅 컴까기 순위</div>
         <div id="ch-top"></div>
@@ -4198,7 +4208,7 @@
         panel.dataset.sig = sig;
         let stages = '';
         for (let i = 1; i <= ch.maxStage; i++) stages += '<button class="cp-stage' + (i === ch.total ? ' boss' : '') + '" ' + (isHost ? 'onclick="startCoop(' + i + ')"' : 'disabled') + '>' + (i === ch.total ? '👹 보스' : i + '단계') + '</button>';
-        panel.innerHTML = '<div class="cp-title">👥 컴까기 협동 — ' + humans.length + ' / 3명</div>' +
+        panel.innerHTML = '<div class="cp-title">👥 컴까기 협동 — ' + humans.length + ' / 4명</div>' +
             '<div class="cp-members">' + humans.map(n => '<span>' + esc(n) + (n === ch.host ? ' 👑' : '') + '</span>').join('') + '</div>' +
             '<div class="cp-sub">' + (isHost ? '도전할 단계를 누르면 바로 시작합니데이' : '방장이 단계를 고르는 중입니데이...') + '</div>' +
             '<div class="cp-stages">' + stages + '</div>' +
@@ -4256,7 +4266,9 @@
         document.getElementById('run-modal').style.display = 'none';
         socket.emit('runPick', { idx: i });
     }
-    function augChip(a) { return `<span class="aug-chip t-${a.tier}" title="${esc(a.name)} — ${esc(a.desc)}">${a.icon}</span>`; }
+    // 🎨 증강 그림(힉스필드) — id 는 서버가 정한 영문 소문자뿐이지만, 주소에 넣기 전에 한 번 더 거른다
+    function augPic(a) { return /^[a-z]+$/.test(a.id || '') ? `background-image:url('/skins/aug_${a.id}.webp')` : ''; }
+    function augChip(a) { return `<span class="aug-chip t-${a.tier}" title="${esc(a.name)} — ${esc(a.desc)}" style="${augPic(a)}"></span>`; }
     function runCardTxt(c) {
         if (!c || c.length < 2) return '';
         const suit = { s: '♠', h: '♥', d: '♦', c: '♣' }[c[1]] || '';
@@ -4281,7 +4293,7 @@
         document.getElementById('run-offers').innerHTML = d.offers.map((a, i) => `
             <button class="aug-card t-${a.tier}" onclick="pickAug(${i})">
                 <span class="ac-tier">${esc(a.tierName)}</span>
-                <span class="ac-ico">${a.icon}</span>
+                <span class="ac-pic" style="${augPic(a)}"></span>
                 <span class="ac-name">${esc(a.name)}</span>
                 <span class="ac-desc">${esc(a.desc)}</span>
             </button>`).join('');
@@ -4324,14 +4336,14 @@
         hud.innerHTML = `<span class="rh-floor">${ch.boss ? '👹' : '🍀'} ${r.floor}/${r.total}층</span>
             <span class="rh-quota ${pct >= 100 ? 'full' : ''}"><i style="width:${pct}%"></i><em>${chips.toLocaleString()} / ${r.quota.toLocaleString()}</em></span>
             <span class="rh-hands ${r.handsLeft <= 2 ? 'low' : ''}">${r.handsLeft > 0 ? '⏳ ' + r.handsLeft + '핸드' : '⏳ 마지막!'}</span>
-            <span class="rh-augs" onclick="toggleRunInfo()">${_runInfo.length ? _runInfo.map(a => a.icon).join('') : '증강'}</span>
+            <span class="rh-augs" onclick="toggleRunInfo()">${_runInfo.length ? _runInfo.map(a => `<i style="${augPic(a)}"></i>`).join('') : '증강'}</span>
             ${canMull ? `<button class="rh-mull" onclick="socket.emit('runMulligan')">🔄 ${r.mull}</button>` : ''}${peek}`;
     }
     function toggleRunInfo() {
         const el = document.getElementById('run-info');
         if (el.style.display !== 'none') { el.style.display = 'none'; return; }
         el.innerHTML = '<div class="ri-title">🍀 가진 증강 <small>(눌러서 닫기)</small></div>' + (_runInfo.length
-            ? _runInfo.map(a => `<div class="ri-row t-${a.tier}"><span class="ri-ico">${a.icon}</span><span><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span></div>`).join('')
+            ? _runInfo.map(a => `<div class="ri-row t-${a.tier}"><span class="ri-ico" style="${augPic(a)}"></span><span><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span></div>`).join('')
             : '<div class="ri-row"><span>아직 없습니데이</span></div>');
         el.style.display = 'block';
     }

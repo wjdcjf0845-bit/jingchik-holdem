@@ -122,7 +122,7 @@ test('코어는 열리지 않은 단계로는 못 번다 / 손상된 값에서�
 // ══════════════ 협동 ══════════════
 
 test('협동: 사람 + 봇이 6자리를 넘지 않는다', () => {
-    for (let st = 1; st <= 10; st++) for (let h = 1; h <= 3; h++) {
+    for (let st = 1; st <= 10; st++) for (let h = 1; h <= C.COOP_MAX; h++) {
         const s = C.coopSetup(st, h);
         assert.ok(s.bots.length >= 1 && s.bots.length + h <= 6, `단계 ${st} 사람 ${h}`);
     }
@@ -131,7 +131,7 @@ test('협동: 사람 + 봇이 6자리를 넘지 않는다', () => {
 test('협동: 사람이 늘면 봇이 늘거나(자리 될 때) 봇 칩이 늘어 — 쉬워지지 않게', () => {
     for (let st = 1; st <= 10; st++) {
         const solo = C.coopSetup(st, 1);
-        for (let h = 2; h <= 3; h++) {
+        for (let h = 2; h <= C.COOP_MAX; h++) {
             const co = C.coopSetup(st, h);
             const power = x => x.bots.length * x.mult;
             assert.ok(co.mult > solo.mult, `단계 ${st} 사람 ${h}: 칩 배율이 안 올랐다`);
@@ -142,9 +142,10 @@ test('협동: 사람이 늘면 봇이 늘거나(자리 될 때) 봇 칩이 늘�
     }
 });
 
-test('협동: 인원 범위를 벗어나도 안전하게 1~3명으로 본다', () => {
+test('협동: 인원 범위를 벗어나도 안전하게 1~4명으로 본다', () => {
     assert.deepStrictEqual(C.coopSetup(3, 0), C.coopSetup(3, 1));
-    assert.deepStrictEqual(C.coopSetup(3, 99), C.coopSetup(3, 3));
+    assert.deepStrictEqual(C.coopSetup(3, 99), C.coopSetup(3, 4));
+    assert.strictEqual(C.COOP_MAX, 4);
 });
 
 test('협동도 잠금 없이 전 단계를 고를 수 있다', () => {

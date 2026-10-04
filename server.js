@@ -4859,7 +4859,7 @@ io.on('connection', (socket) => {
     });
 
     // 🍀 [증강 런] 시작 — 고르다 만 런이 있으면 이어서, 없으면 새 런(첫 증강 3택부터)
-    socket.on('runStart', async () => {
+    socket.on('runStart', async (data) => {
         if (!socket.nickname) return;
         const nick = socket.nickname;
         const u = await MockDB.getUser(nick);
@@ -4868,6 +4868,17 @@ io.on('connection', (socket) => {
         const cur = socket.currentRoom;
         if (cur && cur !== roomId && rooms.has(cur) && rooms.get(cur).players[nick]) {
             socket.emit('challengeError', '먼저 지금 있는 방에서 나가이소.');
+            return;
+        }
+        // 🔬 밸런스 측정 전용(DEV_RUN) — 원하는 층·증강으로 바로 시작한다. 운영 서버에는 이 환경변수가 없다.
+        if (process.env.DEV_RUN && data && data.dev) {
+            const dr = Rogue.newRun(Math.random);
+            dr.floor = Math.max(1, Math.min(Rogue.FLOORS.length, Number(data.dev.floor) || 1));
+            dr.cleared = dr.floor - 1;
+            dr.augments = (Array.isArray(data.dev.augments) ? data.dev.augments : []).filter(id => Object.prototype.hasOwnProperty.call(Rogue.AUGMENTS, id));
+            dr.revive = dr.augments.filter(a => a === 'revive').length;
+            dr.offers = []; runs.set(nick, dr);
+            launchRunFloor(socket, dr);
             return;
         }
         let run = runs.get(nick);
@@ -4927,7 +4938,7 @@ io.on('connection', (socket) => {
         room.sendState();
     });
 
-    // 🤖 [컴까기 협동] 친구를 기다리는 방 만들기 — 방 목록·초대 링크로 들어온다(최대 3명)
+    // 🤖 [컴까기 협동] 친구를 기다리는 방 만들기 — 방 목록·초대 링크로 들어온다(최대 4명)
     socket.on('createCoopChallenge', async () => {
         if (!socket.nickname) return;
         const nick = socket.nickname;
