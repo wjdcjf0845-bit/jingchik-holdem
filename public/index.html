@@ -3418,6 +3418,34 @@
         .rh-augs i { flex: 0 0 auto; width: 19px; height: 19px; border-radius: 5px; background: #10162c center / cover no-repeat; border: 1px solid rgba(255,255,255,0.3); }
         @media screen and (max-width: 560px) { .ac-pic { width: 62px; height: 62px; border-radius: 14px; } }
         @media screen and (max-width: 960px) and (orientation: landscape) { .ac-pic { width: 62px; height: 62px; border-radius: 14px; } .rh-augs i { width: 15px; height: 15px; } }
+    
+        /* 🪙 증강 컴까기 — 층 사이 상점 */
+        #run-shop { margin-top: 10px; text-align: left; }
+        .rs-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; font-size: 13px; font-weight: 900; color: #fff; margin-bottom: 7px; }
+        .rs-head b { color: var(--gold); font-family: var(--font-num); font-size: 15px; }
+        .rs-earn { font-size: 11.5px; font-weight: 800; color: #4be3a0; background: rgba(35,201,122,0.12); border: 1px solid rgba(75,227,160,0.4); border-radius: 999px; padding: 1px 8px; }
+        .rs-head small { font-size: 11px; font-weight: 600; color: #8d98b3; margin-left: auto; }
+        .rs-items { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+        .rs-item {
+            display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 9px; text-align: left; cursor: pointer;
+            font: inherit; color: #fff; border-radius: 11px; border: 1px solid rgba(255,200,87,0.45);
+            background: linear-gradient(165deg, rgba(60,48,20,0.75), rgba(18,16,10,0.9));
+            transition: transform 0.12s, border-color 0.12s;
+        }
+        .rs-item:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--gold); }
+        .rs-item:disabled { cursor: default; opacity: 0.45; border-color: rgba(255,255,255,0.12); background: rgba(6,9,18,0.5); }
+        .rs-item.bought { opacity: 0.7; border-color: rgba(75,227,160,0.5); }
+        .rs-ico { flex: 0 0 auto; font-size: 19px; }
+        .rs-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+        .rs-txt b { font-size: 12.5px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rs-txt small { font-size: 10px; color: #9aa6c2; line-height: 1.3; word-break: keep-all; }
+        .rs-cost { flex: 0 0 auto; font-family: var(--font-num); font-size: 12px; font-weight: 700; color: var(--gold); white-space: nowrap; }
+        .rs-item.bought .rs-cost { color: #4be3a0; font-family: var(--font-body); font-size: 10.5px; }
+        @media screen and (max-width: 560px) { .rs-items { grid-template-columns: 1fr 1fr; } .rs-head small { margin-left: 0; flex: 1 1 100%; } }
+        @media screen and (max-width: 960px) and (orientation: landscape) {
+            #run-shop { margin-top: 6px; } .rs-head { margin-bottom: 4px; font-size: 12px; } .rs-head small { display: none; }
+            .rs-item { padding: 5px 7px; gap: 6px; } .rs-txt small { display: none; } .rs-ico { font-size: 15px; }
+        }
     </style>
 </head>
 <body>
@@ -3457,6 +3485,7 @@
         </div>
         <div id="run-offers"></div>
         <div class="run-next" id="run-next"></div>
+        <div id="run-shop"></div>
         <div class="run-owned" id="run-owned"></div>
         <div class="run-btns">
             <button id="run-reroll" onclick="socket.emit('runReroll')">🎲 다시 뽑기</button>
@@ -4252,6 +4281,7 @@
     // ═══ 🍀 증강 컴까기 (로그라이크 런) ═══
     //   층마다 "기한(핸드 수) 안에 목표 칩"을 채우면 올라가고, 층 사이에 증강 3개 중 1개를 고른다.
     let _runInfo = [];   // 지금 가진 증강(설명 포함) — HUD를 누르면 목록으로 보여준다
+    let _runTitle = '', _runEarned = 0;
     function startRun() {
         document.getElementById('challenge-modal').style.display = 'none';
         document.getElementById('result-modal').classList.remove('show');
@@ -4278,7 +4308,7 @@
         const el = document.getElementById('cr-best');
         if (!el || !d) return;
         const top = (d.top && d.top.length) ? ' · 1위 ' + esc(d.top[0].nickname) + ' ' + d.top[0].best + '층' : '';
-        el.innerHTML = (d.active ? `▶ 진행 중인 런이 있습니데이 (${d.active.floor}층) · ` : '') + `내 최고 ${d.progress.best} / ${d.total}층` + top;
+        el.innerHTML = (d.active ? `▶ 하던 런 이어하기 (${d.active.floor}층) · ` : '') + `내 최고 ${d.progress.best} / ${d.total}층` + top;
     });
     socket.on('runOffer', d => {
         if (!d) return;
@@ -4286,7 +4316,13 @@
         document.getElementById('result-modal').classList.remove('show');
         if (d.clearedFloor && !d.rerolled) confetti({ particleCount: 140, spread: 90, origin: { y: 0.45 }, zIndex: 4600 });
         const nx = d.next;
-        document.getElementById('run-title').innerHTML = d.clearedFloor ? `🎉 ${d.clearedFloor}층 돌파! <small>증강을 고르이소</small>` : '🍀 증강 컴까기 <small>첫 증강을 고르이소</small>';
+        // 다시 뽑기·상점 구매로 다시 그릴 때는 서버가 "몇 층을 깼는지"를 다시 안 보낸다 — 직전 제목을 기억해 둔다
+        if (d.clearedFloor) _runTitle = `🎉 ${d.clearedFloor}층 돌파! <small>증강을 고르이소</small>`;
+        else if (d.start) _runTitle = '🍀 증강 컴까기 <small>첫 증강을 고르이소</small>';
+        else if (d.more) _runTitle = '➕ 증강 하나 더 <small>한 번 더 고르이소</small>';
+        else if (!d.rerolled || !_runTitle) _runTitle = `🍀 ${d.floor}층 준비 <small>증강을 고르이소</small>`;
+        document.getElementById('run-title').innerHTML = _runTitle;
+        if (d.earned) _runEarned = d.earned; else if (!d.rerolled) _runEarned = 0;
         document.getElementById('run-sub').innerText = d.start
             ? '층마다 기한(핸드 수) 안에 목표 칩을 채우면 올라갑니데이. 못 채우면 런이 끝나고, 올라간 층만큼 보상을 받습니데이.'
             : '';
@@ -4301,6 +4337,17 @@
             `<b>${nx.boss ? '👹 ' : ''}다음: ${nx.floor}층 「${esc(nx.name)}」</b> 상대 ${nx.bots.length}명 · 시작 ${nx.startChips.toLocaleString()} → 목표 <em>${nx.quota.toLocaleString()}</em> · 기한 ${nx.hands}핸드` +
             `<br><small>(목표·기한은 지금 가진 증강 기준 — 고른 증강에 따라 더 좋아질 수 있습니데이)</small>`;
         document.getElementById('run-owned').innerHTML = d.augments.length ? '가진 증강 ' + d.augments.map(augChip).join('') : '';
+        // 🪙 상점 — 층을 깨고 받은 코인으로 산다 (물건 id 는 서버가 정한 영문 소문자뿐이지만 한 번 더 거른다)
+        const items = (d.shop || []).filter(it => /^[a-z]+$/.test(it.id || ''));
+        document.getElementById('run-shop').innerHTML = items.length ? `
+            <div class="rs-head">🪙 상점 <b>${d.coins || 0} 코인</b>${_runEarned ? `<span class="rs-earn">이번 층 +${_runEarned}</span>` : ''}
+                <small>${(d.coins || 0) > 0 || !d.start ? '빨리·크게 깰수록 코인을 더 받습니데이' : '층을 깨면 코인을 받습니데이 (빨리·크게 깰수록 더)'}</small></div>
+            <div class="rs-items">` + items.map(it => `
+                <button class="rs-item${it.bought ? ' bought' : ''}" ${it.can ? '' : 'disabled'} onclick="socket.emit('runBuy', { id: '${it.id}' })">
+                    <span class="rs-ico">${it.icon}</span>
+                    <span class="rs-txt"><b>${esc(it.name)}</b><small>${esc(it.desc)}</small></span>
+                    <span class="rs-cost">${it.bought ? '구매함' : '🪙 ' + it.cost}</span>
+                </button>`).join('') + '</div>' : '';
         const rr = document.getElementById('run-reroll');
         rr.innerText = `🎲 다시 뽑기 (${d.rerolls})`; rr.disabled = d.rerolls <= 0;
         document.getElementById('run-modal').style.display = 'flex';

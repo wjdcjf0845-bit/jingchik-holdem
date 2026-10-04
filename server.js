@@ -1142,7 +1142,8 @@ class GameRoom {
                     try { rank = Hand.solve(p.hand.concat(this.communityCards)).rank; } catch (e) {}
                 }
                 // 카드를 받을 때 준 보너스(포켓·블라인드 환급)는 "번 칩"에서 뺀다 — 폴드한 핸드가 이긴 걸로 계산되지 않게
-                const r = Rogue.afterHand(run, { start: start + (ch.dealBonus || 0), now: p.chips, hand: p.hand, rank, allIn: !!p.isAllIn || p.chips <= 0, rng: Math.random });
+                const r = Rogue.afterHand(run, { start: start + (ch.dealBonus || 0), now: p.chips, hand: p.hand, rank, allIn: !!p.isAllIn || p.chips <= 0,
+                    vpip: !!(this.vpipThisHand && this.vpipThisHand.has(ch.nick)), rng: Math.random });
                 if (r.bonus > 0) {
                     p.chips += r.bonus;
                     if (p.socketId) io.to(p.socketId).emit('runBonus', { bonus: r.bonus, notes: r.notes });
@@ -1188,17 +1189,17 @@ class GameRoom {
         const pl = this.players[nick];
         const sock = (pl && pl.socketId) ? io.sockets.sockets.get(pl.socketId) : null;
         if (win) {
-            run.cleared = run.floor;
-            if (run.floor >= Rogue.FLOORS.length) endRun(nick, run, sock);
+            const chips = pl ? pl.chips : 0;
+            const r = Rogue.clearFloor(run, { chips, quota: ch.quota, handsLeft: Math.max(0, ch.hands - ch.handsPlayed) }, Math.random);
+            if (r.done) endRun(nick, run, sock);
             else {
-                run.afterBoss = !!Rogue.FLOORS[run.floor - 1].boss;
-                run.floor += 1; run.phase = 'pick';
-                run.offers = Rogue.makeOffers(run, Math.random, run.afterBoss);
-                if (sock) sock.emit('runOffer', runOfferPayload(run, { clearedFloor: run.cleared, chips: pl ? pl.chips : 0, quota: ch.quota }));
+                saveRun(nick, run);
+                if (sock) sock.emit('runOffer', runOfferPayload(run, { clearedFloor: run.cleared, chips, quota: ch.quota, earned: r.coins }));
             }
         } else if (!abandon && run.revive > 0 && sock) {
             run.revive -= 1;
             const i = run.augments.indexOf('revive'); if (i !== -1) run.augments.splice(i, 1);   // 쓴 클로버는 사라진다
+            saveRun(nick, run);
             sock.emit('runRevive', { floor: run.floor });
             setTimeout(() => { if (runs.get(nick) === run && sock.connected) launchRunFloor(sock, run); }, 2600);
         } else {
@@ -1433,6 +1434,20 @@ class GameRoom {
                 const _threeBetPlus = _rc >= 2;
                 const rt = preflopRangeTier(code, p.position || '', facingRaise, { numActive: _numActive, threeBetPlus: _threeBetPlus });
                 const isBB = p.role && p.role.includes('BB');
+
+                // 🤖 [반복 올인 대응 — 초보·중수] 이 방에서 올인을 남발한 사람의 올인은 "그 사람이 실제로 미는 빈도"로 받는다.
+                //    (고수는 아래 숏스택 로직이 같은 읽기를 쓴다.) 예전엔 난이도 낮은 봇이 올인에 거의 다 접어서
+                //    매 핸드 올인하면 블라인드를 공짜로 쓸어 갔다.
+                if (!persona.proStrategy && facingRaise && toCall > 0) {
+                    const _jam = this.playerOrder.find(n => n !== nick && this.players[n] && !this.players[n].isFolded && this.players[n].isAllIn && (this.players[n].currentBet || 0) === this.currentHighestBet);
+                    if (_jam) {
+                        const js = this.jamStat(_jam);
+                        if (js.j >= 2 && js.h >= 3 && js.j / js.h >= 0.3) {
+                            const res = ShortStack.shouldCallShove(code, Math.min(1, js.j / js.h), toCall / (totalPot + toCall), 0.03);
+                            return res.call ? { type: 'call' } : { type: 'fold' };
+                        }
+                    }
+                }
 
                 // 🤖 [숏스택·올인] 스택이 짧거나 올인을 마주하면 일반 로직보다 먼저 푸시/폴드 판단을 한다
                 if (persona.proStrategy && this.botV2(nick)) {
@@ -1786,6 +1801,17 @@ class GameRoom {
         return ab === '2' ? !bit : bit;
     }
 
+    // 🤖 [반복 올인 읽기] 프리플랍에 깊은 스택으로 올인한 횟수 / 받은 핸드 수.
+    //    예전엔 30bb 올인을 늘 "아주 좁은 레인지"로 읽어 거의 다 접었다 → 매 핸드 올인하면 블라인드를 공짜로 가져갔다.
+    //    증강 런에서는 층이 바뀌어도(방이 새로 생겨도) 이어지도록 런에 적어 둔다.
+    jamStat(nick) {
+        const ch = this._challenge;
+        if (ch && ch.run && ch.nick === nick) return (ch.run.jam = ch.run.jam || { h: 0, j: 0 });
+        const p = this.players[nick];
+        if (!p) return { h: 0, j: 0 };
+        return (p._jam = p._jam || { h: 0, j: 0 });
+    }
+
     // 🤖 [숏스택 푸시/폴드 + 올인 콜]
     //    반환: 결정 객체, 또는 null(일반 프리플랍 로직에 맡김)
     shortStackDecision(nick, c) {
@@ -1817,6 +1843,8 @@ class GameRoom {
             // 상대 성향 반영: 평소에 많이 넣는 사람은 레인지가 넓다
             const rd = this.getPrimaryOpponentRead ? this.getPrimaryOpponentRead(nick) : null;
             if (rd && rd.aggression != null) x *= rd.aggression > 0.55 ? 1.3 : (rd.aggression < 0.2 ? 0.8 : 1);
+            // 이 방에서 실제로 본 올인 빈도가 더 넓으면 그쪽을 믿는다 (두 번 이상 밀었고 세 핸드 이상 봤을 때부터)
+            if (aggr && aggrAllIn) { const js = this.jamStat(aggr); if (js.j >= 2 && js.h >= 3) x = Math.max(x, Math.min(1, js.j / js.h)); }
             const potOdds = toCall / (totalPot + toCall);
             // 토너먼트는 탈락하면 끝이라 조금 더 요구한다. 뒤에 사람이 남았으면 더.
             const behind = live.filter(n => n !== aggr && !this.players[n].isAllIn && !this.players[n].hasActed).length;
@@ -2593,6 +2621,7 @@ class GameRoom {
 
         this.playerOrder.forEach(nick => {
             this.players[nick].hand = [this.deck.pop(), this.deck.pop()];
+            this.jamStat(nick).h += 1;
 
             if (bl.ante > 0) {
                 const antePaid = Math.min(bl.ante, this.players[nick].chips);
@@ -2836,6 +2865,8 @@ class GameRoom {
 
             if (p.chips === 0) { p.isAllIn = true; finalAction = 'allin'; }
             else if (type === 'allin') { finalAction = 'raise'; }
+            // 프리플랍에 12bb 넘는 스택을 한 번에 밀어 넣은 것만 센다 (숏스택 푸시는 정상 플레이)
+            if (finalAction === 'allin' && this.gameStage === 1 && cost >= 12 * (this.handStartBlinds ? this.handStartBlinds.bb : 100)) this.jamStat(nick).j += 1;
 
             if (p.currentBet > this.currentHighestBet) {
                 const raiseDiff = p.currentBet - this.currentHighestBet;
@@ -4359,11 +4390,31 @@ function roomListArray() {
 // 진행 중인 런 (닉네임 → 런). 메모리에만 둔다 — 서버가 재시작되면 진행 중이던 런은 사라진다(보상은 정산 시점에만 생긴다).
 const runs = new Map();
 
+// 💾 런은 계정에도 적어 둔다 — 서버가 재시작돼도(무료 호스팅은 자주 잠든다) 이어서 할 수 있게.
+function saveRun(nick, run) {
+    const u = MockDB.users.get(nick);
+    if (!u) return;
+    u.run = Rogue.serialize(run);
+    MockDB.save();
+}
+// 메모리에 없으면 계정에 저장된 런을 검증해서 되살린다
+function loadRun(nick) {
+    let run = runs.get(nick);
+    if (run) return run;
+    const u = MockDB.users.get(nick);
+    if (!u || !u.run) return null;
+    run = Rogue.restore(u.run, Math.random);
+    if (!run) { delete u.run; return null; }
+    runs.set(nick, run);
+    return run;
+}
+
 function runOfferPayload(run, extra) {
     return Object.assign({
         floor: run.floor, total: Rogue.FLOORS.length, next: Rogue.floorSetup(run),
         offers: run.offers.map(Rogue.describe), rerolls: run.rerolls,
-        augments: run.augments.map(Rogue.describe)
+        augments: run.augments.map(Rogue.describe),
+        coins: run.coins || 0, shop: Rogue.shopView(run), extraPicks: run.extraPicks || 0
     }, extra || {});
 }
 
@@ -4372,6 +4423,7 @@ function endRun(nick, run, sock) {
     if (runs.get(nick) === run) runs.delete(nick);
     const u = MockDB.users.get(nick);
     if (!u) return;
+    delete u.run;
     const r = Rogue.settle(u, run);
     MockDB.save();
     if (sock) sock.emit('runEnd', Object.assign({ floor: run.floor, total: Rogue.FLOORS.length, augments: run.augments.map(Rogue.describe), coresNow: u.cores || 0 }, r));
@@ -4409,6 +4461,7 @@ function launchRunFloor(socket, run) {
     fs.bots.forEach(d => room.addBot(d));
     room.playerOrder.forEach(n => { const bp = room.players[n]; if (bp && bp.isBot) bp.chips = fs.botChips; });
     run.phase = 'play'; run.inFloor = true;
+    saveRun(nick, run);
 
     socket.emit('joinRoomSuccess', roomId);
     socket.emit('runFloorStart', Object.assign({}, fs, { augments: run.augments.map(Rogue.describe), botNames: room.playerOrder.filter(n => room.players[n].isBot) }));
@@ -4428,6 +4481,11 @@ function destroyRoom(roomId) {
                 MockDB.adjustBankroll(nick, p.chips);
             }
         });
+    }
+    // 🍀 [증강 런] 층이 끝나기 전에 방이 치워지면(접속 끊김·다른 방 시작) 그 층은 실패 — 깬 층까지만 정산한다.
+    //    서버 재시작은 이 길을 타지 않으므로(방이 그냥 사라진다) 그때는 그 층을 처음부터 다시 하게 된다.
+    if (room._challenge && room._challenge.run && !room._challenge.done) {
+        try { room.finishRunFloor(false, true); } catch (e) { console.error('run settle on destroy:', e); }
     }
     room.stopAllTimers();
     rooms.delete(roomId);
@@ -4851,14 +4909,14 @@ io.on('connection', (socket) => {
             .sort((a, b) => b.p.best - a.p.best || b.p.wins - a.p.wins || a.p.runs - b.p.runs)
             .slice(0, 5)
             .map(x => ({ nickname: x.nickname, best: x.p.best, wins: x.p.wins }));
-        const run = runs.get(socket.nickname);
+        const run = loadRun(socket.nickname);
         socket.emit('runData', {
             progress: Rogue.progressOf(u), top, total: Rogue.FLOORS.length,
-            active: (run && run.phase === 'pick') ? { floor: run.floor, augments: run.augments.length } : null
+            active: run ? { floor: run.floor, augments: run.augments.length } : null
         });
     });
 
-    // 🍀 [증강 런] 시작 — 고르다 만 런이 있으면 이어서, 없으면 새 런(첫 증강 3택부터)
+    // 🍀 [증강 런] 시작 — 하던 런이 있으면 이어서, 없으면 새 런(첫 증강 3택부터)
     socket.on('runStart', async (data) => {
         if (!socket.nickname) return;
         const nick = socket.nickname;
@@ -4872,54 +4930,75 @@ io.on('connection', (socket) => {
         }
         // 🔬 밸런스 측정 전용(DEV_RUN) — 원하는 층·증강으로 바로 시작한다. 운영 서버에는 이 환경변수가 없다.
         if (process.env.DEV_RUN && data && data.dev) {
+            const old = rooms.get(roomId);
+            if (old && old._challenge && old._challenge.run && !old._challenge.done) old._challenge.done = true;
             const dr = Rogue.newRun(Math.random);
             dr.floor = Math.max(1, Math.min(Rogue.FLOORS.length, Number(data.dev.floor) || 1));
             dr.cleared = dr.floor - 1;
             dr.augments = (Array.isArray(data.dev.augments) ? data.dev.augments : []).filter(id => Object.prototype.hasOwnProperty.call(Rogue.AUGMENTS, id));
             dr.revive = dr.augments.filter(a => a === 'revive').length;
+            // 실제 런에서는 올인 이력이 층을 넘어 이어진다 — 측정도 "이미 올인을 남발해 온 사람"으로 시작할 수 있게
+            if (data.dev.jam && Number.isInteger(data.dev.jam.h) && Number.isInteger(data.dev.jam.j)) dr.jam = { h: Math.max(0, data.dev.jam.h), j: Math.max(0, Math.min(data.dev.jam.h, data.dev.jam.j)) };
             dr.offers = []; runs.set(nick, dr);
             launchRunFloor(socket, dr);
             return;
         }
-        let run = runs.get(nick);
+        let run = loadRun(nick);
         if (run && run.phase !== 'pick') {
-            // 층 도중에 끊긴 런 — 그 층은 실패로 치고 정산한 뒤 새로 시작한다
             const old = rooms.get(roomId);
-            if (old && old._challenge && old._challenge.run === run && !old._challenge.done) old._challenge.done = true;
-            endRun(nick, run, null);
-            run = null;
+            if (old && old._challenge && old._challenge.run === run && !old._challenge.done) {
+                // 층을 치던 방이 아직 살아 있는데 새로 시작을 눌렀다 — 그 런은 여기서 끝(깬 층까지 정산)
+                old.finishRunFloor(false, true);
+                run = null;
+            } else {
+                // 방이 없다 = 서버가 재시작됐다. 플레이어 잘못이 아니니 그 층을 처음부터 다시 한다.
+                launchRunFloor(socket, run);
+                return;
+            }
         }
-        if (!run) { run = Rogue.newRun(Math.random); runs.set(nick, run); }
+        if (!run) { run = Rogue.newRun(Math.random); runs.set(nick, run); saveRun(nick, run); }
         socket.emit('runOffer', runOfferPayload(run, { start: run.augments.length === 0 && run.cleared === 0 }));
     });
 
-    // 🍀 [증강 런] 증강 고르기 → 바로 다음 층 시작
+    // 🍀 [증강 런] 증강 고르기 → 바로 다음 층 시작 (상점에서 "하나 더"를 샀으면 한 번 더 고른다)
     socket.on('runPick', (data) => {
         if (!socket.nickname) return;
         const nick = socket.nickname;
-        const run = runs.get(nick);
+        const run = loadRun(nick);
         if (!run || run.phase !== 'pick') return;
         const cur = socket.currentRoom;
         if (cur && cur !== `🤖컴까기_${nick}` && rooms.has(cur) && rooms.get(cur).players[nick]) {
             socket.emit('challengeError', '먼저 지금 있는 방에서 나가이소.');
             return;
         }
-        if (!Rogue.pick(run, data ? data.idx : undefined)) return;   // 정수만 받는다 (Number(null) 이 0 이 되는 것 방지)
+        if (!Rogue.pick(run, data ? data.idx : undefined, Math.random)) return;   // 정수만 받는다 (Number(null) 이 0 이 되는 것 방지)
+        if (run.phase === 'pick') { saveRun(nick, run); socket.emit('runOffer', runOfferPayload(run, { more: true })); return; }
         launchRunFloor(socket, run);
     });
 
-    // 🍀 [증강 런] 증강 다시 뽑기 (런 하나에 정해진 횟수만)
+    // 🍀 [증강 런] 증강 다시 뽑기 (런 하나에 정해진 횟수만 — 상점에서 늘릴 수 있다)
     socket.on('runReroll', () => {
         if (!socket.nickname) return;
-        const run = runs.get(socket.nickname);
+        const run = loadRun(socket.nickname);
         if (!run || !Rogue.reroll(run, Math.random, !!run.afterBoss)) return;
+        saveRun(socket.nickname, run);
         socket.emit('runOffer', runOfferPayload(run, { rerolled: true }));
+    });
+
+    // 🪙 [증강 런] 층 사이 상점 — 코인으로 산다
+    socket.on('runBuy', (data) => {
+        if (!socket.nickname) return;
+        const run = loadRun(socket.nickname);
+        const id = data && typeof data.id === 'string' ? data.id : '';
+        if (!run || !Rogue.buy(run, id)) return;
+        saveRun(socket.nickname, run);
+        socket.emit('runOffer', runOfferPayload(run, { rerolled: true, boughtId: id }));
     });
 
     // 🍀 [증강 런] 증강 고르는 화면에서 그만두기 — 깬 층까지 정산
     socket.on('runAbandon', () => {
         if (!socket.nickname) return;
-        const run = runs.get(socket.nickname);
+        const run = loadRun(socket.nickname);
         if (!run || run.phase !== 'pick') return;
         endRun(socket.nickname, run, socket);
     });
