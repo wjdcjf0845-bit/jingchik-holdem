@@ -3268,6 +3268,146 @@
             /* 상대 카드는 겹쳐서 폭을 아낀다 (뒷면이라 정보가 없다 · 쇼다운 때도 왼쪽 위 숫자는 둘 다 보인다) */
             .player-spot:not(.me) .cards .card-container + .card-container { margin-left: -18px; }
         }
+    
+        /* ═══ 🍀 증강 컴까기 (로그라이크 런) ═══ */
+        .ch-run-btn {
+            display: flex; align-items: center; gap: 12px; width: 100%; margin: 0 0 9px; padding: 12px 14px; text-align: left; cursor: pointer;
+            font: inherit; color: #fff; border-radius: 14px; border: 1px solid rgba(190,140,255,0.7);
+            background: linear-gradient(120deg, rgba(122,69,224,0.55), rgba(35,201,122,0.30));
+            box-shadow: 0 0 22px rgba(150,100,255,0.25), inset 0 1px 0 rgba(255,255,255,0.18);
+        }
+        .ch-run-btn:hover { filter: brightness(1.12); }
+        .cr-ico { font-size: 30px; flex: 0 0 auto; }
+        .cr-txt { display: flex; flex-direction: column; min-width: 0; }
+        .cr-txt b { font-size: 16px; font-weight: 900; }
+        .cr-txt b i { font-style: normal; font-size: 10px; background: #ff5a4d; border-radius: 999px; padding: 1px 6px; margin-left: 4px; vertical-align: middle; }
+        .cr-txt small { font-size: 11.5px; color: #d5dcf0; word-break: keep-all; }
+        #cr-best { color: var(--gold) !important; font-weight: 800; }
+
+        #run-modal { align-items: center; justify-content: center; }
+        .run-card { width: 640px; max-width: 96vw; text-align: center; max-height: calc(100dvh - 20px); overflow-y: auto; }
+        .run-title { font-size: 21px; font-weight: 900; color: #fff; }
+        .run-title small { display: block; font-size: 12.5px; font-weight: 700; color: #9aa6c2; margin-top: 2px; }
+        .run-sub { font-size: 12px; color: #9aa6c2; margin: 6px 0 0; word-break: keep-all; }
+        #run-offers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0 12px; }
+        .aug-card {
+            position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 26px 10px 14px; min-width: 0;
+            font: inherit; color: #fff; cursor: pointer; border-radius: 16px; border: 2px solid var(--tc);
+            background: linear-gradient(180deg, var(--tb), rgba(10,13,26,0.96) 70%);
+            box-shadow: 0 8px 22px rgba(0,0,0,0.5), 0 0 18px var(--tg);
+            transition: transform 0.14s, box-shadow 0.14s;
+        }
+        .aug-card:hover { transform: translateY(-5px) scale(1.02); box-shadow: 0 14px 30px rgba(0,0,0,0.6), 0 0 30px var(--tg); }
+        .t-s { --tc: #c3cbe0; --tb: rgba(150,165,200,0.30); --tg: rgba(195,203,224,0.22); }
+        .t-g { --tc: #ffc857; --tb: rgba(255,200,87,0.28); --tg: rgba(255,200,87,0.30); }
+        .t-p { --tc: #e58bff; --tb: rgba(190,110,255,0.34); --tg: rgba(120,220,255,0.38); }
+        .aug-card.t-p { border-image: linear-gradient(135deg, #ff8bd8, #8be9ff, #b98bff) 1; border-radius: 0; }
+        .ac-tier { position: absolute; top: 7px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 900; letter-spacing: 2px; color: var(--tc); }
+        .ac-ico { font-size: 38px; line-height: 1.1; }
+        .ac-name { font-size: 15px; font-weight: 900; }
+        .ac-desc { font-size: 12px; color: #c3cbe0; line-height: 1.45; word-break: keep-all; }
+        .run-next { font-size: 12.5px; color: #dfe6f7; background: rgba(6,9,18,0.5); border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; padding: 9px 12px; line-height: 1.55; word-break: keep-all; }
+        .run-next em { font-style: normal; color: var(--gold); font-weight: 900; }
+        .run-next small { color: #8d98b3; }
+        .run-owned { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 5px; margin-top: 10px; font-size: 12px; color: #9aa6c2; }
+        .aug-chip { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; font-size: 16px; background: var(--tb); border: 1px solid var(--tc); }
+        .run-btns { display: flex; gap: 8px; margin-top: 14px; }
+        .run-btns button { flex: 1; font: inherit; font-weight: 800; font-size: 13px; padding: 10px; border-radius: 11px; cursor: pointer; color: #e8edf9; background: linear-gradient(180deg, #33405f, #222b44); border: 1px solid rgba(255,255,255,0.14); }
+        .run-btns button:disabled { opacity: 0.4; cursor: default; }
+        #run-quit { flex: 0 0 auto; color: #ff9d90; }
+        @media screen and (max-width: 560px) {
+            #run-offers { grid-template-columns: 1fr; gap: 8px; }
+            .aug-card { flex-direction: row; text-align: left; padding: 12px 12px 12px 12px; gap: 11px; flex-wrap: wrap; }
+            .ac-tier { position: static; transform: none; width: 100%; text-align: left; margin-bottom: -4px; }
+            .ac-ico { font-size: 30px; }
+            .ac-name { flex: 0 0 auto; } .ac-desc { flex: 1 1 100%; }
+        }
+        @media screen and (max-width: 960px) and (orientation: landscape) {
+            .run-card { padding: 12px 16px; }
+            .run-title { font-size: 17px; } .run-sub { display: none; }
+            #run-offers { margin: 8px 0; }
+            .aug-card { padding: 20px 8px 9px; gap: 3px; }
+            .ac-ico { font-size: 26px; } .ac-name { font-size: 13.5px; } .ac-desc { font-size: 11px; }
+            .run-next { padding: 6px 10px; font-size: 11.5px; } .run-next small { display: none; }
+            .run-btns { margin-top: 8px; } .run-btns button { padding: 7px; }
+        }
+
+        /* 런 테이블: 보랏빛 펠트 (보스 층은 기존 붉은 테이블) */
+        body.run-mode:not(.challenge-boss) .poker-table { --felt-1: #7a4ad6; --felt-2: #43208f; --felt-3: #170a3c; }
+        body.run-mode:not(.challenge-boss) .poker-table { box-shadow: inset 0 0 0 2px rgba(200,150,255,0.95), inset 0 0 0 6px rgba(0,0,0,0.5), inset 0 20px 80px rgba(0,0,0,0.5), inset 0 0 130px rgba(0,0,0,0.6), 0 34px 80px rgba(0,0,0,0.8), 0 0 70px rgba(150,100,255,0.22) !important; }
+
+        /* 런에서는 블라인드가 안 오른다 — 레벨·시계 표시는 HUD 자리를 가리기만 하니 숨긴다 */
+        body.run-mode #hud-center #tournament-header { display: none !important; }
+        /* 런 HUD: 층 · 목표 진행 막대 · 남은 핸드 · 증강 */
+        #ch-hud.run { pointer-events: auto; gap: 8px; padding: 4px 10px; color: #e9dcff; border-color: rgba(190,140,255,0.7); box-shadow: 0 0 16px rgba(150,100,255,0.3); max-width: 96vw; }
+        .rh-floor { font-weight: 900; }
+        .rh-quota { position: relative; display: inline-block; width: 150px; height: 18px; border-radius: 999px; overflow: hidden; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.16); }
+        .rh-quota i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #7a45e0, #23c97a); }
+        .rh-quota.full i { background: linear-gradient(90deg, #23c97a, #ffc857); }
+        .rh-quota em { position: relative; display: block; text-align: center; font-style: normal; font-family: var(--font-num); font-size: 11.5px; line-height: 18px; color: #fff; text-shadow: 0 1px 2px #000; }
+        .rh-hands.low { color: #ff8a78; }
+        .rh-augs { cursor: pointer; letter-spacing: 1px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+        .rh-mull { font: inherit; font-weight: 900; font-size: 12px; padding: 2px 9px; border-radius: 999px; cursor: pointer; color: #2c1c00; background: var(--gold-grad); border: none; }
+        .rh-peek { color: #fff; } .rh-peek b { background: #fff; color: #111; border-radius: 4px; padding: 0 4px; font-family: var(--font-num); } .rh-peek b.red { color: #d9261c; }
+        @media screen and (max-width: 960px) and (orientation: landscape) {
+            #ch-hud.run { left: 50%; gap: 5px; padding: 2px 8px; }
+            .rh-quota { width: 104px; height: 15px; } .rh-quota em { font-size: 10px; line-height: 15px; }
+            .rh-augs { max-width: 70px; }
+        }
+        @media screen and (max-width: 520px) {
+            #ch-hud.run { flex-wrap: wrap; justify-content: center; border-radius: 12px; font-size: 11px; }
+            .rh-quota { width: 112px; }
+        }
+        #run-info {
+            position: fixed; left: 50%; top: 78px; transform: translateX(-50%); z-index: 2300; width: min(340px, 92vw); max-height: 60vh; overflow-y: auto;
+            background: rgba(10,13,26,0.97); border: 1px solid rgba(190,140,255,0.6); border-radius: 14px; padding: 10px 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.7); cursor: pointer;
+        }
+        @media screen and (max-width: 960px) and (orientation: landscape) { #run-info { top: 30px; max-height: 80vh; } }
+        .ri-title { font-size: 13px; font-weight: 900; color: #fff; margin-bottom: 7px; } .ri-title small { color: #8d98b3; font-weight: 600; }
+        .ri-row { display: flex; align-items: center; gap: 9px; padding: 6px 4px; border-top: 1px solid rgba(255,255,255,0.07); font-size: 12.5px; color: #fff; text-align: left; }
+        .ri-ico { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 17px; background: var(--tb); border: 1px solid var(--tc); }
+        .ri-row b { display: block; } .ri-row small { color: #9aa6c2; }
+        .run-toast {
+            position: fixed; left: 50%; transform: translateX(-50%); z-index: 4100; pointer-events: none; white-space: nowrap;
+            padding: 5px 14px; border-radius: 999px; font-size: 13px; font-weight: 800; color: #fff;
+            background: rgba(20,12,40,0.94); border: 1px solid rgba(190,140,255,0.7); box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+            animation: runToast 2.4s ease-out both;
+        }
+        .run-toast b { color: #4be3a0; font-family: var(--font-num); margin-left: 4px; }
+        .run-toast.jackpot { border-color: var(--gold); color: var(--gold); font-size: 16px; box-shadow: 0 0 26px rgba(255,200,87,0.6); }
+        @keyframes runToast { 0% { opacity: 0; margin-top: 12px; } 12% { opacity: 1; margin-top: 0; } 80% { opacity: 1; } 100% { opacity: 0; margin-top: -10px; } }
+        @media (prefers-reduced-motion: reduce) { .run-toast { animation: none; } }
+    
+        /* ═══ 📊 스탯창 — 간소화 ═══ */
+        .pf-card { padding: 22px 20px 18px !important; max-height: calc(100dvh - 24px); overflow-y: auto; }
+        .pf-card .pf-avatar { width: 60px; height: 60px; font-size: 26px; margin-bottom: 8px; }
+        .pf-card .pf-name { font-size: 21px; }
+        #pf-rank, #pf-style-wrap { display: inline-block; margin: 6px 3px 0; }
+        .pf-style { margin-top: 0 !important; }
+        .pf-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 6px !important; margin-top: 14px !important; }
+        .pf-stat { padding: 8px 2px !important; border-radius: 10px !important; background: rgba(6,9,18,0.5) !important; }
+        .pf-stat .v { font-size: 17px !important; color: #fff !important; }
+        .pf-stat .k { font-size: 10px !important; letter-spacing: 0 !important; }
+        #pf-adv-wrap { margin-top: 12px !important; }
+        .pf-gtobar { background: rgba(6,9,18,0.5); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 9px 11px; }
+        .pg-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; font-weight: 800; color: #c3cbe0; }
+        .pg-top b { font-family: var(--font-num); font-size: 16px; } .pg-top small { font-family: var(--font-body); font-size: 11px; font-weight: 800; }
+        .pg-track { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.09); margin-top: 6px; overflow: hidden; }
+        .pg-track i { display: block; height: 100%; border-radius: 3px; }
+        .pf-key3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+        .pf-key3 > div { background: rgba(6,9,18,0.5); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 7px 2px; }
+        .pf-key3 b { display: block; font-family: var(--font-num); font-size: 17px; color: var(--gold); line-height: 1.15; }
+        .pf-key3 span { font-size: 10px; color: #9aa6c2; font-weight: 700; }
+        .pf-achline { margin-top: 10px; font-size: 12px; font-weight: 800; color: #c3cbe0; }
+        .pf-achline span { letter-spacing: 2px; margin-left: 4px; }
+        .pf-more-btn { margin-top: 10px; font: inherit; font-size: 12px; font-weight: 800; color: #9aa6c2; background: none; border: none; cursor: pointer; padding: 4px 10px; }
+        .pf-more-btn:hover { color: #fff; }
+        .pf-more { margin-top: 4px; text-align: left; }
+        .pf-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 2px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 12.5px; }
+        .pr-k { color: #dfe6f7; font-weight: 800; } .pr-k small { color: #8d98b3; font-weight: 600; margin-left: 6px; font-size: 10.5px; }
+        .pr-v { font-family: var(--font-num); font-weight: 700; color: var(--gold); }
+        .pf-more .pf-adv-legend { margin-top: 10px; }
+        .pf-card .btn-close-modal { margin-top: 12px !important; }
     </style>
 </head>
 <body>
@@ -3287,6 +3427,10 @@
             <div class="shop-bank" id="ch-progress">0 / 10</div>
         </div>
         <div class="ch-intro"><b>원하는 단계를 바로 골라</b> 봇들과 토너먼트를 칩니데이. 참가비는 없고, 깨면 뱅크롤과 <b>🔷 코어</b>(컴까기 전용 재화)를 받습니데이.</div>
+        <button class="ch-run-btn" onclick="startRun()">
+            <span class="cr-ico">🍀</span>
+            <span class="cr-txt"><b>증강 컴까기 <i>NEW</i></b><small>10층 탑 · 층마다 기한 안에 목표 칩 달성 → 증강 3개 중 1개 선택</small><small id="cr-best"></small></span>
+        </button>
         <button class="ch-coop-btn" onclick="createCoop()">👥 친구랑 같이 깨기 <small>(최대 3명 · 방을 만들고 친구를 기다립니데이)</small></button>
         <div id="ch-ladder"></div>
         <div class="ch-top-title">🏅 컴까기 순위</div>
@@ -3294,6 +3438,23 @@
         <button class="btn-close-modal" style="margin-top:14px; width:100%;" onclick="document.getElementById('challenge-modal').style.display='none'">닫기</button>
     </div>
 </div>
+
+<div id="run-modal" class="overlay" style="display:none; z-index:4500;">
+    <div class="shop-card run-card">
+        <div class="run-head">
+            <div class="run-title" id="run-title">🍀 증강 고르기</div>
+            <div class="run-sub" id="run-sub"></div>
+        </div>
+        <div id="run-offers"></div>
+        <div class="run-next" id="run-next"></div>
+        <div class="run-owned" id="run-owned"></div>
+        <div class="run-btns">
+            <button id="run-reroll" onclick="socket.emit('runReroll')">🎲 다시 뽑기</button>
+            <button id="run-quit" onclick="quitRun()">그만두고 정산</button>
+        </div>
+    </div>
+</div>
+<div id="run-info" style="display:none;" onclick="toggleRunInfo()"></div>
 
 <div id="throw-hint"><span class="th-t"></span><button onclick="disarmThrow()">취소</button></div>
 
@@ -3917,6 +4078,7 @@
     let _challengeStage = 0;
     function openChallenge() {
         socket.emit('getChallenge');
+        socket.emit('getRun');
         document.getElementById('challenge-modal').style.display = 'flex';
     }
     function startChallenge(stage) {
@@ -3982,12 +4144,15 @@
         const ch = data.challenge;
         document.body.classList.toggle('challenge-mode', !!ch);
         document.body.classList.toggle('challenge-boss', !!(ch && ch.boss && !ch.waiting));
+        document.body.classList.toggle('run-mode', !!(ch && ch.run));
+        if (!ch || !ch.run) { const ri = document.getElementById('run-info'); if (ri) ri.style.display = 'none'; }
         const hud = document.getElementById('ch-hud');
         if (!ch) { if (hud) hud.style.display = 'none'; document.getElementById('coop-panel').style.display = 'none'; _chBotChips = {}; return; }
         // 진행 표시
         if (hud) {
             hud.style.display = ch.waiting ? 'none' : 'flex';
-            hud.innerHTML = (ch.boss ? '👹 보스전' : '🤖 ' + ch.stage + '단계') + (ch.coop ? ' · 협동' : '') + ' <b>남은 봇 ' + ch.botsLeft + '</b>';
+            if (ch.run) renderRunHud(hud, ch, data);
+            else { hud.classList.remove('run'); hud.dataset.sig = ''; hud.innerHTML = (ch.boss ? '👹 보스전' : '🤖 ' + ch.stage + '단계') + (ch.coop ? ' · 협동' : '') + ' <b>남은 봇 ' + ch.botsLeft + '</b>'; }
         }
         // 격파 감지 (핸드가 끝나 칩이 0으로 확정된 프레임에서만)
         if (!ch.waiting) {
@@ -4072,6 +4237,144 @@
             </div>`;
         }
         modal.classList.add('show');
+    });
+
+    // ═══ 🍀 증강 컴까기 (로그라이크 런) ═══
+    //   층마다 "기한(핸드 수) 안에 목표 칩"을 채우면 올라가고, 층 사이에 증강 3개 중 1개를 고른다.
+    let _runInfo = [];   // 지금 가진 증강(설명 포함) — HUD를 누르면 목록으로 보여준다
+    function startRun() {
+        document.getElementById('challenge-modal').style.display = 'none';
+        document.getElementById('result-modal').classList.remove('show');
+        socket.emit('runStart');
+    }
+    function quitRun() {
+        if (!confirm('런을 여기서 끝내고 지금까지 깬 층만큼 정산할까예?')) return;
+        document.getElementById('run-modal').style.display = 'none';
+        socket.emit('runAbandon');
+    }
+    function pickAug(i) {
+        document.getElementById('run-modal').style.display = 'none';
+        socket.emit('runPick', { idx: i });
+    }
+    function augChip(a) { return `<span class="aug-chip t-${a.tier}" title="${esc(a.name)} — ${esc(a.desc)}">${a.icon}</span>`; }
+    function runCardTxt(c) {
+        if (!c || c.length < 2) return '';
+        const suit = { s: '♠', h: '♥', d: '♦', c: '♣' }[c[1]] || '';
+        return `<b class="${c[1] === 'h' || c[1] === 'd' ? 'red' : ''}">${c[0] === 'T' ? '10' : c[0]}${suit}</b>`;
+    }
+    socket.on('runData', d => {
+        const el = document.getElementById('cr-best');
+        if (!el || !d) return;
+        const top = (d.top && d.top.length) ? ' · 1위 ' + esc(d.top[0].nickname) + ' ' + d.top[0].best + '층' : '';
+        el.innerHTML = (d.active ? `▶ 진행 중인 런이 있습니데이 (${d.active.floor}층) · ` : '') + `내 최고 ${d.progress.best} / ${d.total}층` + top;
+    });
+    socket.on('runOffer', d => {
+        if (!d) return;
+        document.getElementById('challenge-modal').style.display = 'none';
+        document.getElementById('result-modal').classList.remove('show');
+        if (d.clearedFloor && !d.rerolled) confetti({ particleCount: 140, spread: 90, origin: { y: 0.45 }, zIndex: 4600 });
+        const nx = d.next;
+        document.getElementById('run-title').innerHTML = d.clearedFloor ? `🎉 ${d.clearedFloor}층 돌파! <small>증강을 고르이소</small>` : '🍀 증강 컴까기 <small>첫 증강을 고르이소</small>';
+        document.getElementById('run-sub').innerText = d.start
+            ? '층마다 기한(핸드 수) 안에 목표 칩을 채우면 올라갑니데이. 못 채우면 런이 끝나고, 올라간 층만큼 보상을 받습니데이.'
+            : '';
+        document.getElementById('run-offers').innerHTML = d.offers.map((a, i) => `
+            <button class="aug-card t-${a.tier}" onclick="pickAug(${i})">
+                <span class="ac-tier">${esc(a.tierName)}</span>
+                <span class="ac-ico">${a.icon}</span>
+                <span class="ac-name">${esc(a.name)}</span>
+                <span class="ac-desc">${esc(a.desc)}</span>
+            </button>`).join('');
+        document.getElementById('run-next').innerHTML =
+            `<b>${nx.boss ? '👹 ' : ''}다음: ${nx.floor}층 「${esc(nx.name)}」</b> 상대 ${nx.bots.length}명 · 시작 ${nx.startChips.toLocaleString()} → 목표 <em>${nx.quota.toLocaleString()}</em> · 기한 ${nx.hands}핸드` +
+            `<br><small>(목표·기한은 지금 가진 증강 기준 — 고른 증강에 따라 더 좋아질 수 있습니데이)</small>`;
+        document.getElementById('run-owned').innerHTML = d.augments.length ? '가진 증강 ' + d.augments.map(augChip).join('') : '';
+        const rr = document.getElementById('run-reroll');
+        rr.innerText = `🎲 다시 뽑기 (${d.rerolls})`; rr.disabled = d.rerolls <= 0;
+        document.getElementById('run-modal').style.display = 'flex';
+    });
+    socket.on('runFloorStart', d => {
+        if (!d) return;
+        _runInfo = d.augments || [];
+        _chBotChips = {};
+        document.getElementById('run-modal').style.display = 'none';
+        document.getElementById('result-modal').classList.remove('show');
+        document.querySelectorAll('.ch-intro-fx').forEach(e => e.remove());
+        const el = document.createElement('div');
+        el.className = 'ch-intro-fx run' + (d.boss ? ' boss' : '');
+        el.innerHTML = (d.boss ? '<div class="ci-warn">⚠ WARNING ⚠</div>' : '') +
+            '<div class="ci-stage">' + d.floor + 'F</div>' +
+            '<div class="ci-name">' + esc(d.name) + '</div>' +
+            '<div class="ci-vs">목표 ' + d.quota.toLocaleString() + ' · ' + d.hands + '핸드 안에</div>' +
+            '<div class="ci-bots">' + (d.botNames || []).map(n => '<span>' + esc(String(n).replace('🤖', '')) + '</span>').join('') + '</div>';
+        document.body.appendChild(el);
+        if (d.boss && !_noMotion()) { document.body.classList.add('ch-quake'); setTimeout(() => document.body.classList.remove('ch-quake'), 1400); }
+        setTimeout(() => el.remove(), d.boss ? 4400 : 2800);
+    });
+    function renderRunHud(hud, ch, data) {
+        const r = ch.run, me = (data.players || {})[myNickname] || {};
+        if (r.augments) _runInfo = r.augments;
+        const chips = me.chips || 0;
+        const pct = Math.max(0, Math.min(100, Math.round(chips / r.quota * 100)));
+        const canMull = r.mull > 0 && data.gameStage === 1 && !me.isFolded && !me.isAllIn && !me.hasActed && !r.over;
+        const peek = (r.peek && data.gameStage >= 1 && data.gameStage <= 4) ? `<span class="rh-peek">👁 ${esc(String(r.peek.nick).replace('🤖', ''))} ${runCardTxt(r.peek.card)}</span>` : '';
+        const sig = [r.floor, chips, r.quota, r.handsLeft, _runInfo.map(a => a.id).join(','), r.mull, canMull, peek].join('|');
+        if (hud.dataset.sig === sig && hud.classList.contains('run')) return;   // 같은 내용이면 다시 안 그린다(멀리건 버튼 누르는 중에 갈아엎지 않게)
+        hud.dataset.sig = sig; hud.classList.add('run');
+        hud.innerHTML = `<span class="rh-floor">${ch.boss ? '👹' : '🍀'} ${r.floor}/${r.total}층</span>
+            <span class="rh-quota ${pct >= 100 ? 'full' : ''}"><i style="width:${pct}%"></i><em>${chips.toLocaleString()} / ${r.quota.toLocaleString()}</em></span>
+            <span class="rh-hands ${r.handsLeft <= 2 ? 'low' : ''}">${r.handsLeft > 0 ? '⏳ ' + r.handsLeft + '핸드' : '⏳ 마지막!'}</span>
+            <span class="rh-augs" onclick="toggleRunInfo()">${_runInfo.length ? _runInfo.map(a => a.icon).join('') : '증강'}</span>
+            ${canMull ? `<button class="rh-mull" onclick="socket.emit('runMulligan')">🔄 ${r.mull}</button>` : ''}${peek}`;
+    }
+    function toggleRunInfo() {
+        const el = document.getElementById('run-info');
+        if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+        el.innerHTML = '<div class="ri-title">🍀 가진 증강 <small>(눌러서 닫기)</small></div>' + (_runInfo.length
+            ? _runInfo.map(a => `<div class="ri-row t-${a.tier}"><span class="ri-ico">${a.icon}</span><span><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span></div>`).join('')
+            : '<div class="ri-row"><span>아직 없습니데이</span></div>');
+        el.style.display = 'block';
+    }
+    const RUN_NOTE = { blind: '🎟️ 블라인드 환급', pair: '👯 포켓 보너스', bonus: '💰 승리 수당', seven: '7️⃣ 럭키 세븐', combo: '🃏 족보 수당', jackpot: '🎰 JACKPOT', insure: '🛡️ 올인 보험', interest: '🏦 이자', mull: '🔄 멀리건 — 새 패' };
+    socket.on('runBonus', d => {
+        if (!d || !d.notes) return;
+        d.notes.forEach((n, i) => setTimeout(() => {
+            const t = document.createElement('div');
+            t.className = 'run-toast' + (n.id === 'jackpot' ? ' jackpot' : '');
+            t.innerHTML = (RUN_NOTE[n.id] || '증강') + (n.amount ? ' <b>+' + n.amount.toLocaleString() + '</b>' : '');
+            t.style.top = (88 + i * 34) + 'px';
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 2400);
+            if (n.id === 'jackpot') confetti({ particleCount: 120, spread: 80, origin: { y: 0.3 }, zIndex: 4000 });
+        }, i * 180));
+    });
+    socket.on('runRevive', d => {
+        const t = document.createElement('div');
+        t.className = 'token-toast';
+        t.innerHTML = '🍀 네잎클로버! <small>' + d.floor + '층을 한 번 더 합니데이</small>';
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 2600);
+    });
+    socket.on('runEnd', r => {
+        if (!r) return;
+        document.getElementById('run-modal').style.display = 'none';
+        const modal = document.getElementById('result-modal');
+        const inner = document.getElementById('result-inner');
+        if (r.win) confetti({ particleCount: 320, spread: 110, origin: { y: 0.5 }, zIndex: 4000 });
+        inner.innerHTML = `<div class="result-pot-card rw-card ${r.win ? 'ch-clear boss' : ''}">
+            ${r.win ? '<div class="ch-clear-stamp">PIT CLEAR</div>' : ''}
+            <div class="rw-trophy">${r.win ? '👑' : (r.cleared > 0 ? '🍀' : '💀')}</div>
+            <div class="rw-name">${r.win ? '더 핏 정복!' : (r.cleared > 0 ? r.cleared + '층까지 올랐습니데이' : '1층에서 끝났습니데이')}</div>
+            <div class="rw-sub">${r.newBest ? '🏅 내 최고 기록 갱신!' : '내 최고 ' + r.best + '층'}</div>
+            <div class="rw-chips">💰 뱅크롤 +${r.reward.toLocaleString()} · 🔷 코어 +${r.cores}</div>
+            ${r.augments.length ? '<div class="run-owned" style="justify-content:center; margin-top:12px;">' + r.augments.map(augChip).join('') + '</div>' : ''}
+            <div style="margin-top:20px;">
+                <button class="btn-join" style="width:100%; margin-bottom:8px;" onclick="startRun()">🍀 새 런 시작</button>
+                <button class="btn-close-modal" style="width:100%;" onclick="leaveChallenge()">대기실로</button></div>
+        </div>`;
+        modal.classList.add('show');
+        // 층 도중에 나가서 끝난 런은 '방 나감' 처리가 결과창을 바로 닫아버린다 — 받은 보상이 있으면 다시 띄운다
+        if (r.cleared > 0) setTimeout(() => { if (inner.innerHTML.includes('새 런 시작')) modal.classList.add('show'); }, 400);
     });
 
     function openShop() { socket.emit('getShop'); document.getElementById('shop-msg').innerText = ''; document.getElementById('shop-modal').style.display = 'flex'; }
@@ -6985,85 +7288,76 @@
             _pfH.style.display = 'none';
         }
 
+        // 📊 간소화한 스탯창 — 한눈에 볼 것만 위에 두고, 나머지는 "자세히"로 접는다.
+        //    위: 핵심 4개(우승·핸드·승률·최대 팟) → GTO 한 줄 → 성향 3개(VPIP·PFR·AF) / 접힘: 나머지 지표·설명·업적 이름
         const hp = u.handsPlayed || 0;
         const winRate = hp > 0 ? Math.round(u.handsWon / hp * 100) : 0;
-        const vpip = hp > 0 ? Math.round(u.vpipHands / hp * 100) : 0;
+        const s = u.stats || {};
+        const has = v => v !== null && v !== undefined;
+        const fmtPct = v => has(v) ? v + '%' : '–';
+        // VPIP 는 분석 지표의 값을 쓴다 (예전엔 위·아래에 서로 다른 계산이 같이 나와 숫자가 달랐다)
+        const vpip = has(s.vpip) ? s.vpip : (hp > 0 ? Math.round(u.vpipHands / hp * 100) : 0);
+        const compact = n => n >= 1000000 ? (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M' : (n >= 10000 ? Math.round(n / 1000) + 'K' : n.toLocaleString());
 
-        // 플레이 스타일 진단 (10핸드 이상부터)
+        // 성향 한 줄 (10핸드 이상부터)
         let styleHtml = '';
         if (hp >= 10) {
-            if (vpip >= 40) styleHtml = '<span class="pf-style loose">🔥 루즈 — 아무 패나 들어옵니데이</span>';
-            else if (vpip <= 20) styleHtml = '<span class="pf-style tight">🧊 타이트 — 좋은 패만 칩니데이</span>';
-            else styleHtml = '<span class="pf-style balance">⚖️ 밸런스형</span>';
+            if (vpip >= 40) styleHtml = '<span class="pf-style loose">🔥 루즈</span>';
+            else if (vpip <= 20) styleHtml = '<span class="pf-style tight">🧊 타이트</span>';
+            else styleHtml = '<span class="pf-style balance">⚖️ 밸런스</span>';
         }
         document.getElementById('pf-style-wrap').innerHTML = styleHtml;
 
         document.getElementById('pf-grid').innerHTML = hp === 0
-            ? '<div class="pf-empty" style="grid-column:1/3;">아직 기록이 없습니데이</div>'
-            : `<div class="pf-stat"><div class="v">${u.wins}</div><div class="k">토너먼트 우승</div></div>
-               <div class="pf-stat"><div class="v">${hp.toLocaleString()}</div><div class="k">플레이 핸드</div></div>
-               <div class="pf-stat"><div class="v">${winRate}%</div><div class="k">핸드 승률</div></div>
-               <div class="pf-stat"><div class="v">${vpip}%</div><div class="k">VPIP</div></div>
-               <div class="pf-stat" style="grid-column:1/3;"><div class="v">${(u.biggestPot || 0).toLocaleString()}</div><div class="k">최대 획득 팟</div></div>`;
+            ? '<div class="pf-empty" style="grid-column:1/-1;">아직 기록이 없습니데이</div>'
+            : `<div class="pf-stat"><div class="v">${u.wins}</div><div class="k">우승</div></div>
+               <div class="pf-stat"><div class="v">${compact(hp)}</div><div class="k">핸드</div></div>
+               <div class="pf-stat"><div class="v">${winRate}%</div><div class="k">승률</div></div>
+               <div class="pf-stat"><div class="v">${compact(u.biggestPot || 0)}</div><div class="k">최대 팟</div></div>`;
 
-        // 🏆 시즌 포인트 + 💵 캐시 순익
-        const seasonWrap = document.getElementById('pf-season-wrap');
-        const cashStr = (u.cashNet || 0) !== 0
-            ? ` · 캐시 ${u.cashNet > 0 ? '+' : ''}${(u.cashNet || 0).toLocaleString()}` : '';
-        seasonWrap.innerHTML = (hp > 0)
-            ? `<span class="pf-season">🏆 시즌 ${(u.seasonPoints || 0).toLocaleString()}pt${cashStr}</span>` : '';
-
-        // 🏅 업적 배지
-        const achWrap = document.getElementById('pf-ach-wrap');
         const ach = u.achievements || [];
-        achWrap.innerHTML = ach.length
-            ? ach.map(a => `<span class="pf-ach"><span class="a-ico">${a.icon}</span>${esc(a.name)}</span>`).join('')
-            : (hp > 0 ? '<div class="pf-ach-empty">아직 획득한 업적이 없습니데이</div>' : '');
-
-        // 📊 포커 분석 지표 + GTO 근접도
         const advWrap = document.getElementById('pf-adv-wrap');
-        const s = u.stats || {};
-        const fmtPct = v => (v === null || v === undefined) ? '–' : v + '%';
-        if (hp > 0 && (s.sampleActions || 0) > 0) {
-            // GTO 등급
-            let gtoTier = '', gtoColor = '#7bedaa';
-            const g = s.gto;
-            if (g !== null && g !== undefined) {
-                if (g >= 85) { gtoTier = 'S · GTO 마스터'; gtoColor = '#ffd97a'; }
-                else if (g >= 75) { gtoTier = 'A · 솔리드'; gtoColor = '#7bedaa'; }
-                else if (g >= 65) { gtoTier = 'B · 견실'; gtoColor = '#8fd3ff'; }
-                else if (g >= 55) { gtoTier = 'C · 발전중'; gtoColor = '#d9b3ff'; }
-                else { gtoTier = 'D · 직관파'; gtoColor = '#ff9d8f'; }
-            }
-            const gtoBlock = (g !== null && g !== undefined) ? `
-                <div class="pf-gto">
-                    <div class="pf-gto-ring" style="--gto:${g}; --gc:${gtoColor};">
-                        <div class="pf-gto-val" style="color:${gtoColor}">${g}<small>점</small></div>
-                    </div>
-                    <div class="pf-gto-info">
-                        <div class="pf-gto-title">🎯 GTO 근접도</div>
-                        <div class="pf-gto-tier" style="color:${gtoColor}">${gtoTier}</div>
-                        <div class="pf-gto-sub">${(s.sampleActions || 0).toLocaleString()}개 액션 분석 · 이론 최적 대비</div>
-                    </div>
-                </div>` : '';
+        const seasonWrap = document.getElementById('pf-season-wrap');
+        const achWrap = document.getElementById('pf-ach-wrap');
+        seasonWrap.innerHTML = ''; achWrap.innerHTML = '';
+        if (hp === 0) { advWrap.innerHTML = ''; modal.classList.add('show'); return; }
 
-            const statRow = (label, val, hint) => `<div class="pf-adv-stat"><span class="pal">${label}</span><span class="pav">${val}</span><span class="pah">${hint}</span></div>`;
-            advWrap.innerHTML = `
-                ${gtoBlock}
-                <div class="pf-adv-title">📊 플레이 지표</div>
-                <div class="pf-adv-grid">
-                    ${statRow('VPIP', fmtPct(s.vpip), '팟 참여')}
-                    ${statRow('PFR', fmtPct(s.pfr), '프리플랍 레이즈')}
-                    ${statRow('3-Bet', fmtPct(s.threeBet), '리레이즈 빈도')}
-                    ${statRow('AF', (s.af === null || s.af === undefined) ? '–' : s.af, '공격성 지수')}
-                    ${statRow('Fold→Bet', fmtPct(s.foldToBet), '벳 대응 폴드')}
-                    ${statRow('WTSD', fmtPct(s.wtsd), '쇼다운 도달')}
-                    ${statRow('W$SD', fmtPct(s.wsd), '쇼다운 승률')}
-                </div>
-                <div class="pf-adv-legend">💡 GTO 근접도는 매 액션을 핸드 승률과 팟 오즈로 평가해 이론 최적 선택에 얼마나 가까운지 0~100점으로 환산한 값입니다. VPIP·PFR은 타이트/루즈, AF는 공격성, WTSD·W$SD는 쇼다운 성향을 보여줍니다.</div>`;
-        } else {
-            advWrap.innerHTML = hp > 0 ? '<div class="pf-ach-empty" style="margin-top:14px;">📊 지표 분석에는 몇 핸드가 더 필요합니데이</div>' : '';
+        // 🎯 GTO 근접도 — 한 줄 막대
+        let gtoBlock = '';
+        const g = s.gto;
+        if ((s.sampleActions || 0) > 0 && has(g)) {
+            let tier, color;
+            if (g >= 85) { tier = 'S · 마스터'; color = '#ffd97a'; }
+            else if (g >= 75) { tier = 'A · 솔리드'; color = '#4be3a0'; }
+            else if (g >= 65) { tier = 'B · 견실'; color = '#8fd3ff'; }
+            else if (g >= 55) { tier = 'C · 발전중'; color = '#d9b3ff'; }
+            else { tier = 'D · 직관파'; color = '#ff9d8f'; }
+            gtoBlock = `<div class="pf-gtobar">
+                <div class="pg-top"><span>🎯 GTO 근접도</span><b style="color:${color}">${g}점 <small>${tier}</small></b></div>
+                <div class="pg-track"><i style="width:${Math.max(0, Math.min(100, g))}%; background:${color};"></i></div>
+            </div>`;
         }
+        const row = (label, val, hint) => `<div class="pf-row"><span class="pr-k">${label}<small>${hint}</small></span><span class="pr-v">${val}</span></div>`;
+        const key3 = (s.sampleActions || 0) > 0
+            ? `<div class="pf-key3">
+                   <div><b>${fmtPct(s.vpip)}</b><span>VPIP · 참여</span></div>
+                   <div><b>${fmtPct(s.pfr)}</b><span>PFR · 레이즈</span></div>
+                   <div><b>${has(s.af) ? s.af : '–'}</b><span>AF · 공격성</span></div>
+               </div>`
+            : '<div class="pf-ach-empty" style="margin-top:10px;">📊 지표 분석에는 몇 핸드가 더 필요합니데이</div>';
+        const cashStr = (u.cashNet || 0) !== 0 ? `${u.cashNet > 0 ? '+' : ''}${(u.cashNet || 0).toLocaleString()}` : '0';
+        const more = `<div class="pf-more" id="pf-more" style="display:none;">
+                ${(s.sampleActions || 0) > 0 ? row('3-Bet', fmtPct(s.threeBet), '리레이즈 빈도') + row('Fold→Bet', fmtPct(s.foldToBet), '벳에 폴드') + row('WTSD', fmtPct(s.wtsd), '쇼다운 도달') + row('W$SD', fmtPct(s.wsd), '쇼다운 승률') : ''}
+                ${row('시즌 포인트', (u.seasonPoints || 0).toLocaleString() + 'pt', '')}
+                ${row('캐시 순익', cashStr, '')}
+                ${row('최대 획득 팟', (u.biggestPot || 0).toLocaleString(), '')}
+                ${(s.sampleActions || 0) > 0 ? row('분석한 액션', (s.sampleActions || 0).toLocaleString() + '개', '') : ''}
+                ${ach.length ? '<div class="pf-ach-wrap" style="margin-top:10px;">' + ach.map(a => `<span class="pf-ach"><span class="a-ico">${a.icon}</span>${esc(a.name)}</span>`).join('') + '</div>' : ''}
+                <div class="pf-adv-legend">💡 VPIP·PFR이 높으면 루즈, 낮으면 타이트. AF는 벳·레이즈를 콜보다 얼마나 자주 하는지. GTO 근접도는 매 액션이 이론상 최적 선택에 얼마나 가까운지를 0~100점으로 본 값입니데이.</div>
+            </div>`;
+        advWrap.innerHTML = gtoBlock + key3 +
+            (ach.length ? `<div class="pf-achline" title="${esc(ach.map(a => a.name).join(' · '))}">🏅 업적 ${ach.length}개 <span>${ach.map(a => a.icon).join('')}</span></div>` : '') +
+            `<button class="pf-more-btn" onclick="const m=document.getElementById('pf-more');const o=m.style.display==='none';m.style.display=o?'block':'none';this.innerText=o?'접기 ▴':'자세히 ▾';">자세히 ▾</button>` + more;
 
         modal.classList.add('show');
     });

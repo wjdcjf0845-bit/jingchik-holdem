@@ -106,6 +106,7 @@ const { RANKS, rankIndexOf, rankNeedText } = require('./lib/rank');
 const ShortStack = require('./lib/shortstack'); // 🤖 숏스택 푸시/폴드 · 올인 콜 레인지
 const OppModel = require('./lib/oppmodel');     // 🧠 상대 읽기 — 세션 표본 + 계정 누적 전적
 const Challenge = require('./lib/challenge');   // 🤖 컴까기(AI 도장깨기) 단계표·보상
+const Rogue = require('./lib/roguerun');        // 🍀 증강 컴까기(로그라이크 런) — 층·증강·정산
 // 칭호는 화면에 그대로 찍히는 문구라 id 대신 문구를 내려보낸다 (클라이언트에 카탈로그 사본을 두지 않으려고)
 // ⚠️ COSMETICS 는 평범한 객체라 COSMETICS['__proto__'] 같은 상속 키가 걸려든다.
 //    클라이언트가 보낸 id 는 반드시 이 함수로만 조회할 것 (자기 소유 키만 통과).
@@ -975,7 +976,14 @@ class GameRoom {
 
             const chInfo = this._challenge ? {
                 stage: this._challenge.stage || 0, coop: !!this._challenge.coop, waiting: !!this._challenge.waiting,
-                boss: this._challenge.stage === Challenge.STAGES.length, total: Challenge.STAGES.length,
+                boss: this._challenge.run ? !!this._challenge.boss : this._challenge.stage === Challenge.STAGES.length, total: Challenge.STAGES.length,
+                // 🍀 증강 런이면 층·목표·기한·증강을 같이 보낸다 (혼자 치는 방이라 엿보기 카드도 여기 실어도 된다)
+                run: this._challenge.run ? {
+                    floor: this._challenge.run.floor, total: Rogue.FLOORS.length, name: this._challenge.floorName,
+                    quota: this._challenge.quota, hands: this._challenge.hands, handsLeft: Math.max(0, this._challenge.hands - this._challenge.handsPlayed),
+                    augments: this._challenge.run.augments.map(Rogue.describe), mull: this._challenge.mullLeft, revive: this._challenge.run.revive,
+                    peek: this._challenge.peek, over: !!this._challenge.done
+                } : null,
                 maxStage: this._challenge.waiting ? this.challengeMaxStage() : 0, host: this.hostNickname,
                 botsLeft: Object.values(this.players).filter(x => x.isBot && x.chips > 0).length
             } : null;
@@ -1085,6 +1093,7 @@ class GameRoom {
     finishChallenge(win) {
         const ch = this._challenge;
         if (!ch || ch.done) return;
+        if (ch.run) { this.finishRunFloor(win); return; }   // 🍀 증강 런은 단계표가 아니라 층 규칙으로 끝난다
         ch.done = true;
         this.gameStage = 0;
         this.tournamentStarted = false;
@@ -1115,6 +1124,86 @@ class GameRoom {
         });
         MockDB.save();
         if (ch.coop) this.resetCoop();
+        this.sendState();
+    }
+
+    // 🍀 [증강 런] 핸드와 핸드 사이 — 직전 핸드의 증강 수당을 주고, 목표 달성/실패를 판정한다.
+    //    층이 끝났으면 true (새 핸드를 돌리지 않는다).
+    runBetweenHands() {
+        const ch = this._challenge, run = ch.run, p = this.players[ch.nick];
+        if (!p) { this.finishRunFloor(false, true); return true; }
+        if (!this.tournamentStarted) return false;          // 아직 첫 핸드 전
+        if (ch.settledHandId !== this.handId) {             // 한 핸드에 한 번만 (startNextHand 가 겹쳐 불려도)
+            ch.settledHandId = this.handId;
+            const start = this.handStartStacks ? this.handStartStacks[ch.nick] : null;
+            if (start != null) {
+                let rank = 0;
+                if (!p.isFolded && this.communityCards.length === 5 && p.hand && p.hand.length === 2) {
+                    try { rank = Hand.solve(p.hand.concat(this.communityCards)).rank; } catch (e) {}
+                }
+                // 카드를 받을 때 준 보너스(포켓·블라인드 환급)는 "번 칩"에서 뺀다 — 폴드한 핸드가 이긴 걸로 계산되지 않게
+                const r = Rogue.afterHand(run, { start: start + (ch.dealBonus || 0), now: p.chips, hand: p.hand, rank, allIn: !!p.isAllIn || p.chips <= 0, rng: Math.random });
+                if (r.bonus > 0) {
+                    p.chips += r.bonus;
+                    if (p.socketId) io.to(p.socketId).emit('runBonus', { bonus: r.bonus, notes: r.notes });
+                }
+            }
+        }
+        const botsAlive = Object.values(this.players).some(x => x.isBot && x.chips > 0);
+        if (p.chips >= ch.quota || (!botsAlive && p.chips > 0)) { this.finishRunFloor(true); return true; }
+        if (p.chips <= 0 || ch.handsPlayed >= ch.hands) { this.finishRunFloor(false); return true; }
+        return false;
+    }
+
+    // 🍀 [증강 런] 카드를 돌린 직후 — 기한 한 핸드 소모, 블라인드 환급·포켓 보너스, 엿보기
+    runOnDeal(sbIndex, bbIndex) {
+        const ch = this._challenge, p = this.players[ch.nick];
+        ch.dealBonus = 0; ch.peek = null;
+        if (!p || !this.playerOrder.includes(ch.nick)) return;
+        ch.handsPlayed += 1;
+        const me = this.playerOrder.indexOf(ch.nick);
+        const r = Rogue.onDeal(ch.run, { hand: p.hand, blindPaid: (me === sbIndex || me === bbIndex) ? p.currentBet : 0 });
+        if (r.bonus > 0) {
+            p.chips += r.bonus; ch.dealBonus = r.bonus;
+            if (p.socketId) io.to(p.socketId).emit('runBonus', { bonus: r.bonus, notes: r.notes });
+        }
+        if (Rogue.has(ch.run, 'peek')) {
+            const opp = this.playerOrder.filter(n => n !== ch.nick && this.players[n] && this.players[n].hand.length === 2);
+            if (opp.length) { const n = opp[Math.floor(Math.random() * opp.length)]; ch.peek = { nick: n, card: this.players[n].hand[Math.floor(Math.random() * 2)] }; }
+        }
+    }
+
+    // 🍀 [증강 런] 층 종료 — 깼으면 다음 증강 3택, 실패면 (네잎클로버가 있으면 재도전) 런 정산
+    finishRunFloor(win, abandon) {
+        const ch = this._challenge;
+        if (!ch || !ch.run || ch.done) return;
+        ch.done = true;
+        this.gameStage = 0;
+        this.tournamentStarted = false;
+        if (this.tournamentTimer) clearInterval(this.tournamentTimer);
+        this.stopTurnTimer();
+        this.turnIndex = -1;
+        const run = ch.run, nick = ch.nick;
+        run.inFloor = false;
+        const pl = this.players[nick];
+        const sock = (pl && pl.socketId) ? io.sockets.sockets.get(pl.socketId) : null;
+        if (win) {
+            run.cleared = run.floor;
+            if (run.floor >= Rogue.FLOORS.length) endRun(nick, run, sock);
+            else {
+                run.afterBoss = !!Rogue.FLOORS[run.floor - 1].boss;
+                run.floor += 1; run.phase = 'pick';
+                run.offers = Rogue.makeOffers(run, Math.random, run.afterBoss);
+                if (sock) sock.emit('runOffer', runOfferPayload(run, { clearedFloor: run.cleared, chips: pl ? pl.chips : 0, quota: ch.quota }));
+            }
+        } else if (!abandon && run.revive > 0 && sock) {
+            run.revive -= 1;
+            const i = run.augments.indexOf('revive'); if (i !== -1) run.augments.splice(i, 1);   // 쓴 클로버는 사라진다
+            sock.emit('runRevive', { floor: run.floor });
+            setTimeout(() => { if (runs.get(nick) === run && sock.connected) launchRunFloor(sock, run); }, 2600);
+        } else {
+            endRun(nick, run, sock);
+        }
         this.sendState();
     }
 
@@ -2210,7 +2299,8 @@ class GameRoom {
         // 🤖 [컴까기] 끝난 도전방은 더 딜하지 않는다. 사람이 칩을 다 잃었으면 봇끼리 계속 칠 이유가 없으니 바로 실패 처리.
         if (this._challenge) {
             if (this._challenge.done || this._challenge.waiting) return;
-            if (this.tournamentStarted) {
+            if (this._challenge.run) { if (this.runBetweenHands()) return; }
+            else if (this.tournamentStarted) {
                 // 협동이면 한 명이라도 살아 있으면 계속, 봇이 다 죽으면 사람끼리 싸울 것 없이 바로 클리어
                 const all = Object.values(this.players);
                 if (!all.some(x => !x.isBot && x.chips > 0)) { this.finishChallenge(false); return; }
@@ -2586,6 +2676,8 @@ class GameRoom {
         // 블라인드 포스팅 자체도 로그에 남김
         this.logAction(this.playerOrder[sbIndex], 'sb', bl.sb, 1);
         this.logAction(this.playerOrder[bbIndex], 'bb', bl.bb, 1);
+
+        if (this._challenge && this._challenge.run) this.runOnDeal(sbIndex, bbIndex);   // 🍀 증강 런: 기한·딜 보너스·엿보기
 
         this.sendState();
 
@@ -4263,6 +4355,67 @@ function roomListArray() {
 }
 
 // 💡 [수정 #6] 빈 방 정리 (메모리 누수 + 유령 방 목록 방지)
+// ═══ 🍀 증강 컴까기(로그라이크 런) ═══
+// 진행 중인 런 (닉네임 → 런). 메모리에만 둔다 — 서버가 재시작되면 진행 중이던 런은 사라진다(보상은 정산 시점에만 생긴다).
+const runs = new Map();
+
+function runOfferPayload(run, extra) {
+    return Object.assign({
+        floor: run.floor, total: Rogue.FLOORS.length, next: Rogue.floorSetup(run),
+        offers: run.offers.map(Rogue.describe), rerolls: run.rerolls,
+        augments: run.augments.map(Rogue.describe)
+    }, extra || {});
+}
+
+// 런 종료 정산 — 깬 층만큼 뱅크롤·코어
+function endRun(nick, run, sock) {
+    if (runs.get(nick) === run) runs.delete(nick);
+    const u = MockDB.users.get(nick);
+    if (!u) return;
+    const r = Rogue.settle(u, run);
+    MockDB.save();
+    if (sock) sock.emit('runEnd', Object.assign({ floor: run.floor, total: Rogue.FLOORS.length, augments: run.augments.map(Rogue.describe), coresNow: u.cores || 0 }, r));
+    if (r.reward > 0) {
+        MockDB.adjustBankroll(nick, r.reward).then(nb => { if (sock) sock.emit('bankrollUpdate', { bankroll: nb || 0 }); });
+    }
+}
+
+// 이번 층의 방을 만들어 바로 시작한다 (컴까기 방과 같은 이름을 써서 방 목록 제외·남의 입장 금지 규칙을 그대로 탄다)
+function launchRunFloor(socket, run) {
+    const nick = socket.nickname;
+    const roomId = `🤖컴까기_${nick}`;
+    if (rooms.has(roomId)) { try { destroyRoom(roomId); } catch (e) {} }
+    const fs = Rogue.floorSetup(run);
+    // 블라인드는 층 내내 그대로(50/100) — 기한이 핸드 수라 블라인드가 오르면 계산이 흐려진다
+    const settings = { startingChips: fs.startChips, blindUpInterval: 3600, turnTimeLimit: 30, mode: 'tournament', maxRebuys: 0 };
+    const room = new GameRoom(roomId, settings);
+    room._mttFreeChips = true;                 // 참가비·상금풀 없음 (뱅크롤과 무관한 칩)
+    room._challenge = {
+        nick, stage: 0, done: false, run, boss: fs.boss, floorName: fs.name,
+        quota: fs.quota, hands: fs.hands, handsPlayed: 0, mullLeft: fs.mull, settledHandId: 0, dealBonus: 0, peek: null
+    };
+    rooms.set(roomId, room);
+    socket.join(roomId);
+    socket.currentRoom = roomId;
+    leaveLobby(socket);
+    room.hostNickname = nick;
+    room.players[nick] = {
+        id: nick, socketId: socket.id, chips: fs.startChips,
+        currentBet: 0, totalInvested: 0, isFolded: false, hasActed: false, role: '',
+        isAllIn: false, isDisconnected: false, isMucked: false, isSpectator: false,
+        hand: [], lastEmoteTime: 0, isBot: false, rebuysUsed: 0
+    };
+    room.playerOrder.push(nick);
+    fs.bots.forEach(d => room.addBot(d));
+    room.playerOrder.forEach(n => { const bp = room.players[n]; if (bp && bp.isBot) bp.chips = fs.botChips; });
+    run.phase = 'play'; run.inFloor = true;
+
+    socket.emit('joinRoomSuccess', roomId);
+    socket.emit('runFloorStart', Object.assign({}, fs, { augments: run.augments.map(Rogue.describe), botNames: room.playerOrder.filter(n => room.players[n].isBot) }));
+    room.sendState();
+    setTimeout(() => { if (rooms.get(roomId) === room && !room._challenge.done) room.startNextHand(); }, fs.boss ? 4600 : 3000);
+}
+
 function destroyRoom(roomId) {
     const room = rooms.get(roomId);
     if (!room) return;
@@ -4556,6 +4709,9 @@ io.on('connection', (socket) => {
         const p = room.players[nick];
         if (!p) return;
 
+        // 🍀 [증강 런] 층 도중에 나가면 그 런은 거기서 끝 — 깬 층까지만 정산한다 (나갔다 들어와 같은 층을 다시 치는 것 방지)
+        if (room._challenge && room._challenge.run && !room._challenge.done) room.finishRunFloor(false, true);
+
         // 🛡️ [버그픽스] 진행 중인 핸드에 칩이 걸려 있으면(특히 올인) 즉시 이탈 금지.
         //    올인한 사람은 chips===0 이라 아래 "생존자 이탈 차단"을 통과해 좌석이 통째로 삭제됐고,
         //    아직 팟에 쓸어담기지 않은 currentBet이 사라져 테이블 총칩이 줄었다(실측 30,000→20,000).
@@ -4683,6 +4839,92 @@ io.on('connection', (socket) => {
         room.sendState();
         // 인트로 연출(보스전은 더 길다)이 끝난 뒤에 첫 카드를 돌린다
         setTimeout(() => { if (rooms.get(roomId) === room && !room._challenge.done) room.startNextHand(); }, boss ? 4600 : 3200);
+    });
+
+    // 🍀 [증강 런] 내 기록·순위·진행 중인 런
+    socket.on('getRun', async () => {
+        if (!socket.nickname) return;
+        const u = await MockDB.getUser(socket.nickname);
+        const top = Array.from(MockDB.users.values())
+            .map(x => ({ nickname: x.nickname, p: Rogue.progressOf(x) }))
+            .filter(x => x.nickname && !x.nickname.startsWith('🤖') && x.p.best > 0)
+            .sort((a, b) => b.p.best - a.p.best || b.p.wins - a.p.wins || a.p.runs - b.p.runs)
+            .slice(0, 5)
+            .map(x => ({ nickname: x.nickname, best: x.p.best, wins: x.p.wins }));
+        const run = runs.get(socket.nickname);
+        socket.emit('runData', {
+            progress: Rogue.progressOf(u), top, total: Rogue.FLOORS.length,
+            active: (run && run.phase === 'pick') ? { floor: run.floor, augments: run.augments.length } : null
+        });
+    });
+
+    // 🍀 [증강 런] 시작 — 고르다 만 런이 있으면 이어서, 없으면 새 런(첫 증강 3택부터)
+    socket.on('runStart', async () => {
+        if (!socket.nickname) return;
+        const nick = socket.nickname;
+        const u = await MockDB.getUser(nick);
+        if (!u) return;
+        const roomId = `🤖컴까기_${nick}`;
+        const cur = socket.currentRoom;
+        if (cur && cur !== roomId && rooms.has(cur) && rooms.get(cur).players[nick]) {
+            socket.emit('challengeError', '먼저 지금 있는 방에서 나가이소.');
+            return;
+        }
+        let run = runs.get(nick);
+        if (run && run.phase !== 'pick') {
+            // 층 도중에 끊긴 런 — 그 층은 실패로 치고 정산한 뒤 새로 시작한다
+            const old = rooms.get(roomId);
+            if (old && old._challenge && old._challenge.run === run && !old._challenge.done) old._challenge.done = true;
+            endRun(nick, run, null);
+            run = null;
+        }
+        if (!run) { run = Rogue.newRun(Math.random); runs.set(nick, run); }
+        socket.emit('runOffer', runOfferPayload(run, { start: run.augments.length === 0 && run.cleared === 0 }));
+    });
+
+    // 🍀 [증강 런] 증강 고르기 → 바로 다음 층 시작
+    socket.on('runPick', (data) => {
+        if (!socket.nickname) return;
+        const nick = socket.nickname;
+        const run = runs.get(nick);
+        if (!run || run.phase !== 'pick') return;
+        const cur = socket.currentRoom;
+        if (cur && cur !== `🤖컴까기_${nick}` && rooms.has(cur) && rooms.get(cur).players[nick]) {
+            socket.emit('challengeError', '먼저 지금 있는 방에서 나가이소.');
+            return;
+        }
+        if (!Rogue.pick(run, data ? data.idx : undefined)) return;   // 정수만 받는다 (Number(null) 이 0 이 되는 것 방지)
+        launchRunFloor(socket, run);
+    });
+
+    // 🍀 [증강 런] 증강 다시 뽑기 (런 하나에 정해진 횟수만)
+    socket.on('runReroll', () => {
+        if (!socket.nickname) return;
+        const run = runs.get(socket.nickname);
+        if (!run || !Rogue.reroll(run, Math.random, !!run.afterBoss)) return;
+        socket.emit('runOffer', runOfferPayload(run, { rerolled: true }));
+    });
+
+    // 🍀 [증강 런] 증강 고르는 화면에서 그만두기 — 깬 층까지 정산
+    socket.on('runAbandon', () => {
+        if (!socket.nickname) return;
+        const run = runs.get(socket.nickname);
+        if (!run || run.phase !== 'pick') return;
+        endRun(socket.nickname, run, socket);
+    });
+
+    // 🍀 [증강 런] 멀리건 — 프리플랍에서 아직 아무 행동도 안 했을 때 내 패를 새로 받는다
+    socket.on('runMulligan', () => {
+        if (!socket.nickname) return;
+        const room = rooms.get(socket.currentRoom);
+        const ch = room && room._challenge;
+        if (!ch || !ch.run || ch.done || ch.nick !== socket.nickname) return;
+        const p = room.players[socket.nickname];
+        if (!p || ch.mullLeft <= 0 || room.gameStage !== 1 || p.isFolded || p.isAllIn || p.hasActed || p.hand.length !== 2 || room.deck.length < 12) return;
+        p.hand = [room.deck.pop(), room.deck.pop()];
+        ch.mullLeft -= 1;
+        socket.emit('runBonus', { bonus: 0, notes: [{ id: 'mull', amount: 0 }] });
+        room.sendState();
     });
 
     // 🤖 [컴까기 협동] 친구를 기다리는 방 만들기 — 방 목록·초대 링크로 들어온다(최대 3명)
