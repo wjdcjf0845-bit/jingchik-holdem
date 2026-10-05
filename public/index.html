@@ -4124,6 +4124,25 @@
         #queue-box .qb-n small { color: #9aa6c2; font-size: 12px; }
         #queue-box .qb-s { font-size: 12px; color: #c3cbe0; line-height: 1.5; word-break: keep-all; }
         #queue-box button { margin-top: 10px; padding: 7px 18px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.06); color: #dfe6f5; font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer; }
+    
+        /* 🩹 내 실수 복습 · 📈 실력 비교 */
+        .qz-cat.mine { border-color: rgba(255,120,105,0.6); color: #ffd1cb; }
+        .qz-cat.mine.on { background: linear-gradient(180deg, #ff7a6e, #c9261a); color: #fff; border-color: transparent; }
+        .sk-row { display: flex; align-items: center; gap: 9px; padding: 9px 10px; margin-bottom: 6px; border-radius: 12px; background: rgba(0,0,0,0.28); border: 1px solid rgba(255,255,255,0.07); }
+        .sk-row.me { border-color: rgba(255,200,87,0.7); background: rgba(255,200,87,0.08); }
+        .sk-row.low { opacity: 0.6; }
+        .sk-rank { flex: 0 0 26px; text-align: center; font-family: var(--font-num); font-weight: 700; font-size: 15px; color: #c3cbe0; }
+        .sk-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+        .sk-main b { font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sk-main b em { font-style: normal; font-size: 10px; background: var(--gold); color: #2c1c00; border-radius: 999px; padding: 0 6px; margin-left: 4px; vertical-align: 1px; }
+        .sk-main small { font-size: 11.5px; color: #ffb9ae; word-break: keep-all; }
+        .sk-main small b { font-size: inherit; color: #ffd1cb; }
+        .sk-main small.dim { color: var(--txt-dim); font-size: 10.5px; }
+        .sk-score { flex: 0 0 auto; text-align: right; line-height: 1.15; }
+        .sk-score > b { font-family: var(--font-num); font-size: 24px; color: #8fd3ff; }
+        .sk-score i { font-style: normal; font-size: 11px; font-weight: 800; margin-left: 4px; }
+        .sk-score i.up { color: #4be3a0; } .sk-score i.down { color: #ff8a7d; } .sk-score i.flat { color: #8d98b3; }
+        .sk-score small { display: block; font-size: 9.5px; color: var(--txt-dim); margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -4358,6 +4377,7 @@
             <button class="rank-btn" onclick="socket.emit('getSeasonBoard')" title="시즌 랭킹">📅<span>시즌</span></button>
             <button class="rank-btn" onclick="socket.emit('getBankrollBoard')" title="뱅크롤 순위">💰<span>뱅크롤</span></button>
             <button class="rank-btn" onclick="socket.emit('getMttChampions')" title="MTT 챔피언">👑<span>챔피언</span></button>
+            <button class="rank-btn report" onclick="socket.emit('getSkillBoard')" title="친구들과 실력 비교">📈<span>실력</span></button>
             <button class="rank-btn report" onclick="openSessionReport()" title="내 세션 리포트">📊<span>리포트</span></button>
             <button class="rank-btn help" onclick="openHelp()" title="족보·규칙 도움말">📖<span>도움말</span></button>
         </div>
@@ -4578,6 +4598,15 @@
         <div id="season-label" style="font-size:12px; color:var(--txt-dim); margin-bottom:6px;"></div>
         <div id="season-list" style="margin: 12px 0; max-height: 320px; overflow-y: auto; text-align: left;"></div>
         <button class="btn-join" style="width: 100%; background: linear-gradient(180deg, #3a455f, #232c44 60%, #161c2c); color: white; box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 6px 16px rgba(0,0,0,0.5); text-shadow:none;" onclick="document.getElementById('season-modal').style.display='none'">닫기</button>
+    </div>
+</div>
+
+<div id="skill-modal" class="overlay" style="display:none; z-index: 4000;">
+    <div class="login-box" style="width: 520px;">
+        <h2 style="margin-top:0; font-family: var(--font-disp); font-weight:400; letter-spacing:1px; background: linear-gradient(180deg,#8fd3ff,#2f86dd); -webkit-background-clip:text; background-clip:text; color:transparent;">📈 실력 비교</h2>
+        <div style="font-size:12px; color:var(--txt-dim); margin-bottom:6px; line-height:1.5; word-break:keep-all;">최근 30일 · 칩이 아니라 <b style="color:#fff;">결정의 질</b>로 본 순위입니다. 점수는 매 액션을 그 순간의 권장 플레이와 비교한 값입니다.</div>
+        <div id="skill-list" style="margin: 10px 0; max-height: 60vh; overflow-y: auto; text-align: left;"></div>
+        <button class="btn-join" style="width: 100%; background: linear-gradient(180deg, #3a455f, #232c44 60%, #161c2c); color: white;" onclick="document.getElementById('skill-modal').style.display='none'">닫기</button>
     </div>
 </div>
 
@@ -5164,11 +5193,14 @@
     function renderQuizCats() {
         const st = _quizStats;
         const chip = (id, icon, name, n, ok) => `<button class="qz-cat${_quizCat === id ? ' on' : ''}" onclick="quizPick('${id}')">${icon} ${esc(name)}${n ? `<small>${ok}/${n}</small>` : ''}</button>`;
-        document.getElementById('quiz-cats').innerHTML = chip('all', '🎲', '전체', st ? st.total : 0, st ? st.ok : 0) +
+        const mine = _quizMine || { pool: 0, n: 0, ok: 0 };
+        document.getElementById('quiz-cats').innerHTML = `<button class="qz-cat mine${_quizCat === 'mine' ? ' on' : ''}" onclick="quizPick('mine')">🩹 내 실수 복습<small>${mine.pool}문제${mine.n ? ` · ${mine.ok}/${mine.n}` : ''}</small></button>` +
+            chip('all', '🎲', '전체', st ? st.total : 0, st ? st.ok : 0) +
             _quizCats.filter(c => /^[a-z]+$/.test(c.id)).map(c => chip(c.id, c.icon, c.name, st ? st.cats[c.id].n : 0, st ? st.cats[c.id].ok : 0)).join('');
         if (st) document.getElementById('quiz-score').innerHTML = `정답 ${st.ok} / ${st.total}` + (st.total ? ` · ${Math.round(st.ok / st.total * 100)}%` : '') + (st.streak >= 2 ? ` · 🔥 ${st.streak}연속` : '');
     }
-    socket.on('quizInfo', d => { if (!d) return; _quizCats = d.cats || []; _quizStats = d.stats || null; renderQuizCats(); });
+    let _quizMine = null;
+    socket.on('quizInfo', d => { if (!d) return; _quizCats = d.cats || []; _quizStats = d.stats || null; _quizMine = d.mine || null; renderQuizCats(); });
     // 🎬 문제의 상황을 글이 아니라 테이블로 그린다: 좌석(자리·남은 스택·한 행동) · 앞에 놓인 칩 · 가운데 팟과 보드 · 내 패
     //    나는 항상 아래 가운데, 나머지는 실제 게임처럼 시계 방향.
     const QS_POS = {
@@ -5264,6 +5296,7 @@
     }
     socket.on('quizQuestion', q => {
         if (!q) return;
+        if (q.empty) { _quizQ = null; _quizDone = true; document.getElementById('quiz-body').innerHTML = `<div class="qz-loading" style="line-height:1.7; word-break:keep-all;">🩹 ${esc(q.msg)}</div>`; return; }
         _quizQ = q; _quizDone = false;
         const scene = quizScene(q);
         const cards = (!scene && q.hand && q.hand.length === 2)
@@ -5302,6 +5335,7 @@
                 <div class="qz-ref">${esc(r.ref || '')}</div>
             </div>
             <button class="btn-join qz-next" onclick="quizNext()">다음 문제 ▶</button>`;
+        if (r.mine) _quizMine = r.mine;
         if (r.stats) { _quizStats = r.stats; renderQuizCats(); }
         if (r.correct && typeof SFX !== 'undefined' && SFX.win) { try { SFX.win(); } catch (e) {} }
     });
@@ -7408,6 +7442,30 @@
     }
 
     // 🏆 시즌 리더보드
+    // 📈 실력 비교판
+    socket.on('skillBoard', d => {
+        const list = document.getElementById('skill-list');
+        const rows = (d && d.rows) || [];
+        if (!rows.length) {
+            list.innerHTML = '<div class="hist-empty" style="text-align:center; line-height:1.7;">아직 비교할 기록이 없습니다.<br>최근 30일 동안 10판 이상 친 사람부터 나옵니다.</div>';
+        } else {
+            let rank = 0;
+            list.innerHTML = rows.map(u => {
+                if (!u.low) rank++;
+                const medal = u.low ? '–' : (rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank);
+                const tr = u.trend == null ? '' : (u.trend > 1 ? `<i class="up">▲${u.trend}</i>` : u.trend < -1 ? `<i class="down">▼${Math.abs(u.trend)}</i>` : '<i class="flat">–</i>');
+                const leak = u.top ? `약점: <b>${esc(u.top.name)}</b> ${u.top.n}번 · 약 −${u.top.bb}bb` : '기록된 큰 실수 없음';
+                return `<div class="sk-row${u.me ? ' me' : ''}${u.low ? ' low' : ''}">
+                    <span class="sk-rank">${medal}</span>
+                    <span class="sd-avatar" style="--av:${avatarHue(u.nick)}">${avatarInitial(u.nick)}</span>
+                    <span class="sk-main"><b>${esc(u.nick)}${u.me ? ' <em>나</em>' : ''}</b><small>${leak}</small>
+                        <small class="dim">${u.hands.toLocaleString()}판 · 결정 ${u.decisions.toLocaleString()}번${u.vpip != null ? ` · 참여 ${u.vpip}% / 레이즈 ${u.pfr}%` : ''}${u.low ? ' · 표본 부족' : ''}</small></span>
+                    <span class="sk-score"><b>${u.gto}</b>${tr}<small>실수 −${u.loss100}bb<br>/100결정</small></span>
+                </div>`;
+            }).join('') + '<div class="bl-foot" style="margin-top:8px;">▲▼는 최근 7일 점수가 그 전 3주보다 얼마나 올랐는지입니다. 실수 손실은 큰 실수들의 손실 어림값을 결정 100번당으로 환산한 것이며, 이 기능을 넣은 뒤부터 쌓입니다. 결정 30번 미만은 순위에서 뺐습니다.</div>';
+        }
+        document.getElementById('skill-modal').style.display = 'flex';
+    });
     socket.on('seasonBoardData', d => {
         document.getElementById('season-label').innerText = `${d.season} 시즌 · 우승 100점 / 핸드승 5점`;
         const list = document.getElementById('season-list');

@@ -46,3 +46,26 @@ test('설명 글: 상황 · 내 플레이 · 권장이 들어간다', () => {
     assert.strictEqual(d.did, '콜 10bb'); assert.strictEqual(d.should, '폴드'); assert.strictEqual(d.netBB, -10);
     assert.strictEqual(d.title, '접어야 할 패로 콜');
 });
+
+test('내 실수 복습: 기록을 그 상황 그대로 문제로 만든다 · 손실 큰 것·못 맞힌 것이 더 자주 나온다', () => {
+    const Q = require('../lib/gtoquiz');
+    const rec = { t: 5, kind: 'overcall', costBB: 8, street: 'river', hand: ['Ks', '7d'], board: ['Ah', 'Qd', '9c', '4s', '2h'], pos: 'BB', seats: 4, opp: 1,
+        potBB: 20, toCallBB: 10, stackBB: 60, act: 'call', amtBB: 10, best: 'fold', bestPct: 95, didPct: 5, eq: 10, odds: 33, reason: '승률이 팟오즈보다 낮음' };
+    const q = Q.fromBlunder(rec);
+    assert.strictEqual(q.cat, 'mine'); assert.strictEqual(q.answer, 'fold');
+    assert.deepStrictEqual(q.choices.map(c => c.id), ['fold', 'call', 'raise']);
+    assert.strictEqual(q.scene.seats.length, 2); assert.strictEqual(q.scene.pot, 10, '팟은 상대 벳을 뺀 값 — 벳은 칩으로 따로 그린다');
+    assert.match(q.explain, /콜 10bb/);
+    const pub = Q.publicView(q);
+    assert.strictEqual(pub.answer, undefined); assert.strictEqual(pub.explain, undefined);
+    // 체크 가능한 자리
+    const q2 = Q.fromBlunder(Object.assign({}, rec, { toCallBB: 0, best: 'bet', act: 'check', street: 'turn', board: ['Ah', 'Qd', '9c', '4s'] }));
+    assert.deepStrictEqual(q2.choices.map(c => c.id), ['check', 'bet']);
+    assert.strictEqual(Q.fromBlunder({ hand: ['As'] }), null);
+    assert.strictEqual(Q.pickBlunder([], Math.random), null);
+    // 가중치: 손실 20bb 짜리가 1bb 짜리보다, 그리고 이미 맞힌 것보다 훨씬 자주
+    const big = Object.assign({}, rec, { t: 1, costBB: 20 }), small = Object.assign({}, rec, { t: 2, costBB: 1 }), done = Object.assign({}, rec, { t: 3, costBB: 20, qok: 5 });
+    let nBig = 0, nDone = 0, seed = 7; const rng = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+    for (let i = 0; i < 600; i++) { const p = Q.pickBlunder([big, small, done], rng); if (p.t === 1) nBig++; if (p.t === 3) nDone++; }
+    assert.ok(nBig > 400, 'big ' + nBig); assert.ok(nDone < 100, 'done ' + nDone);
+});

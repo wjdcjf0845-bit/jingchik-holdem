@@ -5335,11 +5335,26 @@ io.on('connection', (socket) => {
     socket.on('quizInfo', async () => {
         if (!socket.nickname) return;
         const u = await MockDB.getUser(socket.nickname);
-        socket.emit('quizInfo', { cats: Quiz.catList(), stats: Quiz.statsOf(u) });
+        socket.emit('quizInfo', { cats: Quiz.catList(), stats: Quiz.statsOf(u), mine: mineInfo(u) });
     });
+    // 🩹 내 실수 복습: 실전·학습에서 기록된 큰 실수 모음
+    function minePool(u) { return ((u && u.blunders) || []).concat((u && u.learnStats && u.learnStats.blunders) || []); }
+    function mineInfo(u) {
+        const m = (u && u.quizMine) || {};
+        return { pool: minePool(u).filter(r => Quiz.fromBlunder(r)).length, n: m.n || 0, ok: m.ok || 0 };
+    }
     // 문제 하나 — 정답·해설은 서버가 쥐고 있다가 답을 받은 뒤에 보낸다
     socket.on('quizNext', (data) => {
         if (!socket.nickname) return;
+        if (data && data.cat === 'mine') {
+            const u = MockDB.users.get(socket.nickname);
+            const rec = Quiz.pickBlunder(minePool(u), Math.random);
+            const mq = rec ? Quiz.fromBlunder(rec) : null;
+            socket._quiz = mq;
+            socket.emit('quizQuestion', mq ? Quiz.publicView(mq)
+                : { empty: true, msg: '아직 기록된 큰 실수가 없습니다. 게임이나 GTO 학습을 몇 판 치고 나면, 그때 틀렸던 상황이 여기에 문제로 나옵니다.' });
+            return;
+        }
         const q = Quiz.generate(data && typeof data.cat === 'string' ? data.cat : 'all', Math.random);
         socket._quiz = q;
         socket.emit('quizQuestion', Quiz.publicView(q));
@@ -5352,9 +5367,47 @@ io.on('connection', (socket) => {
         const choice = data && typeof data.choice === 'string' ? data.choice : '';
         const correct = choice === q.answer;
         const u = await MockDB.getUser(socket.nickname);
+        if (u && q.cat === 'mine') {
+            // 그 실수 기록에 "다시 풀어 본 횟수 · 맞힌 횟수"를 적는다(맞힌 문제는 덜 나온다)
+            const rec = minePool(u).find(r => r.t === q._t);
+            if (rec) { rec.qn = (rec.qn || 0) + 1; if (correct) rec.qok = (rec.qok || 0) + 1; }
+            const m = u.quizMine || (u.quizMine = { n: 0, ok: 0 });
+            m.n++; if (correct) m.ok++;
+            MockDB.save();
+            socket.emit('quizResult', { correct, answer: q.answer, choice, explain: q.explain, ref: q.ref, stats: Quiz.statsOf(u), mine: mineInfo(u) });
+            return;
+        }
         const stats = u ? Quiz.record(u, q.cat, correct) : Quiz.statsOf(null);
         if (u) MockDB.save();
         socket.emit('quizResult', { correct, answer: q.answer, choice, explain: q.explain, ref: q.ref, stats });
+    });
+
+    // 📈 [실력 비교] 최근 30일 — 칩이 아니라 "결정의 질"로 나란히 본다 (GTO 근접도 · 실수 손실 · 가장 큰 약점 · 최근 7일 추세)
+    socket.on('getSkillBoard', () => {
+        if (!socket.nickname) return;
+        const rows = [];
+        MockDB.users.forEach(u => {
+            if (!u || !u.nickname || u.nickname.startsWith('🤖') || u.nickname === ADMIN_NICK) return;
+            const a30 = MockDB.aggregateRange(u, 30);
+            if ((a30.handsPlayed || 0) < 10 || !(a30.gtoScoreCount > 0)) return;
+            const a7 = MockDB.aggregateRange(u, 7);
+            const prevCnt = a30.gtoScoreCount - a7.gtoScoreCount, prevSum = a30.gtoScoreSum - a7.gtoScoreSum;
+            let lossBB = 0, top = null;
+            Blunder.KIND_KEYS.forEach(k => { const bb = a30['lkB_' + k] || 0; lossBB += bb; if (bb > 0 && (!top || bb > top.bb)) top = { name: Blunder.KINDS[k].name, bb: Math.round(bb * 10) / 10, n: a30['lkN_' + k] || 0 }; });
+            rows.push({
+                nick: u.nickname, me: u.nickname === socket.nickname,
+                hands: a30.handsPlayed, decisions: a30.gtoScoreCount,
+                gto: Math.round(a30.gtoScoreSum / a30.gtoScoreCount),
+                trend: (a7.gtoScoreCount >= 15 && prevCnt >= 15) ? Math.round(a7.gtoScoreSum / a7.gtoScoreCount - prevSum / prevCnt) : null,
+                loss100: Math.round(lossBB / a30.gtoScoreCount * 1000) / 10,
+                top,
+                vpip: a30.preflopOpps > 0 ? Math.round(a30.vpipHands / a30.preflopOpps * 100) : null,
+                pfr: a30.preflopOpps > 0 ? Math.round(a30.pfrHands / a30.preflopOpps * 100) : null,
+                low: a30.gtoScoreCount < 30
+            });
+        });
+        rows.sort((x, y) => (x.low ? 1 : 0) - (y.low ? 1 : 0) || y.gto - x.gto || x.loss100 - y.loss100);
+        socket.emit('skillBoard', { rows: rows.slice(0, 40), days: 30 });
     });
 
     // 🍀 [증강 런] 내 기록·순위·진행 중인 런
