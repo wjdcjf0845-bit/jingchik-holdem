@@ -279,3 +279,32 @@ test('장면: 프리플랍은 블라인드가 놓이고, 내 앞자리는 폴드
 test('손으로 쓴 문제마다 장면이 하나씩 짝지어져 있다', () => {
     ['multiway', 'depth'].forEach(c => assert.strictEqual(Q.AUTHORED[c].length, Q.AUTHORED_SCENES[c].length, c));
 });
+
+test('드로우 찾기: 플러시 9 · 양방 8 · 것샷 4 · 겹치면 15, 완성된 패·리버·드로우 없음은 null', () => {
+    assert.deepStrictEqual(A.detectDraws(['Td', 'Jd'], ['5c', 'Qd', '5h', '4d']), { outs: 9, label: '플러시 드로우', flush: true, straightRanks: 0 });
+    assert.strictEqual(A.detectDraws(['9s', '8d'], ['7c', '6h', '2d']).outs, 8);
+    assert.strictEqual(A.detectDraws(['9s', '8d'], ['6c', '5h', 'Kd']).outs, 4);
+    assert.strictEqual(A.detectDraws(['9h', '8h'], ['7h', '6h', '2c']).outs, 15);
+    assert.strictEqual(A.detectDraws(['Ah', '2s'], ['3c', '4d', 'Kh']).outs, 4, 'A-2-3-4 는 5 하나만 기다린다');
+    assert.strictEqual(A.detectDraws(['As', 'Kd'], ['9c', '6h', '2d']), null);
+    assert.strictEqual(A.detectDraws(['Ah', 'Kh'], ['2h', '7h', '9h']), null, '이미 플러시');
+    assert.strictEqual(A.detectDraws(['9s', '8d'], ['7c', '6h', 'Td']), null, '이미 스트레이트');
+    assert.strictEqual(A.detectDraws(['Td', 'Jd'], ['5c', 'Qd', '5h', '4d', '2s']), null, '리버');
+    assert.strictEqual(A.detectDraws(['2c', '7d'], ['Ah', 'Kh', 'Qh', 'Jh']), null, '보드만으로 된 드로우는 내 드로우가 아니다');
+    [null, [], ['xx', 'yy'], ['Td']].forEach(h => assert.strictEqual(A.detectDraws(h, ['5c', 'Qd', '5h']), null));
+});
+
+test('임플라이드 오즈: 깊은 스택의 강한 드로우는 가격이 조금 모자라도 콜, 얕으면 폴드', () => {
+    const draw = A.detectDraws(['Td', 'Jd'], ['5c', 'Qd', '5h', '4d']);
+    const ctx = { equity: 0.19, potOdds: 0.255, toCall: 287, opponents: 1, inPosition: true, draw, pot: 837 };
+    const deep = A.postflopAdvice(Object.assign({ spr: 11, stackShare: 0.03, behind: 9176 }, ctx));
+    assert.strictEqual(deep.bestAction, 'call');
+    assert.ok(deep.notes.includes('임플라이드 오즈') && /아웃츠 9장/.test(deep.reason));
+    const shallow = A.postflopAdvice(Object.assign({ spr: 3, stackShare: 0.5, behind: 150 }, ctx));
+    assert.strictEqual(shallow.bestAction, 'fold');
+    // 것샷(4아웃)이나 드로우가 없으면 임플라이드로 콜하지 않는다
+    assert.strictEqual(A.postflopAdvice(Object.assign({ spr: 11, stackShare: 0.03, behind: 9176 }, ctx, { draw: { outs: 4, label: '것샷' }, equity: 0.10 })).bestAction, 'fold');
+    assert.strictEqual(A.postflopAdvice(Object.assign({ spr: 11, stackShare: 0.03, behind: 9176 }, ctx, { draw: null })).bestAction, 'fold');
+    // 벳이 너무 크면(팟의 2배) 깊어도 폴드
+    assert.strictEqual(A.postflopAdvice({ equity: 0.19, potOdds: 0.4, toCall: 1600, opponents: 1, inPosition: true, spr: 5, stackShare: 0.2, draw, pot: 2400, behind: 8000 }).bestAction, 'fold');
+});

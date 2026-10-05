@@ -1963,6 +1963,53 @@ class GameRoom {
         return RangeEq.shareBeaten(mine, opp, top);
     }
 
+    // 🎓 [학습 조언용] 벳하는 범위를 상대로 한 "진짜 승률" — 남은 카드를 실제로 깔아 본다.
+    //    예전엔 "지금 이 순간 상대 범위를 이기는 비율"에 아무 패 상대 승률을 조금 섞었다. 그 계산은 드로우를 거의 0으로 쳐서,
+    //    턴의 플러시 드로우(9아웃, 실제 약 18~20%)가 15%로 나왔다. 여기서는 상대 범위의 패 하나하나와 끝까지 가 본다.
+    //    상대 범위 = 지금 보드에서 강한 순 상위 top(벳 크기·스트리트에 따라) + 그 밖의 패 일부(블러프·드로우).
+    equityVsRangeMC(nick, betFrac, aggroStreets) {
+        const p = this.players[nick];
+        const cc = this.communityCards;
+        if (!p || !p.hand || p.hand.length !== 2 || !cc || cc.length < 3) return null;
+        const known = new Set([...cc, ...p.hand]);
+        const pool = FULL_DECK.filter(c => !known.has(c));
+        const ORDER = '23456789TJQKA';
+        const score = cards => {
+            const h = Hand.solve(cards);
+            return RangeEq.handScore(h.rank, h.cards.map(c => ORDER.indexOf(c.value === '10' ? 'T' : c.value)));
+        };
+        const cand = [];
+        for (let i = 0; i < 600; i++) {   // 표본을 넉넉히 — 조언을 보여줄 때와 채점할 때 값이 흔들리지 않게
+            const a = pool[Math.floor(Math.random() * pool.length)], b = pool[Math.floor(Math.random() * pool.length)];
+            if (a === b) continue;
+            try { cand.push({ h: [a, b], s: score([a, b].concat(cc)) }); } catch (e) {}
+        }
+        if (cand.length < 60) return null;
+        cand.sort((x, y) => y.s - x.s);
+        const top = RangeEq.bettingRangeTop({ street: this.gameStage, betFrac, aggroStreets });
+        const nTop = Math.max(8, Math.ceil(cand.length * top));
+        const range = cand.slice(0, nTop);
+        // 블러프·드로우 몫: 범위 밖의 패를 벳 범위의 25%만큼 섞는다 (리버는 20%)
+        const rest = cand.slice(nTop), nBluff = Math.min(rest.length, Math.round(nTop * (this.gameStage >= 4 ? 0.20 : 0.25)));
+        for (let i = 0; i < nBluff; i++) range.push(rest[Math.floor(Math.random() * rest.length)]);
+        const need = 5 - cc.length;
+        let win = 0, n = 0;
+        for (const v of range) {
+            for (let rep = 0; rep < (need > 0 ? 3 : 1); rep++) {
+                const deck = pool.filter(c => c !== v.h[0] && c !== v.h[1]);
+                const board = cc.slice();
+                for (let k = 0; k < need; k++) board.push(deck.splice(Math.floor(Math.random() * deck.length), 1)[0]);
+                try {
+                    const mine = Hand.solve(p.hand.concat(board)), his = Hand.solve(v.h.concat(board));
+                    const w = Hand.winners([mine, his]);
+                    if (w.length === 2) win += 0.5; else if (w[0] === mine) win += 1;
+                    n++;
+                } catch (e) {}
+            }
+        }
+        return n >= 40 ? win / n : null;
+    }
+
     // 🎯 포스트플랍에서 내가 마지막에 행동하는가(포지션). 액션은 딜러 다음 자리부터 시작하므로
     //    딜러에 가까울수록 늦게 친다. 포지션은 고수 전략의 핵심 입력이다.
     isInPosition(nick) {
@@ -3741,14 +3788,16 @@ class GameRoom {
                 try {
                     const _bf = toCall / Math.max(_bbNow, potBefore - toCall);
                     const _ag = HandRead.summarizeVillain(this.actionLog, this.lastAggressorBefore(this.gameStage + 1) || '').aggroStreets || 1;
-                    const share = this.equityVsBettingRange(nick, _bf, _ag);
-                    if (share != null) { rawEquity = equity; equity = RangeEq.blendWithDraws(share, equity, this.gameStage); }
+                    const vsRange = this.equityVsRangeMC(nick, _bf, _ag);
+                    if (vsRange != null) { rawEquity = equity; equity = vsRange; }
                 } catch (e) {}
             }
+            const _draw = GtoAdvice.detectDraws(p.hand, this.communityCards);
             // 포스트플랍 — 상대 수·포지션·SPR 을 반영한 조언 (lib/gtoadvice.js)
             const pa = GtoAdvice.postflopAdvice({
                 equity, potOdds, toCall, opponents, inPosition: this.isInPosition(nick),
-                spr: _spr, stackShare: p.chips > 0 ? toCall / p.chips : 1
+                spr: _spr, stackShare: p.chips > 0 ? toCall / p.chips : 1,
+                draw: _draw, pot: potBefore, behind: Math.max(0, _effBehind - toCall)
             });
             mix = pa.mix; bestAction = pa.bestAction; reason = pa.reason; notes = pa.notes;
             tier = pa.tier; tierLabel = pa.tierLabel; tierColor = pa.tierColor;   // 등급도 "한 명 상대 환산"으로
