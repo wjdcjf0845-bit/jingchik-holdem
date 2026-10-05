@@ -281,7 +281,7 @@ test('손으로 쓴 문제마다 장면이 하나씩 짝지어져 있다', () =>
 });
 
 test('드로우 찾기: 플러시 9 · 양방 8 · 것샷 4 · 겹치면 15, 완성된 패·리버·드로우 없음은 null', () => {
-    assert.deepStrictEqual(A.detectDraws(['Td', 'Jd'], ['5c', 'Qd', '5h', '4d']), { outs: 9, label: '플러시 드로우', flush: true, straightRanks: 0 });
+    assert.deepStrictEqual(A.detectDraws(['Td', 'Jd'], ['5c', 'Qd', '5h', '4d']), { outs: 9, label: '플러시 드로우', flush: true, straightRanks: 0, weak: false });
     assert.strictEqual(A.detectDraws(['9s', '8d'], ['7c', '6h', '2d']).outs, 8);
     assert.strictEqual(A.detectDraws(['9s', '8d'], ['6c', '5h', 'Kd']).outs, 4);
     assert.strictEqual(A.detectDraws(['9h', '8h'], ['7h', '6h', '2c']).outs, 15);
@@ -307,4 +307,38 @@ test('임플라이드 오즈: 깊은 스택의 강한 드로우는 가격이 조
     assert.strictEqual(A.postflopAdvice(Object.assign({ spr: 11, stackShare: 0.03, behind: 9176 }, ctx, { draw: null })).bestAction, 'fold');
     // 벳이 너무 크면(팟의 2배) 깊어도 폴드
     assert.strictEqual(A.postflopAdvice({ equity: 0.19, potOdds: 0.4, toCall: 1600, opponents: 1, inPosition: true, spr: 5, stackShare: 0.2, draw, pot: 2400, behind: 8000 }).bestAction, 'fold');
+});
+
+test('점검: 약한 플러시 드로우는 임플라이드 콜 근거가 아니다 · 얇은 밸류는 작게 · 프리플랍 등급은 점수 기준', () => {
+    // 보드에 다이아 3장 + 내 낮은 다이아 한 장 → 약한 드로우
+    const weak = A.detectDraws(['3d', '2c'], ['4d', 'Ks', '9d', '7d']);
+    assert.strictEqual(weak.weak, true);
+    assert.match(weak.label, /약한 플러시 드로우/);
+    // 에이스 한 장짜리(넛 드로우)와 두 장짜리는 약하지 않다
+    assert.strictEqual(A.detectDraws(['Ad', '2c'], ['4d', 'Ks', '9d', '7d']).weak, false);
+    assert.strictEqual(A.detectDraws(['3d', '2d'], ['4d', 'Ks', '9d', 'Jc']).weak, false);
+    const ctx = { toCall: 500, pot: 1500, behind: 9000 };
+    assert.strictEqual(A.impliedCall(Object.assign({ draw: weak }, ctx), 0.2), false);
+    assert.strictEqual(A.impliedCall(Object.assign({ draw: A.detectDraws(['Td', 'Jd'], ['5c', 'Qd', '5h', '4d']) }, ctx), 0.2), true);
+
+    // 얇은 밸류벳: 권장과 믹스가 같은 방향, 크기는 1/3
+    const thin = A.postflopAdvice({ equity: 0.62, potOdds: 0, toCall: 0, opponents: 1, inPosition: true, spr: 5 });
+    if (thin.thin) {
+        assert.strictEqual(thin.bestAction, 'bet');
+        assert.ok(thin.mix.bet > thin.mix.check);
+        assert.match(A.betSize({ opponents: 1, wet: true, spr: 5, pot: 900, thin: true }).text, /1\/3/);
+    }
+    assert.strictEqual(A.betSize({ opponents: 1, wet: true, spr: 5, pot: 900, thin: true }).frac, 0.33);
+
+    // 프리플랍 등급
+    assert.strictEqual(A.preflopTier(90).tierLabel, '매우 강함');
+    assert.strictEqual(A.preflopTier(72).tierLabel, '강함');
+    assert.strictEqual(A.preflopTier(30).tierLabel, '매우 약함');
+
+    // 림퍼가 있으면 오픈을 키운다
+    assert.match(A.openSize(100, false, 2), /^5bb/);
+    assert.match(A.openSize(100, false, 0), /2\.2/);
+
+    // 체크할 수 있는 자리에서의 '레이즈'는 벳으로 채점된다
+    assert.strictEqual(A.actionKey({ mix: { check: 40, bet: 60 } }, 'raise'), 'bet');
 });

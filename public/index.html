@@ -7419,7 +7419,7 @@
             ${posHeader}
             ${(a.notes && a.notes.length) ? '<div class="gto-notes">' + a.notes.map(n => '<span>' + esc(n) + '</span>').join('') + '</div>' : ''}
             <div class="gto-metrics">
-                <div class="gto-metric"><div class="gm-v" style="color:${a.tierColor}">${a.equity}%</div><div class="gm-k">내 승률${a.rawEquity != null && Math.abs(a.rawEquity - a.equity) >= 3 ? `<small class="gm-raw">아무 패 상대 ${a.rawEquity}%</small>` : ''}</div></div>
+                <div class="gto-metric"><div class="gm-v" style="color:${a.tierColor}">${a.equity}%</div><div class="gm-k">${esc(a.equityLabel || '내 승률')}${a.rawEquity != null && Math.abs(a.rawEquity - a.equity) >= 3 ? `<small class="gm-raw">아무 패 상대 ${a.rawEquity}%</small>` : ''}</div></div>
                 <div class="gto-metric"><div class="gm-v" style="color:#8fd3ff">${a.toCall>0?a.potOdds+'%':'—'}</div><div class="gm-k">팟 오즈</div></div>
                 <div class="gto-metric"><div class="gm-v" style="color:var(--gold)">${a.potSize.toLocaleString()}</div><div class="gm-k">현재 팟</div></div>
             </div>

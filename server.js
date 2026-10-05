@@ -3622,7 +3622,7 @@ class GameRoom {
         // 🎯 [상황별 조언] 예전엔 승률 하나로만 갈라서 헤즈업·4명·숏스택에서 전부 같은 말을 했다.
         //    상대 수 · 유효 스택(bb) · 포지션 · SPR 을 같이 본다. notes 는 화면에 "지금 상황" 꼬리표로 나간다.
         let notes = [];
-        let sizeHint = '', rawEquity = null;
+        let sizeHint = '', rawEquity = null, equityLabel = '내 승률';
         const _bbNow = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
         const _liveOpp = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded);
         const _stk = n => this.players[n].chips + (this.players[n].currentBet || 0);
@@ -3649,8 +3649,16 @@ class GameRoom {
             const _ctx = { numActive: opponents + 1, threeBetPlus: (this.raiseCountThisStreet || 0) >= 2,
                 headsUp: _huTable, openerPos: _opnPos, closing: !!isBB };
             const rt = preflopRangeTier(code, p.position || '', facingRaise, _ctx);
-            const _vs = facingRaise ? (_huTable ? ' (헤즈업 — 넓게 방어)' : (_opnPos ? ` (${_opnPos} 오픈 상대${isBB ? ' · BB라 넓게' : ''})` : '')) : '';
+            // 문구: 처음 연 것이면 '오픈', 누가 림프한 뒤 올린 것(내가 림프했거나 블라인드가 올림)이면 '레이즈', 두 번째 레이즈부터는 '리레이즈'
+            const _iLimped = !isBB && (p.currentBet || 0) >= bb;
+            const _opnBlind = !!(_opn && this.players[_opn].role && /SB|BB/.test(this.players[_opn].role) && this.playerOrder.length > 2);
+            const _vsWord = (this.raiseCountThisStreet || 0) >= 2 ? '리레이즈' : ((_iLimped || (_opnBlind && this.players[_opn].role.includes('BB'))) ? '레이즈' : '오픈');
+            const _vs = facingRaise ? (_huTable ? ' (헤즈업 — 넓게 방어)' : (_opnPos ? ` (${_opnPos} ${_vsWord} 상대${isBB ? ' · BB라 넓게' : ''})` : '')) : '';
             posInfo = { position: p.position || '-', code, rangeScore: rt.score, rangeLabel: rt.label, threshold: openThreshold(p.position || '') };
+            // 등급은 핸드 점수로, 승률은 "아무 패 한 명 상대"(몬테카를로 표)로 — 예전 값은 어림식을 상대 수의 제곱근으로 나눈 것이라 승률이 아니었다
+            { const _pt = GtoAdvice.preflopTier(rt.score); tier = _pt.tier; tierLabel = _pt.tierLabel; tierColor = _pt.tierColor; }
+            equity = ShortStack.equityVs(code, 1);
+            equityLabel = '1명 상대 승률';
 
             const canCheck = (toCall === 0); // BB 무료 체크 또는 림프 팟
             notes.push(this.playerOrder.length === 2 ? '헤즈업 테이블' : (opponents === 1 ? '상대 1명 남음' : `${opponents + 1}명 남음`));
@@ -3773,7 +3781,11 @@ class GameRoom {
                 }
             }
             if (!_special && (bestAction === 'raise' || (mix.raise || 0) >= 30)) {
-                if (!facingRaise) sizeHint = GtoAdvice.openSize(effBB, _huTable);
+                if (!facingRaise) {
+                    // 림퍼: 블라인드가 아닌데 bb 만큼만 넣고 남아 있는 사람
+                    const limpers = _liveOpp.filter(n => { const o = this.players[n]; return (o.currentBet || 0) === bb && !(o.role && o.role.includes('BB')); }).length;
+                    sizeHint = GtoAdvice.openSize(effBB, _huTable, limpers);
+                }
                 else {
                     const callers = _liveOpp.filter(n => n !== _opn && (this.players[n].currentBet || 0) === this.currentHighestBet).length;
                     const inPos = !(p.role && (p.role.includes('SB') || p.role.includes('BB'))) || _huTable && p.role.includes('D');
@@ -3789,7 +3801,12 @@ class GameRoom {
                     const _bf = toCall / Math.max(_bbNow, potBefore - toCall);
                     const _ag = HandRead.summarizeVillain(this.actionLog, this.lastAggressorBefore(this.gameStage + 1) || '').aggroStreets || 1;
                     const vsRange = this.equityVsRangeMC(nick, _bf, _ag);
-                    if (vsRange != null) { rawEquity = equity; equity = vsRange; }
+                    if (vsRange != null) {
+                        rawEquity = equity;
+                        // 벳한 사람 말고도 남은 상대가 있으면 그 사람들도 이겨야 한다. 아무 패 상대 승률(전원 상대)을 한 명분으로 환산해 나머지 인원만큼 곱한다.
+                        const others = Math.max(0, opponents - 1);
+                        equity = others > 0 ? vsRange * Math.pow(Math.max(0.01, rawEquity), others / opponents) : vsRange;
+                    }
                 } catch (e) {}
             }
             const _draw = GtoAdvice.detectDraws(p.hand, this.communityCards);
@@ -3804,7 +3821,7 @@ class GameRoom {
             if (rawEquity != null) notes.push('상대 벳 범위 반영');
             const _tx = this.analyzeBoardTexture() || {};
             if ((mix.bet || 0) > 0 && bestAction === 'bet') {
-                sizeHint = GtoAdvice.betSize({ opponents, wet: !!_tx.wet, dry: !!_tx.dry, spr: _spr, pot: potBefore }).text;
+                sizeHint = GtoAdvice.betSize({ opponents, wet: !!_tx.wet, dry: !!_tx.dry, spr: _spr, pot: potBefore, thin: !!pa.thin }).text;
             } else if (bestAction === 'raise') {
                 const to = Math.min(p.currentBet + p.chips, this.currentHighestBet * 3);
                 sizeHint = (to >= p.currentBet + p.chips || _spr <= 1.5) ? '올인' : `약 ${to.toLocaleString()} (상대 벳의 3배)`;
@@ -3818,7 +3835,7 @@ class GameRoom {
             street, opponents, toCall,
             potSize: potBefore,
             mix, bestAction, reason,
-            notes, sizeHint,
+            notes, sizeHint, equityLabel,
             rawEquity: rawEquity == null ? null : Math.round(rawEquity * 100),
             posInfo,
             handStr: p.hand.join(' ')
@@ -3830,9 +3847,9 @@ class GameRoom {
     gradeAction(advice, actualType, gtoScore) {
         if (!advice) return null;
         // 실제 액션을 믹스 키로 정규화 (allin→raise, check→check, call→call, fold→fold)
-        let actKey = actualType;
-        if (actualType === 'allin') actKey = advice.mix.raise !== undefined ? 'raise' : (advice.mix.bet !== undefined ? 'bet' : 'raise');
-        if (actualType === 'check' && advice.mix.check === undefined) actKey = 'call'; // 안전장치
+        // 🐛 체크할 수 있는 자리에서 친 벳은 서버에서 'raise' 액션이다. 예전엔 그대로 믹스의 'raise'를 찾아서(없음 → 0%)
+        //    조언이 "벳"이어도, 그대로 벳을 해도 "아쉬움"으로 채점됐다.
+        const actKey = GtoAdvice.actionKey(advice, actualType);
         const recommendedPct = advice.mix[actKey] || 0;
         const isBest = (actKey === advice.bestAction);
 
