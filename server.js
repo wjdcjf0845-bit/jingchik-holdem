@@ -2540,7 +2540,7 @@ class GameRoom {
                         this.players[nick].chips = this.startingChips;
                         this.players[nick].isSpectator = false;
                         if (!this.players[nick].isBot && this.players[nick].socketId) {
-                            io.to(this.players[nick].socketId).emit('gameMessage', '🎓 칩이 자동 충전됐습니데이! 계속 연습하이소.');
+                            io.to(this.players[nick].socketId).emit('gameMessage', '🎓 칩이 자동 충전됐습니다! 계속 연습하세요.');
                         }
                     } else {
                         this.players[nick].isSpectator = true;
@@ -3802,11 +3802,11 @@ class GameRoom {
                     const jam = res.equity > 0.60 && p.chips > toCall;
                     mix = jam ? { fold: 0, call: 40, raise: 60 } : { fold: 8, call: 92 };
                     bestAction = jam ? 'raise' : 'call';
-                    reason = `상대가 스택을 건 범위는 상위 약 ${_pc(x)}%로 봅니데이. 그 범위 상대로 ${code}의 승률은 약 ${_pc(res.equity)}% — 필요 승률(${_pc(potOdds)}%)을 넘으니 ${jam ? '올인' : '콜'}.`;
+                    reason = `상대가 스택을 건 범위는 상위 약 ${_pc(x)}%로 봅니다. 그 범위 상대로 ${code}의 승률은 약 ${_pc(res.equity)}% — 필요 승률(${_pc(potOdds)}%)을 넘으니 ${jam ? '올인' : '콜'}.`;
                 } else {
                     mix = { fold: 90, call: 10 };
                     bestAction = 'fold';
-                    reason = `상대가 스택을 건 범위는 상위 약 ${_pc(x)}%. 그 범위 상대로 ${code}의 승률은 약 ${_pc(res.equity)}%라 필요 승률(${_pc(potOdds)}%)에 못 미칩니데이 — 폴드. ("아무 패 상대 승률"로 보면 넓게 받게 됩니데이.)`;
+                    reason = `상대가 스택을 건 범위는 상위 약 ${_pc(x)}%. 그 범위 상대로 ${code}의 승률은 약 ${_pc(res.equity)}%라 필요 승률(${_pc(potOdds)}%)에 못 미칩니다 — 폴드. ("아무 패 상대 승률"로 보면 넓게 받게 됩니다.)`;
                 }
             } else if (effBB <= 12 && p.chips > 0) {
                 // (나) 12bb 이하: 올인 아니면 폴드
@@ -3818,13 +3818,13 @@ class GameRoom {
                     if (_pctl <= range) {
                         mix = canCheck ? { check: 8, raise: 92 } : { fold: 8, raise: 92 };
                         bestAction = 'raise';
-                        reason = `${Math.round(effBB)}bb 숏스택 — 작게 열고 접을 칩이 없습니데이. 올인 아니면 폴드: 뒤에 ${behind}명이면 푸시 범위는 상위 약 ${_pc(range)}%, ${code}는 상위 ${_pc(_pctl)}% → 올인.`;
+                        reason = `${Math.round(effBB)}bb 숏스택 — 작게 열고 접을 칩이 없습니다. 올인 아니면 폴드: 뒤에 ${behind}명이면 푸시 범위는 상위 약 ${_pc(range)}%, ${code}는 상위 ${_pc(_pctl)}% → 올인.`;
                     } else if (canCheck) {
                         mix = { check: 100 }; bestAction = 'check';
-                        reason = `${Math.round(effBB)}bb 숏스택 — ${code}는 푸시 범위(상위 약 ${_pc(range)}%) 밖입니데이. 공짜로 플랍을 보이소.`;
+                        reason = `${Math.round(effBB)}bb 숏스택 — ${code}는 푸시 범위(상위 약 ${_pc(range)}%) 밖입니다. 공짜로 플랍을 보세요.`;
                     } else {
                         mix = { fold: 94, raise: 6 }; bestAction = 'fold';
-                        reason = `${Math.round(effBB)}bb 숏스택 — 올인 아니면 폴드입니데이. 뒤에 ${behind}명이면 푸시 범위는 상위 약 ${_pc(range)}%인데 ${code}는 상위 ${_pc(_pctl)}% → 폴드. (작게 열거나 림프하면 칩만 흘립니데이.)`;
+                        reason = `${Math.round(effBB)}bb 숏스택 — 올인 아니면 폴드입니다. 뒤에 ${behind}명이면 푸시 범위는 상위 약 ${_pc(range)}%인데 ${code}는 상위 ${_pc(_pctl)}% → 폴드. (작게 열거나 림프하면 칩만 흘립니다.)`;
                     }
                 } else if (!(isBB && toCall <= bb * 1.5 && effBB >= 6)) {
                     const openX = _raises >= 2 ? 0.07 : ShortStack.openPct(_aggrP ? _aggrP.position : '');
@@ -3833,10 +3833,10 @@ class GameRoom {
                     _special = true;
                     if (_pctl <= r) {
                         mix = { fold: 6, call: 4, raise: 90 }; bestAction = 'raise';
-                        reason = `${Math.round(effBB)}bb로 오픈을 받았습니데이 — 콜하면 플랍 뒤에 할 수 있는 게 없어 올인(리쉬브) 아니면 폴드. 리쉬브 범위 상위 약 ${_pc(r)}%, ${code}는 상위 ${_pc(_pctl)}% → 올인.`;
+                        reason = `${Math.round(effBB)}bb로 오픈을 받았습니다 — 콜하면 플랍 뒤에 할 수 있는 게 없어 올인(리쉬브) 아니면 폴드. 리쉬브 범위 상위 약 ${_pc(r)}%, ${code}는 상위 ${_pc(_pctl)}% → 올인.`;
                     } else {
                         mix = { fold: 92, call: 6, raise: 2 }; bestAction = 'fold';
-                        reason = `${Math.round(effBB)}bb로 오픈을 받았습니데이 — 올인 아니면 폴드. 리쉬브 범위는 상위 약 ${_pc(r)}%인데 ${code}는 상위 ${_pc(_pctl)}% → 폴드.`;
+                        reason = `${Math.round(effBB)}bb로 오픈을 받았습니다 — 올인 아니면 폴드. 리쉬브 범위는 상위 약 ${_pc(r)}%인데 ${code}는 상위 ${_pc(_pctl)}% → 폴드.`;
                     }
                 }
             } else if (effBB <= 20 && facingRaise && _raises <= 1 && _aggrP && !_aggrAllIn) {
@@ -3846,7 +3846,7 @@ class GameRoom {
                     notes.push('리쉬브 스택');
                     _special = true;
                     mix = { fold: 8, call: 17, raise: 75 }; bestAction = 'raise';
-                    reason = `${Math.round(effBB)}bb — 작게 3벳하면 스택의 3분의 1이 들어가 어차피 못 접습니데이. ${_aggrP.position || '상대'} 오픈 상대로 리쉬브 범위는 상위 약 ${_pc(r)}%, ${code}는 상위 ${_pc(_pctl)}% → 올인이 기준.`;
+                    reason = `${Math.round(effBB)}bb — 작게 3벳하면 스택의 3분의 1이 들어가 어차피 못 접습니다. ${_aggrP.position || '상대'} 오픈 상대로 리쉬브 범위는 상위 약 ${_pc(r)}%, ${code}는 상위 ${_pc(_pctl)}% → 올인이 기준.`;
                 }
             }
             // 📊 레인지 표가 지금 상황에 맞는 표를 그리도록 알려준다 (헤즈업 / 숏스택 푸시 / 6인)
@@ -3864,17 +3864,17 @@ class GameRoom {
                 if (opponents === 1 && !canCheck && rt.tier !== 'raise' && rt.score > Quiz.HU_OPEN_SCORE) {
                     // 헤즈업 버튼(SB)은 6인 버튼 차트보다 훨씬 넓게 연다
                     mix = { fold: 15, raise: 85 };
-                    bestAction = 'raise'; reason = `헤즈업 버튼 — 상대가 한 명뿐이고 플랍 뒤에도 포지션이 내 것이라 전체 패의 4분의 3쯤을 엽니데이. ${code}는 6인 테이블에선 접을 패지만 여기선 오픈.`;
+                    bestAction = 'raise'; reason = `헤즈업 버튼 — 상대가 한 명뿐이고 플랍 뒤에도 포지션이 내 것이라 전체 패의 4분의 3쯤을 엽니다. ${code}는 6인 테이블에선 접을 패지만 여기선 오픈.`;
                 } else if (rt.tier === 'raise') {
                     mix = canCheck ? { check: 8, raise: 92 } : { fold: 6, raise: 94 };
-                    bestAction = 'raise'; reason = `${p.position || ''} 오픈 레인지에 드는 핸드(${code}) — 오픈 레이즈가 정석입니데이.`;
+                    bestAction = 'raise'; reason = `${p.position || ''} 오픈 레인지에 드는 핸드(${code}) — 오픈 레이즈가 정석입니다.`;
                 } else if (rt.tier === 'call') {
                     if (canCheck) {
                         mix = { check: 100 };
-                        bestAction = 'check'; reason = `마지널 핸드(${code}) — 체크로 공짜 플랍을 보이소.`;
+                        bestAction = 'check'; reason = `마지널 핸드(${code}) — 체크로 공짜 플랍을 보세요.`;
                     } else if (late) {
                         mix = { fold: 55, raise: 45 };
-                        bestAction = 'fold'; reason = `늦은 포지션 마지널(${code}) — 림프 말고 스틸 오픈 아니면 폴드입니데이.`;
+                        bestAction = 'fold'; reason = `늦은 포지션 마지널(${code}) — 림프 말고 스틸 오픈 아니면 폴드입니다.`;
                     } else {
                         mix = { fold: 80, raise: 20 };
                         bestAction = 'fold'; reason = `마지널 핸드(${code}) — 앞 포지션에선 폴드가 정석(가끔만 오픈).`;
@@ -3882,19 +3882,19 @@ class GameRoom {
                 } else {
                     mix = canCheck ? { check: 100 } : { fold: 92, raise: 8 };
                     bestAction = canCheck ? 'check' : 'fold';
-                    reason = canCheck ? `약한 핸드(${code}) — 공짜로 플랍을 보이소.` : `오픈 레인지 밖(${code}) — 폴드가 정석입니데이(가끔 스틸).`;
+                    reason = canCheck ? `약한 핸드(${code}) — 공짜로 플랍을 보세요.` : `오픈 레인지 밖(${code}) — 폴드가 정석입니다(가끔 스틸).`;
                 }
             } else {
                 // 레이즈에 직면 — 3벳/콜/폴드
                 if (rt.tier === 'raise') {
                     mix = { fold: 5, call: 35, raise: 60 };
-                    bestAction = 'raise'; reason = `강한 핸드(${code}) — 3벳으로 밸류를 키우이소.${_vs}`;
+                    bestAction = 'raise'; reason = `강한 핸드(${code}) — 3벳으로 밸류를 키우세요.${_vs}`;
                 } else if (rt.tier === 'call') {
                     mix = { fold: 35, call: 60, raise: 5 };
-                    bestAction = 'call'; reason = `콜 가능한 핸드(${code}, 점수 ${rt.score}) — 콜로 플랍을 보이소.${_vs}`;
+                    bestAction = 'call'; reason = `콜 가능한 핸드(${code}, 점수 ${rt.score}) — 콜로 플랍을 보세요.${_vs}`;
                 } else {
                     mix = { fold: 88, call: 12, raise: 0 };
-                    bestAction = 'fold'; reason = `레이즈에 약한 핸드(${code}) — 폴드가 정석입니데이.${_vs}`;
+                    bestAction = 'fold'; reason = `레이즈에 약한 핸드(${code}) — 폴드가 정석입니다.${_vs}`;
                 }
             }
             if (!_special && (bestAction === 'raise' || (mix.raise || 0) >= 30)) {
@@ -3974,18 +3974,18 @@ class GameRoom {
         if (GtoAdvice.wrongSize(advice, actualType)) {
             // 방향(공격)은 맞지만 크기가 틀림 — 이 스택에서는 올인이 기준
             grade = '무난'; gradeColor = '#ffd97a'; gradeIcon = '🟡';
-            msg = '방향은 맞지만 크기가 다릅니데이 — 이 스택에서는 올인이 기준입니데이. 작게 치면 접지도 못할 크기로 칩만 묶입니데이.';
+            msg = '방향은 맞지만 크기가 다릅니다 — 이 스택에서는 올인이 기준입니다. 작게 치면 접지도 못할 크기로 칩만 묶입니다.';
         } else if (isBest || recommendedPct >= 40) {
             grade = '훌륭'; gradeColor = '#7bedaa'; gradeIcon = '✅';
-            msg = isBest ? 'GTO 최적 선택입니데이!' : 'GTO상 충분히 좋은 선택입니데이.';
+            msg = isBest ? 'GTO 최적 선택입니다!' : 'GTO상 충분히 좋은 선택입니다.';
         } else if (recommendedPct >= 15) {
             grade = '무난'; gradeColor = '#ffd97a'; gradeIcon = '🟡';
             const actKo = { fold: '폴드', check: '체크', call: '콜', bet: '벳', raise: '레이즈' };
-            msg = `나쁘진 않지만 GTO 권장은 "${actKo[advice.bestAction] || advice.bestAction}"였습니데이.`;
+            msg = `나쁘진 않지만 GTO 권장은 "${actKo[advice.bestAction] || advice.bestAction}"였습니다.`;
         } else {
             grade = '아쉬움'; gradeColor = '#ff6b6b'; gradeIcon = '⚠️';
             const actKo = { fold: '폴드', check: '체크', call: '콜', bet: '벳', raise: '레이즈' };
-            msg = `GTO 권장은 "${actKo[advice.bestAction] || advice.bestAction}"였습니데이. ${advice.reason}`;
+            msg = `GTO 권장은 "${actKo[advice.bestAction] || advice.bestAction}"였습니다. ${advice.reason}`;
         }
         return {
             grade, gradeColor, gradeIcon, msg,
@@ -4198,43 +4198,43 @@ function buildCoaching(s, handsPlayed, extra) {
     const seats = ex.avgSeats || 6;
     const V = seats <= 2.5 ? { hi: 92, lo: 50, pfrLo: 30, name: '헤즈업' } : seats <= 4.2 ? { hi: 55, lo: 22, pfrLo: 14, name: '3~4인' } : { hi: 40, lo: 14, pfrLo: 8, name: '5~6인' };
     if (handsPlayed < 10) {
-        return { headline: '아직 표본이 적어 정밀 진단은 어렵습니데이. 좀 더 쳐보이소!', issues: [], strengths: [], sample: 'low' };
+        return { headline: '아직 표본이 적어 정밀 진단은 어렵습니다. 좀 더 쳐보세요!', issues: [], strengths: [], sample: 'low' };
     }
     const { vpip, pfr, af, foldToBet, wtsd, wsd, gto } = s;
 
     // 1) VPIP (팟 참여율) — 건강범위 대략 18~28% (6맥스)
     if (vpip !== null) {
-        if (vpip > V.hi) issues.push({ area: 'VPIP', severity: 'high', msg: `너무 많은 핸드로 팟에 참여합니다 (${vpip}% · ${V.name} 테이블 기준 ${V.hi}% 이하가 적정).`, tip: '프리플랍 핸드 선택을 좁히이소. 약한 오프수트(예: J5o, Q7o)는 폴드하고, 포지션이 나쁘면 더 타이트하게 가는 게 장기적으로 이득입니데이.' });
-        else if (vpip < V.lo) issues.push({ area: 'VPIP', severity: 'mid', msg: `너무 타이트합니다 (${vpip}% · ${V.name} 테이블 기준 ${V.lo}% 이상이 적정).`, tip: '좋은 핸드만 기다리면 블라인드에 칩이 샙니다. 버튼·컷오프 같은 좋은 포지션에선 수딧 커넥터나 작은 페어도 적극적으로 들어가 보이소.' });
-        else strengths.push(`팟 참여율(VPIP ${vpip}%)이 건강한 범위입니데이.`);
+        if (vpip > V.hi) issues.push({ area: 'VPIP', severity: 'high', msg: `너무 많은 핸드로 팟에 참여합니다 (${vpip}% · ${V.name} 테이블 기준 ${V.hi}% 이하가 적정).`, tip: '프리플랍 핸드 선택을 좁히세요. 약한 오프수트(예: J5o, Q7o)는 폴드하고, 포지션이 나쁘면 더 타이트하게 가는 게 장기적으로 이득입니다.' });
+        else if (vpip < V.lo) issues.push({ area: 'VPIP', severity: 'mid', msg: `너무 타이트합니다 (${vpip}% · ${V.name} 테이블 기준 ${V.lo}% 이상이 적정).`, tip: '좋은 핸드만 기다리면 블라인드에 칩이 샙니다. 버튼·컷오프 같은 좋은 포지션에선 수딧 커넥터나 작은 페어도 적극적으로 들어가 보세요.' });
+        else strengths.push(`팟 참여율(VPIP ${vpip}%)이 건강한 범위입니다.`);
     }
     // 2) PFR vs VPIP 갭 — 갭이 크면 너무 수동적(콜만 많음)
     if (vpip !== null && pfr !== null) {
         const gap = vpip - pfr;
-        if (pfr < V.pfrLo && vpip >= V.lo + 4) issues.push({ area: 'PFR', severity: 'high', msg: `프리플랍에서 레이즈 없이 콜만 많습니다 (PFR ${pfr}%).`, tip: '들어갈 가치가 있는 핸드면 림프(콜) 대신 레이즈로 들어가이소. 주도권을 쥐면 상대를 폴드시키거나 팟을 키울 수 있습니데이.' });
-        else if (gap > 18) issues.push({ area: '수동성', severity: 'mid', msg: `참여는 많은데 레이즈가 적습니다 (VPIP-PFR 갭 ${gap}).`, tip: '콜링 위주 플레이는 주도권을 내줍니다. 핸드가 좋으면 레이즈로 압박하고, 애매하면 차라리 폴드하는 양극화 전략이 좋습니데이.' });
-        else if (pfr >= 12 && gap <= 12) strengths.push(`프리플랍 공격성(PFR ${pfr}%)이 좋습니데이.`);
+        if (pfr < V.pfrLo && vpip >= V.lo + 4) issues.push({ area: 'PFR', severity: 'high', msg: `프리플랍에서 레이즈 없이 콜만 많습니다 (PFR ${pfr}%).`, tip: '들어갈 가치가 있는 핸드면 림프(콜) 대신 레이즈로 들어가세요. 주도권을 쥐면 상대를 폴드시키거나 팟을 키울 수 있습니다.' });
+        else if (gap > 18) issues.push({ area: '수동성', severity: 'mid', msg: `참여는 많은데 레이즈가 적습니다 (VPIP-PFR 갭 ${gap}).`, tip: '콜링 위주 플레이는 주도권을 내줍니다. 핸드가 좋으면 레이즈로 압박하고, 애매하면 차라리 폴드하는 양극화 전략이 좋습니다.' });
+        else if (pfr >= 12 && gap <= 12) strengths.push(`프리플랍 공격성(PFR ${pfr}%)이 좋습니다.`);
     }
     // 3) AF (공격성) — 건강범위 약 1.5~3.5
     if (af !== null && af !== undefined) {
-        if (af < 1.0) issues.push({ area: 'AF', severity: 'mid', msg: `포스트플랍이 수동적입니다 (AF ${af}).`, tip: '콜만 하지 말고 베팅·레이즈로 주도하이소. 좋은 핸드는 밸류 베팅으로 칩을 더 받아내고, 드로우는 세미블러프로 압박하는 게 정석입니데이.' });
-        else if (af > 5) issues.push({ area: 'AF', severity: 'mid', msg: `너무 공격적입니다 (AF ${af}).`, tip: '블러프 빈도가 과합니다. 상대가 잡아내기 시작하면 칩이 샙니다. 밸류와 블러프의 균형을 맞추이소.' });
-        else strengths.push(`포스트플랍 공격성(AF ${af})이 균형 잡혀 있습니데이.`);
+        if (af < 1.0) issues.push({ area: 'AF', severity: 'mid', msg: `포스트플랍이 수동적입니다 (AF ${af}).`, tip: '콜만 하지 말고 베팅·레이즈로 주도하세요. 좋은 핸드는 밸류 베팅으로 칩을 더 받아내고, 드로우는 세미블러프로 압박하는 게 정석입니다.' });
+        else if (af > 5) issues.push({ area: 'AF', severity: 'mid', msg: `너무 공격적입니다 (AF ${af}).`, tip: '블러프 빈도가 과합니다. 상대가 잡아내기 시작하면 칩이 샙니다. 밸류와 블러프의 균형을 맞추세요.' });
+        else strengths.push(`포스트플랍 공격성(AF ${af})이 균형 잡혀 있습니다.`);
     }
     // 4) Fold to Bet — 너무 높으면 호구처럼 쉽게 폴드(블러프 당함), 너무 낮으면 콜링스테이션
     if (foldToBet !== null) {
-        if (foldToBet > 70) issues.push({ area: '폴드율', severity: 'mid', msg: `상대 베팅에 너무 자주 폴드합니다 (${foldToBet}%).`, tip: '쉽게 접으면 상대 블러프에 당합니다. 적당한 핸드로는 콜다운(블러프 캐치)도 하이소. 모든 베팅이 진짜 핸드는 아닙니데이.' });
-        else if (foldToBet < 25 && wtsd !== null && wtsd > 35) issues.push({ area: '콜링스테이션', severity: 'high', msg: `잘 폴드하지 않습니다 (폴드율 ${foldToBet}%, 쇼다운 도달 ${wtsd}%).`, tip: '약한 핸드로 끝까지 보는 콜링스테이션 성향입니다. 진 게임은 일찍 접어 손실을 줄이이소. "궁금해서" 콜하는 칩이 제일 아깝습니데이.' });
+        if (foldToBet > 70) issues.push({ area: '폴드율', severity: 'mid', msg: `상대 베팅에 너무 자주 폴드합니다 (${foldToBet}%).`, tip: '쉽게 접으면 상대 블러프에 당합니다. 적당한 핸드로는 콜다운(블러프 캐치)도 하세요. 모든 베팅이 진짜 핸드는 아닙니다.' });
+        else if (foldToBet < 25 && wtsd !== null && wtsd > 35) issues.push({ area: '콜링스테이션', severity: 'high', msg: `잘 폴드하지 않습니다 (폴드율 ${foldToBet}%, 쇼다운 도달 ${wtsd}%).`, tip: '약한 핸드로 끝까지 보는 콜링스테이션 성향입니다. 진 게임은 일찍 접어 손실을 줄이세요. "궁금해서" 콜하는 칩이 제일 아깝습니다.' });
     }
     // 5) WTSD / WSD — 쇼다운까지 갔을 때 이기는 비율
     if (wsd !== null && wtsd !== null && wtsd > 20) {
-        if (wsd < 40) issues.push({ area: '쇼다운', severity: 'mid', msg: `쇼다운까지 가지만 자주 집니다 (승률 ${wsd}%).`, tip: '약한 핸드로 쇼다운을 너무 자주 봅니다. 강하지 않으면 리버에서 큰 베팅을 마주쳤을 때 접는 훈련을 하이소.' });
-        else if (wsd > 55) strengths.push(`쇼다운 승률(${wsd}%)이 높습니다 — 핸드 선택이 좋습니데이.`);
+        if (wsd < 40) issues.push({ area: '쇼다운', severity: 'mid', msg: `쇼다운까지 가지만 자주 집니다 (승률 ${wsd}%).`, tip: '약한 핸드로 쇼다운을 너무 자주 봅니다. 강하지 않으면 리버에서 큰 베팅을 마주쳤을 때 접는 훈련을 하세요.' });
+        else if (wsd > 55) strengths.push(`쇼다운 승률(${wsd}%)이 높습니다 — 핸드 선택이 좋습니다.`);
     }
     // 6) GTO 종합
     if (gto !== null) {
-        if (gto >= 75) strengths.push(`GTO 근접도 ${gto}점 — 의사결정이 이론에 매우 가깝습니데이! 👏`);
-        else if (gto < 55) issues.push({ area: 'GTO', severity: 'mid', msg: `전반적 의사결정 점수가 낮습니다 (GTO ${gto}점).`, tip: '매 액션 전에 "내 승률 vs 팟 오즈"를 떠올리이소. 콜 비용보다 이길 확률이 높으면 콜, 낮으면 폴드가 기본입니데이.' });
+        if (gto >= 75) strengths.push(`GTO 근접도 ${gto}점 — 의사결정이 이론에 매우 가깝습니다! 👏`);
+        else if (gto < 55) issues.push({ area: 'GTO', severity: 'mid', msg: `전반적 의사결정 점수가 낮습니다 (GTO ${gto}점).`, tip: '매 액션 전에 "내 승률 vs 팟 오즈"를 떠올리세요. 콜 비용보다 이길 확률이 높으면 콜, 낮으면 폴드가 기본입니다.' });
     }
 
     // 7) 실제로 저지른 실수 유형 — 통계 추정보다 정확하다(그 순간의 인원·스택·포지션을 반영한 조언과 비교한 것). 손실이 큰 유형을 맨 앞에.
@@ -4249,9 +4249,9 @@ function buildCoaching(s, handsPlayed, extra) {
     const topIssues = issues.slice(0, 3);
 
     let headline;
-    if (topIssues.length === 0) headline = '약점이 거의 안 보입니데이. 지금 페이스를 유지하이소! 🎯';
-    else if (topIssues[0].severity === 'high') headline = `가장 시급한 개선점은 "${topIssues[0].area}"입니데이.`;
-    else headline = '몇 가지 다듬으면 더 좋아질 부분이 있습니데이.';
+    if (topIssues.length === 0) headline = '약점이 거의 안 보입니다. 지금 페이스를 유지하세요! 🎯';
+    else if (topIssues[0].severity === 'high') headline = `가장 시급한 개선점은 "${topIssues[0].area}"입니다.`;
+    else headline = '몇 가지 다듬으면 더 좋아질 부분이 있습니다.';
 
     return { headline, issues: topIssues, strengths: strengths.slice(0, 3), sample: 'ok' };
 }
