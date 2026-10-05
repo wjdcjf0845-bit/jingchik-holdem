@@ -426,7 +426,9 @@ const MockDB = {
     },
     save() { // 디바운스 저장 (잦은 디스크 IO 방지)
         clearTimeout(this._saveTimer);
-        this._saveTimer = setTimeout(() => this.flush(), 800);
+        // ⚡ 0.8초 → 3초: 저장은 전적 전체(1MB 넘음)를 한 번에 쓰느라 그동안 서버가 멈춘다. 액션마다 0.8초 뒤에 멈추면 다음 사람 버튼이 씹힌다.
+        //    (종료 신호를 받으면 즉시 저장하므로 재배포 때 잃지 않는다)
+        this._saveTimer = setTimeout(() => this.flush(), 3000);
     },
     // 💾 원자적 저장 — 임시파일에 쓰고 rename (쓰기 도중 죽어도 원본 안전)
     flush() {
@@ -1357,16 +1359,30 @@ class GameRoom {
             }, Math.floor(msLimit * 0.5));
         }
 
-        // 🎓 [학습모드] 사람 차례면 GTO 권장 액션 분석을 본인에게만 전송
-        if (this._learnMode) {
+        // 🎓 사람 차례면 GTO 조언을 "차례가 온 순간"에 미리 계산해 둔다.
+        //    ⚡ 예전엔 사람이 버튼을 누른 뒤에(액션 처리 직전에) 계산해서, 그 시간만큼(플랍 이후 수십~수백 ms, 서버가 느리면 더) 버튼 반응이 늦었다.
+        //    이제 생각하는 동안 계산해 두고 액션 때는 꺼내 쓰기만 한다. 학습 모드는 그 조언을 화면에도 보낸다(채점과 화면의 조언이 같은 값이 된다).
+        this._advCache = null;
+        {
             const cp = this.players[expectedNick];
-            if (cp && !cp.isBot && !cp.isFolded && !cp.isAllIn && cp.socketId) {
-                try {
-                    const advice = this.getGtoAdvice(expectedNick);
-                    if (advice) io.to(cp.socketId).emit('gtoAdvice', advice);
-                } catch (e) {}
+            if (cp && !cp.isBot && !cp.isFolded && !cp.isAllIn) {
+                const key = this.advKey(expectedNick);
+                const run = () => {
+                    if (this.playerOrder[this.turnIndex] !== expectedNick || this.advKey(expectedNick) !== key) return;
+                    try {
+                        const advice = this.getGtoAdvice(expectedNick);
+                        this._advCache = { nick: expectedNick, key, advice };
+                        if (this._learnMode && advice && cp.socketId) io.to(cp.socketId).emit('gtoAdvice', advice);
+                    } catch (e) {}
+                };
+                if (this._learnMode) run(); else setTimeout(run, 40);      // 일반 게임은 화면 갱신을 먼저 내보낸 뒤에 계산
             }
         }
+    }
+    // 조언을 계산한 시점의 상황과 지금이 같은지 확인하는 열쇠
+    advKey(nick) {
+        const p = this.players[nick];
+        return [this.handId, this.gameStage, this.currentHighestBet, p ? p.currentBet : 0, this.pot, this.communityCards.length].join('|');
     }
 
     // 🤖 [신규] 봇 두뇌 — 핸드 강도 + 팟 오즈 기반 의사결정
@@ -2989,7 +3005,9 @@ class GameRoom {
         let _learnAdvice = null;
         this._pendingGto = null;
         if (p && !p.isBot) {
-            try { _learnAdvice = this.getGtoAdvice(nick); } catch (e) {}
+            const _c = this._advCache;
+            if (_c && _c.nick === nick && _c.key === this.advKey(nick)) _learnAdvice = _c.advice;      // ⚡ 차례가 왔을 때 미리 계산해 둔 것
+            else { try { _learnAdvice = this.getGtoAdvice(nick); } catch (e) {} }
             const _sc = GtoAdvice.scoreAction(_learnAdvice, type);
             if (_sc != null) this._pendingGto = { nick, score: _sc };
         }

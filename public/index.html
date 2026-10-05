@@ -5909,6 +5909,15 @@
         if (type === 'raise') socket.emit('action', { type, amount: document.getElementById('raise-slider').value });
         else if (type === 'check') socket.emit('action', { type: myActionMode });
         else socket.emit('action', { type });
+        // ⚡ 누른 즉시 버튼을 치운다 — 서버 응답(통신 0.1~0.4초)을 기다리는 동안 "안 눌렸나?" 싶어 또 누르게 되던 문제.
+        //    서버가 거절했으면(잘못된 금액 등) 화면 갱신이 안 오므로 1.8초 뒤에 버튼을 되살린다.
+        const ac = document.getElementById('action-controls');
+        if (ac && ac.style.display !== 'none') {
+            const sentAt = Date.now();
+            ac.style.display = 'none';
+            clearTimeout(window.__acBackT);
+            window.__acBackT = setTimeout(() => { if ((window._lastTableAt || 0) < sentAt) ac.style.display = 'flex'; }, 1800);
+        }
     }
 
     // ── 🔥 올인 확인 ──────────────────────────────────────────
@@ -6314,6 +6323,7 @@
     let lastHandId = -1;
 
     socket.on('updateTable', (data) => {
+        window._lastTableAt = Date.now();
         if (data.cos) tableCos = data.cos; // 🎨 카드 뒷면/아바타/칭호 — 반드시 렌더 전에 갱신
         window._lastGameMode = data.gameMode;
         window._lastGameStage = data.gameStage;
