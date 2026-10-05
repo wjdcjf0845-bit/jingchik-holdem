@@ -3683,6 +3683,43 @@
             .qs-hand .qz-card { width: 30px; height: 40px; }
             .qz-tags { display: none; }
         }
+    
+        /* ═══ 📊 GTO 문제 — 계산·개념 그림 ═══ */
+        .qz-viz { margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; background: rgba(6,9,18,0.55); border: 1px solid rgba(255,255,255,0.09); }
+        .qv-bar { display: flex; gap: 3px; height: 46px; }
+        .qv-seg { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 8px; line-height: 1.15; overflow: hidden; padding: 0 3px; }
+        .qv-seg span { font-size: 10.5px; font-weight: 800; white-space: nowrap; opacity: 0.9; }
+        .qv-seg b { font-family: var(--font-num); font-size: 15px; font-weight: 700; }
+        .qv-seg.k-pot  { background: linear-gradient(180deg, #ffd97a, #d6951a); color: #2c1c00; }
+        .qv-seg.k-bet  { background: linear-gradient(180deg, #ff7a6e, #c9261a); color: #fff; }
+        .qv-seg.k-call { background: linear-gradient(180deg, #2bd389, #12995c); color: #03281a; box-shadow: 0 0 0 2px #fff inset; }
+        .qv-cap { margin-top: 7px; font-size: 11.5px; color: #9aa6c2; text-align: center; word-break: keep-all; }
+        .qv-cap b { color: #fff; font-family: var(--font-num); font-size: 13px; }
+        .qv-cap b.eq { color: #4be3a0; }
+        .qv-outs { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+        .qv-outs i { width: 17px; height: 24px; border-radius: 3px; background: linear-gradient(160deg, #4be3a0, #12995c); border: 1px solid rgba(255,255,255,0.6); box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
+        .qv-folds { display: flex; align-items: center; justify-content: center; gap: 7px; flex-wrap: wrap; }
+        .qv-folds em { font-style: normal; font-size: 17px; font-weight: 900; color: #8d98b3; }
+        .qv-person { display: flex; flex-direction: column; align-items: center; min-width: 52px; padding: 5px 7px; border-radius: 10px; background: rgba(47,125,246,0.16); border: 1px solid rgba(47,125,246,0.45); line-height: 1.15; }
+        .qv-person span { font-size: 17px; letter-spacing: -3px; }
+        .qv-person b { font-family: var(--font-num); font-size: 15px; color: #fff; }
+        .qv-person small { font-size: 10px; color: #9aa6c2; font-weight: 700; }
+        .qv-person.q { background: rgba(255,200,87,0.14); border-color: rgba(255,200,87,0.6); }
+        .qv-person.q b { color: var(--gold); }
+        .qv-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+        .qv-row span { flex: 0 0 70px; font-size: 11.5px; font-weight: 800; color: #c3cbe0; text-align: right; white-space: nowrap; }
+        .qv-row b { flex: 0 0 58px; font-family: var(--font-num); font-size: 13px; color: #fff; text-align: left; white-space: nowrap; }
+        .qv-track { flex: 1 1 auto; height: 16px; border-radius: 8px; background: rgba(255,255,255,0.07); overflow: hidden; }
+        .qv-track i { display: block; height: 100%; border-radius: 8px; }
+        .qv-track i.a { background: linear-gradient(90deg, #2f7df6, #5ad1ff); }
+        .qv-track i.b { background: linear-gradient(90deg, #d6951a, #ffd97a); }
+        /* 보기 속 카드 */
+        .qz-mini { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 30px; margin: 0 1px; padding: 0 3px; border-radius: 4px; background: #fff; color: #151a26; font-family: var(--font-num); font-size: 14px; font-weight: 700; vertical-align: middle; box-shadow: 0 2px 5px rgba(0,0,0,0.45); }
+        .qz-mini i { font-style: normal; font-size: 12px; margin-left: 1px; }
+        .qz-mini.red { color: #d9261c; }
+        @media screen and (max-width: 960px) and (orientation: landscape) {
+            .qz-viz { margin-bottom: 7px; padding: 6px 10px; } .qv-bar { height: 36px; } .qv-seg b { font-size: 13px; }
+        }
     </style>
 </head>
 <body>
@@ -4608,6 +4645,46 @@
             ${html}${hand}
         </div>`;
     }
+    // 📊 계산·개념 문제의 그림 — 숫자를 글로 읽지 않고 크기로 보게 한다 (답은 드러내지 않는다)
+    function quizViz(v) {
+        if (!v || !v.t) return '';
+        const num = x => Number(x).toLocaleString();
+        if (v.t === 'bar' && Array.isArray(v.parts)) {
+            // 팟 · 벳 · 내 콜을 금액에 비례한 한 줄 막대로
+            const total = v.parts.reduce((a, p) => a + (Number(p[1]) || 0), 0) || 1;
+            const segs = v.parts.map(p => `<div class="qv-seg k-${/^[a-z]+$/.test(p[2]) ? p[2] : 'pot'}" style="flex:${Math.max(0.16, p[1] / total)} 1 0;"><span>${esc(p[0])}</span><b>${num(p[1])}</b></div>`).join('');
+            return `<div class="qz-viz"><div class="qv-bar">${segs}</div>
+                <div class="qv-cap">합계 <b>${num(total)}</b>${v.eq != null ? ` · 내 승률 <b class="eq">${Number(v.eq)}%</b>` : ''}</div></div>`;
+        }
+        if (v.t === 'outs') {
+            // 아웃츠 = 초록 카드, 그 옆에 앞으로 볼 카드 수
+            const n = Math.max(0, Math.min(20, Number(v.outs) || 0));
+            return `<div class="qz-viz"><div class="qv-outs">${'<i></i>'.repeat(n)}</div>
+                <div class="qv-cap">나를 완성시키는 카드(아웃츠) <b>${n}장</b> · 앞으로 볼 카드 <b>${Number(v.left) === 2 ? '2장 (턴 · 리버)' : '1장 (리버)'}</b></div></div>`;
+        }
+        if (v.t === 'folds') {
+            const n = Math.max(1, Math.min(5, Number(v.n) || 1)), p = Number(v.p) || 0;
+            const one = `<div class="qv-person"><span>🧑</span><b>${p}%</b><small>폴드</small></div>`;
+            return `<div class="qz-viz"><div class="qv-folds">${Array(n).fill(one).join('<em>×</em>')}<em>=</em><div class="qv-person q"><span>❓</span><b>?</b><small>전원 폴드</small></div></div></div>`;
+        }
+        if (v.t === 'versus') {
+            const n = Math.max(1, Math.min(5, Number(v.n) || 1));
+            return `<div class="qz-viz"><div class="qv-folds"><div class="qv-person"><span>🧑</span><b>${Number(v.one)}%</b><small>1명 상대</small></div><em>→</em>
+                <div class="qv-person q"><span>${'🧑'.repeat(n)}</span><b>?</b><small>${n}명 상대</small></div></div></div>`;
+        }
+        if (v.t === 'ratio' && Array.isArray(v.a) && Array.isArray(v.b)) {
+            // 두 양을 같은 눈금의 막대로 — 얼마나 차이 나는지 한눈에
+            const max = Math.max(Number(v.a[1]) || 0, Number(v.b[1]) || 0) || 1;
+            const unit = v.unit === 'bb' ? 'bb' : '';
+            const row = (x, cls) => `<div class="qv-row"><span>${esc(x[0])}</span><div class="qv-track"><i class="${cls}" style="width:${Math.max(3, Math.round(x[1] / max * 100))}%"></i></div><b>${num(x[1])}${unit}</b></div>`;
+            return `<div class="qz-viz">${row(v.a, 'a')}${row(v.b, 'b')}${v.spr ? '<div class="qv-cap">SPR = 남은 스택 ÷ 팟</div>' : ''}</div>`;
+        }
+        return '';
+    }
+    // 보기 글자 속의 카드(K♠J♦)는 작은 카드로 그린다
+    function quizLabel(label) {
+        return esc(label).replace(/(10|[2-9TJQKA])([♠♥♦♣])/g, (m, r, su) => `<span class="qz-mini${su === '♥' || su === '♦' ? ' red' : ''}">${r}<i>${su}</i></span>`);
+    }
     // 보기 버튼 색: 실제 게임의 폴드(회색)·콜(초록)·레이즈(주황)·올인(빨강)에 맞춘다
     function quizChoiceCls(id) {
         if (['fold', 'nocall', 'no'].includes(id)) return ' c-fold';
@@ -4628,10 +4705,10 @@
             <div class="qz-q">
                 <div class="qz-cat-name">${q.catIcon || ''} ${esc(q.catName || '')}</div>
                 <div class="qz-tags">${(q.tags || []).map(t => `<span>${esc(t)}</span>`).join('')}</div>
-                ${scene}${cards}
+                ${scene}${cards}${quizViz(q.viz)}
                 <div class="qz-prompt${short ? ' short' : ''}">${esc(short ? q.ask : q.prompt)}</div>
                 ${short ? `<details class="qz-more"><summary>상황을 글로 보기</summary>${esc(q.prompt)}</details>` : ''}
-                <div class="qz-choices">${q.choices.map((c, i) => `<button class="qz-choice${quizChoiceCls(c.id)}" data-i="${i}" onclick="quizAnswer(${i})">${esc(c.label)}</button>`).join('')}</div>
+                <div class="qz-choices">${q.choices.map((c, i) => `<button class="qz-choice${quizChoiceCls(c.id)}" data-i="${i}" onclick="quizAnswer(${i})">${quizLabel(c.label)}</button>`).join('')}</div>
                 <div id="qz-result"></div>
             </div>`;
     });
