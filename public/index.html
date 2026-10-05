@@ -3893,6 +3893,140 @@
             #action-controls .step-btn { display: none; }
             #action-controls .action-bottom-row button { font-size: 12.5px !important; }
         }
+    
+        #phone-bar, #pb-custom, #pb-custom-go { display: none; }
+        /* ═══════════════════════════════════════════════════════════════
+           📱 가로 폰 — 상용 홀덤 앱 식 화면
+           · 테이블이 화면을 채우고, 좌석은 테두리 위의 원형 아바타 + 이름 + 칩
+           · 보드 카드는 가운데 크게, 팟은 그 위
+           · 내 카드는 아래 가운데 크게
+           · 맨 아래 한 줄: 다이 · 콜 · 삥 · 하프 · 풀 · 올인 (버튼 위에 금액)
+           ═══════════════════════════════════════════════════════════════ */
+        @media screen and (max-width: 960px) and (orientation: landscape) {
+            :root { --bar-h: 64px; }
+            /* ── 테이블 ── */
+            .poker-table {
+                width: 95vw !important; max-width: none !important; height: calc(100vh - 40px - env(safe-area-inset-top) - 56px) !important;
+                margin: 6px auto 0 !important; padding: 71px 0 0 !important; gap: 4px !important; border-radius: 150px !important; border-width: 7px !important;
+                justify-content: flex-start !important;
+            }
+            .poker-table::before { display: none !important; }
+            .poker-table > div:first-child { order: 0 !important; margin: 0 !important; }
+            #community-area { order: 1 !important; }
+            .pot-area { padding: 3px 16px !important; }
+            #pot-amount { font-size: 15px !important; }
+            .community-area { gap: 5px !important; padding: 0 !important; min-height: 62px !important; background: none !important; border: none !important; box-shadow: none !important; }
+            #community-area .card-container { width: 44px !important; height: 62px !important; }
+            #community-area .cf-corner { font-size: 15px !important; }
+            #community-area .cf-center { font-size: 23px !important; margin-top: 13px !important; }
+
+            /* ── 좌석: 네모 판을 걷어내고 원형 아바타 + 이름 + 칩 ── */
+            .player-spot {
+                background: none !important; border: none !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+                min-width: 0 !important; max-width: none !important; width: 100px; padding: 0 !important; text-align: center; overflow: visible !important; border-radius: 0 !important;
+            }
+            #players-area .player-spot, #players-area .player-spot.me, #players-area .player-spot.active-turn, #players-area .player-spot.all-in { background: none !important; border: none !important; box-shadow: none !important; outline: none !important; }
+            #players-area .player-spot::before, #players-area .player-spot::after { display: none !important; }
+            .player-spot .ps-row { display: block !important; position: relative; }
+            .player-spot .avatar {
+                width: 40px !important; height: 40px !important; font-size: 16px !important; margin: 0 auto !important; display: flex !important;
+                border: 2px solid #c9a85a !important; box-shadow: 0 3px 9px rgba(0,0,0,0.7) !important; grid-area: auto !important;
+            }
+            .player-spot .ps-info { display: block !important; }
+            .player-spot .ps-line { display: block !important; grid-area: auto !important; line-height: 1.2; }
+            .player-spot .ps-nick { display: block; max-width: 100px; margin: 1px auto 0; font-size: 10.5px !important; color: #fff !important; text-shadow: 0 1px 2px #000, 0 0 5px #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .player-spot .chips-info { display: inline !important; background: none !important; border: none !important; box-shadow: none !important; padding: 0 !important; font-size: 11px !important; color: #ffe7a8 !important; text-shadow: 0 1px 2px #000, 0 0 5px #000; }
+            .player-spot .ps-state { font-size: 9.5px; margin-left: 3px; text-shadow: 0 1px 2px #000; }
+            .player-spot .ps-cards { position: absolute; left: calc(50% + 4px); top: 15px; margin: 0 !important; grid-area: auto !important; }
+            .player-spot:not(.me) .card-container { width: 20px !important; height: 28px !important; }
+            .player-spot:not(.me) .cards { display: flex; }
+            .player-spot:not(.me) .cards.backs .card-container + .card-container { margin-left: -7px !important; }
+            .player-spot.shown:not(.me) .ps-cards { top: 8px; left: calc(50% - 4px); }
+            .player-spot.shown:not(.me) .card-container { width: 27px !important; height: 38px !important; }
+            .player-spot.shown:not(.me) .cf-corner { font-size: 10px !important; } .player-spot.shown:not(.me) .cf-center { font-size: 13px !important; margin-top: 6px !important; }
+            .player-spot.active-turn .avatar { border-color: #ffd34d !important; box-shadow: 0 0 0 3px rgba(255,211,77,0.9), 0 0 18px rgba(255,211,77,0.9) !important; }
+            .player-spot.folded { opacity: 0.5; }
+            .player-spot .ps-rank { display: inline-block; margin-top: 1px !important; font-size: 9.5px !important; }
+            .player-spot .time-bar-wrapper { left: 26px !important; right: 26px !important; bottom: -5px !important; }
+            .player-spot .role-badge, .player-spot .pos-badge { position: absolute !important; top: -4px !important; left: calc(50% - 34px) !important; right: auto !important; z-index: 3; }
+
+            /* 내 자리: 아바타 옆에 큰 카드 두 장 */
+            .player-spot.me { width: auto !important; }
+            .player-spot.me .ps-row { display: grid !important; grid-template-columns: auto auto !important; grid-template-areas: "av cards" "info cards" !important; column-gap: 8px; row-gap: 0; align-items: center; justify-items: center; }
+            .player-spot.me .avatar { grid-area: av !important; width: 44px !important; height: 44px !important; font-size: 18px !important; }
+            .player-spot.me .ps-info { grid-area: info !important; min-width: 84px; }
+            .player-spot.me .ps-cards { grid-area: cards !important; position: static !important; }
+            .player-spot.me .cards { display: flex; }
+            .player-spot.me .card-container { width: 52px !important; height: 73px !important; }
+            .player-spot.me .cf-corner { font-size: 17px !important; }
+            .player-spot.me .cf-center { font-size: 27px !important; margin-top: 15px !important; }
+            .player-spot.me .cards .card-container + .card-container { margin-left: -9px !important; transform: rotate(6deg) translateY(2px); }
+            .player-spot.me .role-badge, .player-spot.me .pos-badge { left: -6px !important; }
+            .player-spot:not(.me) .ps-rank { position: absolute !important; top: 27px; left: 50%; transform: translateX(-50%); margin: 0 !important; white-space: nowrap; z-index: 4; }
+            #players-area .pos-0 .bet-chip { left: auto !important; right: calc(100% + 10px) !important; top: 6px !important; bottom: auto !important; transform: none !important; }
+            /* 족보 배지는 좌석 키를 늘리지 않게 카드 오른쪽에 띄운다 */
+            .player-spot.me .ps-rank { position: absolute !important; left: calc(100% + 6px); bottom: 22px; margin: 0 !important; white-space: nowrap; }
+
+            /* 좌석 자리 — 테두리를 따라 */
+            .players-area .pos-0 { bottom: 12px !important; top: auto !important; left: 50% !important; right: auto !important; transform: translate(-50%, 0) !important; }
+            .players-area .pos-1 { left: 0.5% !important; right: auto !important; bottom: 21% !important; top: auto !important; transform: none !important; }
+            .players-area .pos-2 { left: 8% !important; right: auto !important; top: 2px !important; bottom: auto !important; transform: none !important; }
+            .players-area .pos-3 { left: 50% !important; right: auto !important; top: 2px !important; bottom: auto !important; transform: translateX(-50%) !important; }
+            .players-area .pos-3 .bet-chip { top: 30px !important; bottom: auto !important; left: calc(50% + 58px) !important; right: auto !important; transform: none !important; }
+            .players-area .pos-4 { right: 8% !important; left: auto !important; top: 2px !important; bottom: auto !important; transform: none !important; }
+            .players-area .pos-5 { right: 0.5% !important; left: auto !important; bottom: 21% !important; top: auto !important; transform: none !important; }
+
+            /* ── 하단 버튼 바 ── */
+            #action-controls { padding: 0 !important; }
+            #action-controls .action-top-row, #action-controls .action-bottom-row { display: none !important; }
+            #phone-bar {
+                display: flex !important; order: 5; flex: 1 1 100%; width: 100%; box-sizing: border-box; pointer-events: auto; align-items: flex-end; gap: 3px;
+                padding: 0 calc(4px + env(safe-area-inset-right)) calc(3px + env(safe-area-inset-bottom)) calc(4px + env(safe-area-inset-left));
+                background: linear-gradient(180deg, rgba(0,0,0,0) 0, rgba(0,0,0,0.78) 22px);
+            }
+            .pb {
+                --dot: #888; position: relative; flex: 1 1 0; min-width: 0; height: 45px; margin-top: 16px; padding: 0 2px; cursor: pointer;
+                display: flex; align-items: center; justify-content: center; font: inherit; font-size: 17px; font-weight: 900; letter-spacing: 1px; color: #fff;
+                background: linear-gradient(180deg, #333844, #171a22 55%, #0d0f14); border: 1px solid rgba(255,255,255,0.16); border-radius: 7px 7px 4px 4px;
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 -2px 10px rgba(0,0,0,0.5); text-shadow: 0 1px 2px #000; white-space: nowrap;
+            }
+            .pb b { font-weight: 900; }
+            .pb b::before { content: ''; display: inline-block; width: 15px; height: 15px; margin-right: 7px; vertical-align: -2px; border-radius: 50%;
+                background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.75), var(--dot) 55%); box-shadow: 0 0 0 2px rgba(0,0,0,0.55), 0 0 9px var(--dot); }
+            .pb i { position: absolute; left: 7%; right: 7%; top: -15px; height: 15px; line-height: 15px; overflow: hidden; white-space: nowrap; text-align: center;
+                font-style: normal; font-family: var(--font-num); font-size: 10.5px; font-weight: 700; letter-spacing: 0; color: #ffe7a8;
+                background: #1b1e27; border: 1px solid rgba(255,255,255,0.16); border-bottom: 0; border-radius: 6px 6px 0 0; }
+            .pb i:empty { display: none; }
+            .pb:active:not(:disabled) { transform: translateY(1px); filter: brightness(1.25); }
+            .pb:disabled { opacity: 0.32; cursor: default; }
+            .pb-fold { --dot: #8b8f99; } .pb-call { --dot: #f0b21c; } .pb-min { --dot: #2f7df6; } .pb-half { --dot: #23c97a; } .pb-full { --dot: #e0452f; } .pb-allin { --dot: #ff7a1c; }
+            .pb-allin.confirming { background: linear-gradient(180deg, #ff5a4d, #b81e14); font-size: 14px; }
+            /* 금액 직접 고르기 — 누르면 슬라이더가 버튼 바 위에 뜬다 */
+            #pb-custom { display: block; position: fixed; right: calc(6px + env(safe-area-inset-right)); bottom: calc(var(--bar-h) + env(safe-area-inset-bottom) + 4px); z-index: 123; pointer-events: auto;
+                padding: 4px 10px; border-radius: 999px; font: inherit; font-size: 11px; font-weight: 800; color: #ffe7a8; background: rgba(12,16,30,0.9); border: 1px solid rgba(255,200,87,0.45); cursor: pointer; }
+            #action-controls.custom .action-top-row {
+                display: flex !important; position: fixed; right: calc(6px + env(safe-area-inset-right)); bottom: calc(var(--bar-h) + env(safe-area-inset-bottom) + 34px); z-index: 124;
+                width: min(380px, 62vw) !important; flex: none !important; box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+            }
+            #action-controls.custom #pb-custom-go { display: block; flex: 0 0 auto; height: 30px; padding: 0 10px; border-radius: 9px; border: none; font: inherit; font-size: 12px; font-weight: 900; color: #2c1500; background: linear-gradient(180deg, #ffb347, #f08a1c); cursor: pointer; white-space: nowrap; }
+            #timebank-row.on { right: auto !important; left: calc(6px + env(safe-area-inset-left)) !important; bottom: calc(var(--bar-h) + env(safe-area-inset-bottom) + 4px) !important; }
+
+            /* 내 차례가 아닐 때 */
+            #preaction-bar { bottom: calc(4px + env(safe-area-inset-bottom)) !important; }
+            #turn-indicator { bottom: calc(4px + env(safe-area-inset-bottom)) !important; }
+            #foldshow-prompt, #muck-prompt, #rebuy-prompt, #spectate-bar, #coop-panel, #throw-hint { bottom: calc(var(--bar-h) + env(safe-area-inset-bottom) + 8px) !important; }
+            #chat-panel { bottom: calc(var(--bar-h) + env(safe-area-inset-bottom) + 4px) !important; }
+            #gto-advice, #learn-range-panel { max-height: calc(100vh - 54px - var(--bar-h) - 12px) !important; }
+        }
+        @media screen and (max-width: 700px) and (orientation: landscape) {
+            .pb { font-size: 14.5px; letter-spacing: 0; }
+            .pb b::before { width: 12px; height: 12px; margin-right: 5px; }
+            #community-area .card-container { width: 38px !important; height: 54px !important; }
+            #community-area .cf-center { font-size: 20px !important; margin-top: 11px !important; }
+            .player-spot { width: 88px; }
+            .player-spot.me .card-container { width: 46px !important; height: 65px !important; }
+            .player-spot.me .cf-center { font-size: 23px !important; margin-top: 13px !important; }
+        }
     </style>
 </head>
 <body>
@@ -4275,6 +4409,7 @@
                         <button class="step-btn" type="button" onclick="stepRaise(1)" title="블라인드 1단위 증가">+</button>
                     </div>
                 </div>
+                <button id="pb-custom-go" type="button" onclick="sendAction('raise')">이 금액으로 레이즈</button>
             </div>
             <div class="action-bottom-row">
                 <button class="btn-fold" onclick="sendAction('fold')">폴드</button>
@@ -4282,6 +4417,16 @@
                 <button class="btn-raise" id="btn-raise" onclick="sendAction('raise')">레이즈</button>
                 <button class="btn-allin" id="btn-allin" onclick="sendAction('allin')">🔥 올인</button>
             </div>
+            <!-- 📱 가로 폰 전용 하단 버튼 바 (다이 · 콜 · 삥 · 하프 · 풀 · 올인) — 다른 화면에서는 숨김 -->
+            <div id="phone-bar">
+                <button class="pb pb-fold" type="button" onclick="sendAction('fold')"><i></i><b>다이</b></button>
+                <button class="pb pb-call" id="pb-call" type="button" onclick="sendAction('check')"><i></i><b>콜</b></button>
+                <button class="pb pb-min" id="pb-min" type="button" onclick="pbBet('min')"><i></i><b>삥</b></button>
+                <button class="pb pb-half" id="pb-half" type="button" onclick="pbBet(0.5)"><i></i><b>하프</b></button>
+                <button class="pb pb-full" id="pb-full" type="button" onclick="pbBet(1)"><i></i><b>풀</b></button>
+                <button class="pb pb-allin" id="pb-allin" type="button" onclick="sendAction('allin')"><i></i><b>올인</b></button>
+            </div>
+            <button id="pb-custom" type="button" onclick="document.getElementById('action-controls').classList.toggle('custom')">🎚 금액 직접</button>
             <div id="timebank-row"><button id="btn-timebank" onclick="useTimeBank()">⏳ 시간 더 쓰기 <b>+15초</b></button></div>
             <div class="key-hint">단축키 — F 폴드 · C 체크/콜 · R 레이즈 · A 올인 · ← → 금액 조절</div>
         </div>
@@ -5771,6 +5916,7 @@
         _allinLabel = b.innerText;
         b.innerText = '한 번 더 누르면 올인';
         b.classList.add('confirming');
+        { const pb = document.getElementById('pb-allin'); if (pb) { pb.classList.add('confirming'); pb.querySelector('b').innerText = '한 번 더'; } }
         clearTimeout(_allinTimer);
         _allinTimer = setTimeout(disarmAllin, 2600);       // 2.6초 안에 다시 안 누르면 취소
         try { SFX.myturn(); } catch (e) {}
@@ -5781,6 +5927,7 @@
         if (!_allinArmed) return;
         _allinArmed = false;
         if (b) { b.innerText = _allinLabel || '🔥 올인'; b.classList.remove('confirming'); }
+        { const pb = document.getElementById('pb-allin'); if (pb) { pb.classList.remove('confirming'); pb.querySelector('b').innerText = '올인'; } }
     }
 
     // ── ⚡ 자동 액션(프리액션) ─────────────────────────────────
@@ -5930,6 +6077,37 @@
         const pct = pot > 0 ? Math.round((val / pot) * 100) : 0;
         const bbs = lastBB > 0 ? (Math.round(val / lastBB * 10) / 10) + 'BB · ' : '';
         document.getElementById('raise-percent').innerText = `(${bbs}팟의 ${pct}%)`;
+    }
+
+    // 📱 가로 폰 하단 버튼 바 — 버튼마다 금액을 위에 적어 두고, 누르면 그 금액으로 바로 벳/레이즈한다
+    function pbValue(m) {
+        const sl = document.getElementById('raise-slider');
+        const min = parseInt(sl.min) || 0, max = parseInt(sl.max) || 0;
+        if (m === 'min') return min;
+        return Math.max(min, Math.min(max, Math.floor((min + potNow() * m) / 10) * 10));
+    }
+    function pbBet(m) {
+        const sl = document.getElementById('raise-slider');
+        const v = pbValue(m);
+        sl.value = v; updateRaiseSlider(v);
+        sendAction('raise');
+    }
+    function updatePhoneBar(me) {
+        const bar = document.getElementById('phone-bar');
+        if (!bar) return;
+        document.getElementById('action-controls').classList.remove('custom');
+        const call = document.getElementById('btn-call'), raise = document.getElementById('btn-raise'), allin = document.getElementById('btn-allin');
+        const set = (id, txt, amt, off) => { const b = document.getElementById(id); if (!b) return; if (txt != null) b.querySelector('b').innerText = txt; b.querySelector('i').innerText = amt; b.disabled = !!off; };
+        const callTxt = (call.innerText || '').trim(), m = /([\d,]+)/.exec(callTxt);
+        set('pb-call', callTxt.indexOf('체크') === 0 ? '체크' : '콜', m ? m[1] : '0', false);
+        const noRaise = !!raise.disabled;
+        const f = v => Number(v).toLocaleString();
+        set('pb-min', null, noRaise ? '' : f(pbValue('min')), noRaise);
+        set('pb-half', null, noRaise ? '' : f(pbValue(0.5)), noRaise);
+        set('pb-full', null, noRaise ? '' : f(pbValue(1)), noRaise);
+        set('pb-allin', '올인', me ? f((me.chips || 0) + (me.currentBet || 0)) : '', !!allin.disabled);
+        document.getElementById('pb-allin').classList.remove('confirming');
+        document.getElementById('pb-custom').style.visibility = noRaise ? 'hidden' : '';
     }
 
     function setQuickBet(multiplier) {
@@ -6554,6 +6732,7 @@
         } else if (data.turnPlayerId === myNickname) {
             document.getElementById('ready-controls').style.display = 'none';
             document.getElementById('action-controls').style.display = 'flex';
+            updatePhoneBar(myPlayer);
             ind.innerHTML = `⭐ 내 턴입니다! 액션을 선택하세요. ${timerHtml}`;
         } else if (data.turnPlayerId === null) {
             document.getElementById('ready-controls').style.display = 'none';
