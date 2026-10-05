@@ -2829,9 +2829,14 @@ class GameRoom {
         const raisesBeforeAction = this.raiseCountThisStreet || 0;
 
         // 🎓 [학습모드] 사람 액션 전 GTO 조언 캡처 (액션 후 채점에 사용)
+        //    학습모드가 아니어도 사람 액션은 전부 "액션 전 상태"의 조언으로 채점한다(프로필 GTO 근접도).
+        //    예전 근접도는 액션이 반영된 뒤의 상태를 조언과 다른 옛 기준으로 봐서, 정석 스틸·숏스택 푸시를 낮게 쳤다.
         let _learnAdvice = null;
-        if (this._learnMode && p && !p.isBot) {
+        this._pendingGto = null;
+        if (p && !p.isBot) {
             try { _learnAdvice = this.getGtoAdvice(nick); } catch (e) {}
+            const _sc = GtoAdvice.scoreAction(_learnAdvice, type);
+            if (_sc != null) this._pendingGto = { nick, score: _sc };
         }
 
         let finalAction = type;
@@ -3744,7 +3749,11 @@ class GameRoom {
         const isBest = (actKey === advice.bestAction);
 
         let grade, gradeColor, gradeIcon, msg;
-        if (isBest || recommendedPct >= 40) {
+        if (GtoAdvice.wrongSize(advice, actualType)) {
+            // 방향(공격)은 맞지만 크기가 틀림 — 이 스택에서는 올인이 기준
+            grade = '무난'; gradeColor = '#ffd97a'; gradeIcon = '🟡';
+            msg = '방향은 맞지만 크기가 다릅니데이 — 이 스택에서는 올인이 기준입니데이. 작게 치면 접지도 못할 크기로 칩만 묶입니데이.';
+        } else if (isBest || recommendedPct >= 40) {
             grade = '훌륭'; gradeColor = '#7bedaa'; gradeIcon = '✅';
             msg = isBest ? 'GTO 최적 선택입니데이!' : 'GTO상 충분히 좋은 선택입니데이.';
         } else if (recommendedPct >= 15) {
@@ -3766,6 +3775,8 @@ class GameRoom {
     }
 
     gtoProximity(nick, type, p, toCall) {
+        // 사람 액션은 applyAction 이 액션 전에 조언 기준으로 매겨 둔 점수를 쓴다 (아래 옛 계산은 봇 리플레이용)
+        if (this._pendingGto && this._pendingGto.nick === nick) return this._pendingGto.score;
         const pl = this.players[nick];
         if (!pl || !pl.hand || pl.hand.length !== 2) return null;
 

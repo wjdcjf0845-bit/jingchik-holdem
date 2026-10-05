@@ -231,3 +231,21 @@ test('권장 크기(포스트플랍): 마른 보드 헤즈업은 작게, 멀티�
     assert.ok(A.betSize({ opponents: 3, dry: true, pot: 600, spr: 8 }).frac >= 0.66);
     assert.strictEqual(A.betSize({ opponents: 1, dry: true, pot: 600, spr: 0.9 }).frac, 1);
 });
+
+test('근접도 점수: 권장 액션이면 95, 믹스 비중이 낮을수록 낮게, 믹스에 없으면 15', () => {
+    const adv = { mix: { fold: 6, raise: 94 }, bestAction: 'raise', sizeHint: '2.2~2.5bb' };
+    assert.strictEqual(A.scoreAction(adv, 'raise'), 95);
+    assert.strictEqual(A.scoreAction(adv, 'allin'), 95, '올인은 레이즈로 본다');
+    assert.strictEqual(A.scoreAction(adv, 'fold'), 40);
+    assert.strictEqual(A.scoreAction(adv, 'call'), 15, '믹스에 없는 림프');
+    assert.strictEqual(A.scoreAction({ mix: { check: 55, bet: 45 }, bestAction: 'check' }, 'raise'), 88, '체크 가능한 자리의 레이즈는 벳으로 본다');
+    assert.strictEqual(A.scoreAction(null, 'call'), null);
+});
+
+test('근접도 점수: 올인이 기준인 자리에서 작게 레이즈하면 방향이 맞아도 감점', () => {
+    const adv = { mix: { fold: 8, raise: 92 }, bestAction: 'raise', sizeHint: '올인' };
+    assert.strictEqual(A.scoreAction(adv, 'allin'), 95);
+    assert.strictEqual(A.scoreAction(adv, 'raise'), 55);
+    assert.strictEqual(A.wrongSize(adv, 'allin'), false);
+    assert.strictEqual(A.wrongSize({ sizeHint: '약 800 (상대 벳의 3배)' }, 'raise'), false);
+});
