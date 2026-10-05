@@ -3268,7 +3268,11 @@
             }
             .player-spot.me { max-width: 252px; }
             .ps-l1 { align-self: end; } .ps-l2 { align-self: start; }
-            .player-spot .avatar { width: 40px; height: 40px; font-size: 17px; }
+            /* 프로필 사진을 크게 — 판 밖으로 살짝 튀어나오게 해서 좌석 크기는 그대로 두고 사진만 돋보이게 한다 */
+            .player-spot { overflow: visible; }
+            .player-spot .avatar { width: 64px; height: 64px; font-size: 26px; margin: -14px 0 -14px -24px; border-width: 3px; box-shadow: inset 0 -9px 14px rgba(0,0,0,0.35), 0 6px 16px rgba(0,0,0,0.7); position: relative; z-index: 1; }
+            .player-spot.me .avatar { width: 70px; height: 70px; font-size: 28px; margin: -16px 0 -16px -26px; }
+            .player-spot.active-turn .avatar { box-shadow: 0 0 0 3px rgba(255,211,77,0.95), 0 0 22px rgba(255,211,77,0.85), 0 6px 16px rgba(0,0,0,0.7); }
             .ps-state { font-size: 11px; }
             /* 상대 카드는 겹쳐서 폭을 아낀다 (뒷면이라 정보가 없다 · 쇼다운 때도 왼쪽 위 숫자는 둘 다 보인다) */
             .player-spot:not(.me) .cards .card-container + .card-container { margin-left: -18px; }
@@ -4170,7 +4174,7 @@
 
 <div id="foldshow-prompt">
     <div class="fs-title">🃏 죽은 패, 보여줄까요?</div>
-    <div class="fs-sub">핸드가 끝나면 공개됩니다</div>
+    <div class="fs-sub">고르면 바로 모두에게 보입니다</div>
     <div class="fs-row">
         <button data-fs="0" onclick="setFoldShow(0)">첫 장</button>
         <button data-fs="1" onclick="setFoldShow(1)">둘째 장</button>
@@ -7188,9 +7192,13 @@
     // 🃏 [죽은 패 공개] 폴드한 뒤에도 내 패를 보여줄 수 있다 (한 장만도 가능 — 블러프 자랑).
     //    실제 공개는 핸드가 끝난 뒤에 일어난다. 진행 중에 까면 남은 사람들에게
     //    정보를 주게 되고(에이스가 죽었다 등) 규칙에도 어긋나기 때문이다.
+    //    🐛 예전엔 폴드하자마자 물었고, '안 보여주기'를 눌러도 다음 화면 갱신 때마다 다시 떴다.
+    //    → 그 판이 끝난 뒤(쇼다운·기권승 화면)에 한 번만 묻고, 고르면 그 판에서는 다시 묻지 않는다.
+    let _fsHand = null, _fsDoneHand = null;
     function setFoldShow(which) {
         socket.emit('showFoldedCards', { which });
-        if (which === 'none') hideFoldShow();
+        _fsDoneHand = _fsHand;
+        hideFoldShow();
     }
     function hideFoldShow() {
         const el = document.getElementById('foldshow-prompt');
@@ -7200,8 +7208,9 @@
         const el = document.getElementById('foldshow-prompt');
         if (!el) return;
         const me = data.players[myNickname];
-        const live = data.gameStage >= 1 && data.gameStage <= 5;
-        const canShow = !!me && me.isFolded && live && (me.hand || []).length === 2 && me.hand[0] !== '?';
+        const ended = data.gameStage === 5;                       // 판이 끝난 뒤에만 묻는다
+        _fsHand = data.handId;
+        const canShow = !!me && me.isFolded && ended && (me.hand || []).length === 2 && me.hand[0] !== '?' && _fsDoneHand !== data.handId;
         if (!canShow) { el.style.display = 'none'; return; }
         const rc = data.youRevealFold;
         el.querySelectorAll('button[data-fs]').forEach(b => {
@@ -7209,9 +7218,7 @@
             const on = rc && ((k === '0' && rc[0] && !rc[1]) || (k === '1' && rc[1] && !rc[0]) || (k === 'both' && rc[0] && rc[1]));
             b.classList.toggle('on', !!on);
         });
-        el.querySelector('.fs-sub').innerText = rc
-            ? (data.gameStage === 5 ? '공개했습니다' : '핸드가 끝나면 공개됩니다')
-            : '핸드가 끝나면 공개됩니다';
+        el.querySelector('.fs-sub').innerText = '고르면 바로 모두에게 보입니다';
         el.style.display = 'block';
     }
 
