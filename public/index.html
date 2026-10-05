@@ -6924,7 +6924,13 @@
         // 🏆 쇼다운이면 족보 스탬프가 먼저 찍히고, 결과 패널은 그 뒤에 올라온다.
         //    (예전엔 패널이 즉시 떠서 스탬프를 가렸다 — 좁은 화면에서 패널 z-index 가 더 높다)
         const _stampFirst = !data.foldWin && data.pots && data.pots.length && !_noMotion();
-        if (_stampFirst) {
+        // 📱 폰에서는 결과 창을 띄우지 않는다 — 화면이 작아 테이블(공개된 패·승자 강조·칩 이동)을 통째로 가렸다.
+        //    누가 얼마를 땄는지는 좌석의 족보 배지·승리 강조와 채팅 기록으로 볼 수 있다.
+        const _phone = window.matchMedia('(max-width: 960px)').matches && data.pots && data.pots.length;
+        if (_phone) {
+            clearTimeout(window.__resultBoxT);
+            box.style.display = 'none';
+        } else if (_stampFirst) {
             box.style.display = 'none';
             clearTimeout(window.__resultBoxT);
             window.__resultBoxT = setTimeout(() => { box.style.display = 'block'; }, 1050);
