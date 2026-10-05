@@ -3598,6 +3598,14 @@
             .qz-card { width: 32px; height: 44px; } .qz-card b { font-size: 15px; } .qz-card i { font-size: 13px; }
             .qz-choice { padding: 8px 6px; font-size: 13px; }
         }
+    
+        /* 🎓 조언 패널: 권장 크기 · 보정 전 승률 / 📊 레인지 표: 지금 어떤 기준의 표인지 */
+        .gto-size { margin: 6px 0 2px; font-size: 11.5px; color: #c3cbe0; background: rgba(255,200,87,0.08); border: 1px solid rgba(255,200,87,0.3); border-radius: 8px; padding: 4px 9px; word-break: keep-all; }
+        .gto-size b { color: var(--gold); font-weight: 800; }
+        .gm-raw { display: block; font-size: 8.5px; font-weight: 600; color: #8d98b3; margin-top: 1px; white-space: nowrap; }
+        .lrp-mode { font-size: 10px; font-weight: 800; color: #c3cbe0; margin-bottom: 6px; padding: 3px 6px; border-radius: 6px; background: rgba(255,255,255,0.06); text-align: center; word-break: keep-all; line-height: 1.35; }
+        .lrp-mode-hubtn, .lrp-mode-hubb { color: #9fd4ff; background: rgba(47,125,246,0.18); }
+        .lrp-mode-push { color: #ffc0b8; background: rgba(240,72,58,0.18); }
     </style>
 </head>
 <body>
@@ -4097,6 +4105,13 @@
             <button class="learn-bot-opt" data-bots="3" onclick="selectLearnBots(3)">3명<span>4인</span></button>
             <button class="learn-bot-opt" data-bots="4" onclick="selectLearnBots(4)">4명<span>5인</span></button>
             <button class="learn-bot-opt active" data-bots="5" onclick="selectLearnBots(5)">5명<span>6인 풀링</span></button>
+        </div>
+        <div style="font-size:12px; color:var(--txt-dim); margin:14px 0 8px; text-align:left;">스택 깊이 <span style="font-size:11px;">(100bb 외에는 매 핸드 그 깊이로 다시 시작 — 숏스택 연습용)</span></div>
+        <div id="learn-stack-select" class="learn-bot-grid" style="grid-template-columns:repeat(4,1fr);">
+            <button class="learn-bot-opt active" data-stack="100" onclick="selectLearnStack(100)">100bb<span>딥 (기본)</span></button>
+            <button class="learn-bot-opt" data-stack="40" onclick="selectLearnStack(40)">40bb<span>미들</span></button>
+            <button class="learn-bot-opt" data-stack="20" onclick="selectLearnStack(20)">20bb<span>리쉬브</span></button>
+            <button class="learn-bot-opt" data-stack="10" onclick="selectLearnStack(10)">10bb<span>푸시/폴드</span></button>
         </div>
         <button class="btn-join" style="width: 100%; margin-top:18px; background: linear-gradient(180deg, #2c9a5f, #1a6b3f); color: white; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 6px 16px rgba(0,0,0,0.5); text-shadow:none; font-weight:900;" onclick="confirmLearnMode()">🎓 학습 시작</button>
         <button class="btn-join" style="width: 100%; margin-top:8px; background: linear-gradient(180deg, #3a455f, #232c44 60%, #161c2c); color: white; box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 6px 16px rgba(0,0,0,0.5); text-shadow:none;" onclick="document.getElementById('learn-setup-modal').style.display='none'">취소</button>
@@ -5604,6 +5619,8 @@
                 if (_myPos && _RANGE_TH[_myPos] !== undefined) {
                     _lrpPos = _myPos;
                     _lrpMyCode = null; // 새 핸드 — 이전 핸드 강조 제거 (내 차례에 다시 설정)
+                    _lrpCtx.headsUp = (data.playerOrder || []).length === 2;   // 표를 헤즈업 기준으로 그릴지
+                    _lrpCtx.push = null;
                     renderRangePanel();
                 }
             }
@@ -6970,16 +6987,21 @@
     let _learnBotCount = 5;
     function startLearnMode() {
         _learnBotCount = 5;
-        document.querySelectorAll('.learn-bot-opt').forEach(b => b.classList.toggle('active', +b.dataset.bots === 5));
+        document.querySelectorAll('#learn-bot-select .learn-bot-opt').forEach(b => b.classList.toggle('active', +b.dataset.bots === 5));
         document.getElementById('learn-setup-modal').style.display = 'flex';
     }
     function selectLearnBots(n) {
         _learnBotCount = n;
-        document.querySelectorAll('.learn-bot-opt').forEach(b => b.classList.toggle('active', +b.dataset.bots === n));
+        document.querySelectorAll('#learn-bot-select .learn-bot-opt').forEach(b => b.classList.toggle('active', +b.dataset.bots === n));
+    }
+    let _learnStack = 100;
+    function selectLearnStack(n) {
+        _learnStack = n;
+        document.querySelectorAll('#learn-stack-select .learn-bot-opt').forEach(b => b.classList.toggle('active', +b.dataset.stack === n));
     }
     function confirmLearnMode() {
         document.getElementById('learn-setup-modal').style.display = 'none';
-        socket.emit('createLearnMode', { botCount: _learnBotCount });
+        socket.emit('createLearnMode', { botCount: _learnBotCount, stackBB: _learnStack });
     }
     socket.on('learnModeStarted', () => {
         _learnMode = true;
@@ -7038,16 +7060,55 @@
         if (pos === 'BB') return 'BB';
         return 'CO';
     }
+    // 📊 표는 "지금 상황"에 맞춰 그린다 — 6인 오픈 차트 / 헤즈업 / 숏스택 푸시 범위
+    //   (예전엔 헤즈업이든 9bb 든 늘 6인 100bb 오픈 차트를 보여줘서, 조언과 표가 서로 다른 말을 했다)
+    const _lrpCtx = { headsUp: false, push: null, pushPos: '', effBB: 100 };
+    const HU_OPEN_SCORE = 35, HU_DEFEND_SCORE = 40;   // 서버(lib/gtoquiz.js · lib/preflop.js)와 같은 값
+    // 올인 강도 순위(상위 몇 %) — 서버 lib/shortstack.js 의 handPercentile 과 같은 계산
+    const _clAllinPct = (() => {
+        const O = '23456789TJQKA', rows = [];
+        const str = code => {
+            const a = O.indexOf(code[0]), b = O.indexOf(code[1]), hi = Math.max(a, b), lo = Math.min(a, b);
+            if (code[0] === code[1]) return 0.50 + hi * 0.0292;
+            let v = 0.262 + hi * 0.0215 + lo * 0.0105;
+            if (code[2] === 's') v += 0.03;
+            const gap = hi - lo; if (gap === 1) v += 0.012; else if (gap === 2) v += 0.006;
+            return v;
+        };
+        for (let i = 12; i >= 0; i--) for (let j = i; j >= 0; j--) {
+            if (i === j) rows.push({ code: O[i] + O[j], n: 6 });
+            else { rows.push({ code: O[i] + O[j] + 's', n: 4 }); rows.push({ code: O[i] + O[j] + 'o', n: 12 }); }
+        }
+        rows.forEach(r => { r.s = str(r.code); });
+        rows.sort((x, y) => y.s - x.s);
+        const map = {}; let acc = 0;
+        rows.forEach(r => { acc += r.n; map[r.code] = acc / 1326; });
+        return map;
+    })();
+    function lrpMode(pos) {
+        if (_lrpCtx.push && pos === _lrpCtx.pushPos) return 'push';
+        if (_lrpCtx.headsUp) return pos === 'BB' ? 'hubb' : 'hubtn';
+        return 'six';
+    }
     function clRangeTier(code, pos) {
+        const mode = lrpMode(pos);
+        const sc = clHandRangeScore(code);
+        if (mode === 'push') {
+            const p = _clAllinPct[code] || 1, r = _lrpCtx.push.range;
+            return p <= r ? 3 : (p <= r * 1.15 ? 2 : 1);
+        }
+        if (mode === 'hubtn') return sc > HU_OPEN_SCORE ? 3 : (sc >= 32 ? 2 : 1);
+        if (mode === 'hubb') {
+            const prem = ['AA', 'KK', 'QQ', 'JJ', 'AKs', 'AKo'].includes(code);
+            return (prem || sc >= 80) ? 3 : (sc >= HU_DEFEND_SCORE ? 2 : 1);
+        }
         if (pos === 'BB') {
             // BB는 오픈 개념이 약함 — 차트 대신 점수로 단순 표시
-            const sc = clHandRangeScore(code);
             if (sc >= 58) return 3; if (sc >= 48) return 2; return 1;
         }
         const set = _CL_OPEN_RANGE[_clRangeKey(pos)];
         if (set && set.has(code)) return 3;   // 오픈 레이즈
         // 차트 밖 — 경계면 마지널
-        const sc = clHandRangeScore(code);
         const th = _RANGE_TH[pos] || 58;
         if (sc >= th - 6) return 2;
         return 1;
@@ -7066,25 +7127,36 @@
         if (!body) return;
         const R = ['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
         const tierColor = ['', 'rgba(40,44,52,0.5)', 'rgba(180,140,40,0.75)', 'rgba(60,200,120,0.85)'];
-        const positions = ['UTG','HJ','CO','BTN','SB','BB'];
-        const posTabs = positions.map(p => `<button class="lrp-pos-btn ${p===_lrpPos?'active':''}" onclick="setRangePos('${p}')">${p}</button>`).join('');
-        let cells = '';
+        const positions = _lrpCtx.headsUp ? ['BTN', 'BB'] : ['UTG','HJ','CO','BTN','SB','BB'];
+        if (!positions.includes(_lrpPos)) _lrpPos = _lrpCtx.headsUp ? 'BTN' : (_RANGE_TH[_lrpPos] ? _lrpPos : 'BTN');
+        const posTabs = positions.map(p => `<button class="lrp-pos-btn ${p===_lrpPos?'active':''}" onclick="setRangePos('${p}')">${p === 'BTN' && _lrpCtx.headsUp ? 'BTN(SB)' : p}</button>`).join('');
+        const mode = lrpMode(_lrpPos);
+        let cells = '', inCount = 0;
         for (let i = 0; i < 13; i++) {
             for (let j = 0; j < 13; j++) {
                 const hi = R[Math.min(i,j)], lo = R[Math.max(i,j)];
                 const code = (i===j) ? hi+hi : (i<j ? hi+lo+'s' : hi+lo+'o');
                 const t = clRangeTier(code, _lrpPos);
+                if (t === 3 || (mode === 'hubb' && t === 2)) inCount += (i === j ? 6 : (i < j ? 4 : 12));
                 const isCur = _lrpMyCode && code === _lrpMyCode;
                 cells += `<div class="lrp-cell ${isCur?'cur':''}" style="background:${tierColor[t]}" title="${code}">${isCur?code:''}</div>`;
             }
         }
+        const pctIn = Math.round(inCount / 1326 * 100);
+        const L = {
+            six:   ['6인 테이블 · 100bb 오픈 차트', '오픈 레이즈', '마지널/콜', '폴드'],
+            hubtn: [`헤즈업 버튼 — 약 ${pctIn}% 오픈`, '오픈 레이즈', '경계', '폴드'],
+            hubb:  [`헤즈업 BB 방어 — 약 ${pctIn}% 계속`, '3벳', '콜', '폴드'],
+            push:  [`숏스택 ${_lrpCtx.effBB}bb · 뒤 ${_lrpCtx.push ? _lrpCtx.push.behind : 0}명 — 상위 ${_lrpCtx.push ? Math.round(_lrpCtx.push.range * 100) : 0}% 올인`, '올인', '경계', '폴드']
+        }[mode];
         body.innerHTML = `
-            <div class="lrp-pos-tabs">${posTabs}</div>
+            <div class="lrp-pos-tabs" style="${_lrpCtx.headsUp ? 'grid-template-columns:repeat(2,1fr);' : ''}">${posTabs}</div>
+            <div class="lrp-mode lrp-mode-${mode}">${L[0]}</div>
             <div class="lrp-grid">${cells}</div>
             <div class="lrp-legend">
-                <span><i style="background:${tierColor[3]}"></i>오픈 레이즈</span>
-                <span><i style="background:${tierColor[2]}"></i>마지널/콜</span>
-                <span><i style="background:${tierColor[1]}"></i>폴드</span>
+                <span><i style="background:${tierColor[3]}"></i>${L[1]}</span>
+                <span><i style="background:${tierColor[2]}"></i>${L[2]}</span>
+                <span><i style="background:${tierColor[1]}"></i>${L[3]}</span>
             </div>
             <div style="font-size:9px; color:var(--txt-dim); margin-top:5px; line-height:1.4;">${_lrpMyCode?'흰 테두리=내 핸드':'내 차례에 핸드 강조됨'}</div>`;
     }
@@ -7114,6 +7186,12 @@
             // 레인지 패널을 내 포지션/핸드로 동기화
             if (_learnMode && a.posInfo.code) {
                 _lrpMyCode = a.posInfo.code;
+                if (a.posInfo.chart) {
+                    _lrpCtx.headsUp = !!a.posInfo.chart.headsUp;
+                    _lrpCtx.push = a.posInfo.chart.push || null;
+                    _lrpCtx.pushPos = a.posInfo.position;
+                    _lrpCtx.effBB = a.posInfo.chart.effBB || 100;
+                }
                 if (a.posInfo.position && a.posInfo.position !== '-') _lrpPos = a.posInfo.position.replace(/\+\d/, m => m); // UTG+1 등 그대로
                 if (!_RANGE_TH[_lrpPos]) _lrpPos = 'BTN';
                 renderRangePanel();
@@ -7130,7 +7208,7 @@
             ${posHeader}
             ${(a.notes && a.notes.length) ? '<div class="gto-notes">' + a.notes.map(n => '<span>' + esc(n) + '</span>').join('') + '</div>' : ''}
             <div class="gto-metrics">
-                <div class="gto-metric"><div class="gm-v" style="color:${a.tierColor}">${a.equity}%</div><div class="gm-k">내 승률</div></div>
+                <div class="gto-metric"><div class="gm-v" style="color:${a.tierColor}">${a.equity}%</div><div class="gm-k">내 승률${a.rawEquity != null && Math.abs(a.rawEquity - a.equity) >= 3 ? `<small class="gm-raw">아무 패 상대 ${a.rawEquity}%</small>` : ''}</div></div>
                 <div class="gto-metric"><div class="gm-v" style="color:#8fd3ff">${a.toCall>0?a.potOdds+'%':'—'}</div><div class="gm-k">팟 오즈</div></div>
                 <div class="gto-metric"><div class="gm-v" style="color:var(--gold)">${a.potSize.toLocaleString()}</div><div class="gm-k">현재 팟</div></div>
             </div>
@@ -7139,6 +7217,7 @@
                 <span class="gto-best-action" style="color:${actionColor[a.bestAction]||'#fff'}">${actionKo[a.bestAction]||a.bestAction}</span>
                 <span class="gto-reason">${esc(a.reason)}</span>
             </div>
+            ${a.sizeHint ? `<div class="gto-size">📐 권장 크기 <b>${esc(a.sizeHint)}</b></div>` : ''}
             <div class="gto-mix">${mixRows}</div>
             </div>
         `;

@@ -73,8 +73,8 @@ test('조언 모양: 믹스 합은 100, 권장 액션은 믹스 안에 있다 (�
 
 // ══════════════ 문제 학습 ══════════════
 
-test('분야 8개, 분야마다 문제가 만들어지고 정답이 보기 안에 있다', () => {
-    assert.strictEqual(Q.CAT_IDS.length, 8);
+test('분야 9개, 분야마다 문제가 만들어지고 정답이 보기 안에 있다', () => {
+    assert.strictEqual(Q.CAT_IDS.length, 9);
     const rng = lcg(11);
     Q.CAT_IDS.forEach(cat => {
         for (let i = 0; i < 300; i++) {
@@ -180,4 +180,54 @@ test('기록: 망가진 저장값에도 안전', () => {
         assert.ok(s.total >= 0 && s.ok >= 0 && s.ok <= s.total && s.streak >= 0);
         Q.CAT_IDS.forEach(id => assert.ok(s.cats[id].ok <= s.cats[id].n));
     });
+});
+
+// ══════════════ 자리별 방어 · 권장 크기 ══════════════
+
+test('방어 폭: 앞자리 오픈일수록 좁게, 버튼·SB 스틸일수록 넓게, BB는 다른 자리보다 넓게', () => {
+    const w = c => (c.length === 2 ? 6 : c[2] === 's' ? 4 : 12);
+    const frac = (hero, ctx) => Q.ALL_CODES.reduce((n, c) => n + (PF.preflopRangeTier(c, hero, true, ctx).tier !== 'fold' ? w(c) : 0), 0) / 1326;
+    const bb = o => frac('BB', { openerPos: o, closing: true }), ip = o => frac('BTN', { openerPos: o });
+    assert.ok(bb('UTG') < bb('CO') && bb('CO') < bb('BTN') && bb('BTN') <= bb('SB'));
+    assert.ok(ip('UTG') < ip('CO'));
+    ['UTG', 'HJ', 'CO'].forEach(o => assert.ok(bb(o) > ip(o) * 1.5, o + ': BB 가 훨씬 넓어야 한다'));
+    assert.ok(bb('UTG') > 0.18 && bb('UTG') < 0.30 && bb('BTN') > 0.30 && bb('BTN') < 0.50);
+    const hu = frac('BB', { headsUp: true, closing: true });
+    assert.ok(hu > 0.55 && hu < 0.75, '헤즈업 BB 는 절반 넘게 지킨다: ' + hu);
+});
+
+test('방어 기준 입력이 없으면(봇) 예전 기준 그대로', () => {
+    Q.ALL_CODES.forEach(c => {
+        const a = PF.preflopRangeTier(c, 'BB', true, { numActive: 6 }), b = PF.preflopRangeTier(c, 'BB', true, { numActive: 6, openerPos: '', closing: false });
+        assert.strictEqual(a.tier, b.tier, c);
+    });
+    assert.strictEqual(PF.studyDefense({ numActive: 4 }), null);
+    assert.strictEqual(PF.studyDefense({ openerPos: 'nope' }), null);
+});
+
+test('오픈 받기 문제: 정답은 자리별 기준과 일치하고 경계에서 떨어져 있다', () => {
+    const rng = lcg(31);
+    for (let i = 0; i < 300; i++) {
+        const q = Q.generate('defend', rng);
+        const hero = q.tags[2].replace('내 자리 ', ''), opener = q.tags[3].split(' ')[0];
+        const code = PF.handToCode(q.hand), ctx = { openerPos: opener, closing: hero === 'BB' };
+        assert.strictEqual(q.answer, PF.preflopRangeTier(code, hero, true, ctx).tier, q.prompt);
+        const th = PF.studyDefense(ctx).callTh + (PF.isInOpenRange(code, hero) ? 0 : 4);
+        assert.ok(Math.abs(PF.handRangeScore(code) - th) > 2, '경계 근처: ' + q.prompt);
+    }
+});
+
+test('권장 크기: 얕으면 작게 열고, 3벳은 포지션·콜러에 따라 커지고, 스택의 1/3을 넘으면 올인', () => {
+    assert.match(A.openSize(15, false), /^2bb/);
+    assert.match(A.openSize(100, false), /2\.2/);
+    const ip = A.threeBetSize(250, 0, true, 100, 10000), oop = A.threeBetSize(250, 0, false, 100, 10000), sq = A.threeBetSize(250, 2, true, 100, 10000);
+    assert.deepStrictEqual([ip.to, oop.to, sq.to], [800, 1000, 1300]);     // 3배 / 4배 / (3+2)배 — 100 단위 반올림
+    assert.strictEqual(A.threeBetSize(250, 0, true, 100, 2000).allIn, true);
+});
+
+test('권장 크기(포스트플랍): 마른 보드 헤즈업은 작게, 멀티웨이·젖은 보드는 크게, SPR 이 낮으면 올인', () => {
+    assert.strictEqual(A.betSize({ opponents: 1, dry: true, pot: 600, spr: 8 }).frac, 0.33);
+    assert.ok(A.betSize({ opponents: 1, wet: true, pot: 600, spr: 8 }).frac >= 0.66);
+    assert.ok(A.betSize({ opponents: 3, dry: true, pot: 600, spr: 8 }).frac >= 0.66);
+    assert.strictEqual(A.betSize({ opponents: 1, dry: true, pot: 600, spr: 0.9 }).frac, 1);
 });

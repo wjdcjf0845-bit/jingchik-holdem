@@ -1370,7 +1370,12 @@ class GameRoom {
         p._botTimer = setTimeout(() => {
             // 그 사이 턴이 바뀌었으면 취소
             if (this.turnIndex === -1 || this.playerOrder[this.turnIndex] !== expectedNick) return;
-            const d = decision || { type: toCall > 0 ? 'call' : 'check' };
+            let d = decision || { type: toCall > 0 ? 'call' : 'check' };
+            // 🐛 [버그픽스] 봇의 "올인"이 올인이 아니었다. 봇은 올인을 '레이즈(금액 = 스택 전부)'로 내는데,
+            //    레이즈는 팟의 3배 상한에 걸려서 10bb 푸시가 5bb 레이즈로 깎였다(실측: 1,000칩 봇이 500만 넣고 500을 남김).
+            //    숏스택 푸시/폴드와 리쉬브가 전부 어정쩡한 레이즈가 되어, 접을 수도 없는 크기로 칩을 흘렸다.
+            //    스택 전부를 넣으려는 레이즈는 상한이 없는 올인 액션으로 바꿔 준다.
+            if (d.type === 'raise' && d.amount >= (p.currentBet || 0) + p.chips) d = { type: 'allin' };
 
             // 💬 상황별 한마디 — 큰 벳은 도발/블러프, 큰 콜은 "안 믿는다", 큰 레이다운은 폴드 멘트
             if (d.type === 'allin' || (d.type === 'raise' && d.amount > potNow * 0.6)) {
@@ -1434,8 +1439,15 @@ class GameRoom {
                 // 🔬 운영에선 항상 고쳐진 카운터. BOT_AB 측정 때만 "옛 봇"이 고치기 전 값을 본다.
                 const _rc = this.botV2(nick) ? (this.raiseCountThisStreet || 0) : (this._legacyRaiseCount || 0);
                 const _threeBetPlus = _rc >= 2;
-                const rt = preflopRangeTier(code, p.position || '', facingRaise, { numActive: _numActive, threeBetPlus: _threeBetPlus });
                 const isBB = p.role && p.role.includes('BB');
+                // ⚔️ [헤즈업 — 고수 봇] 둘만 남은 테이블에서는 6인 기준표가 너무 좁다.
+                //    예전엔 헤즈업 BB가 버튼 오픈의 74%를 접어서, 사람이 버튼마다 최소 레이즈만 해도 이득이었다
+                //    (2bb 걸어 1.5bb 먹기는 57%만 접혀도 본전). 버튼도 42%만 열어 블라인드를 그냥 내줬다.
+                //    → BB는 약 65%로 지키고, 버튼은 약 76%를 연다 (학습 조언·문제와 같은 기준).
+                const _huBot = persona.proStrategy && this.playerOrder.length === 2;
+                let rt = preflopRangeTier(code, p.position || '', facingRaise,
+                    { numActive: _numActive, threeBetPlus: _threeBetPlus, headsUp: _huBot, closing: _huBot && !!isBB });
+                if (_huBot && !facingRaise && rt.tier !== 'raise' && rt.score > Quiz.HU_OPEN_SCORE) rt = { tier: 'raise', label: '오픈 레이즈', score: rt.score };
 
                 // 🤖 [반복 올인 대응 — 초보·중수] 이 방에서 올인을 남발한 사람의 올인은 "그 사람이 실제로 미는 빈도"로 받는다.
                 //    (고수는 아래 숏스택 로직이 같은 읽기를 쓴다.) 예전엔 난이도 낮은 봇이 올인에 거의 다 접어서
@@ -2363,6 +2375,7 @@ class GameRoom {
                 this.players[nick].isMucked = false;
                 this.players[nick]._revealCards = null; // 🃏 폴드 패 공개 선택 초기화
                 this.players[nick]._tbUsed = false;     // ⏳ 타임뱅크는 핸드마다 1회
+                if (this._learnFixedStack) this.players[nick].chips = this.startingChips;   // 📏 숏스택 연습: 매 핸드 같은 깊이로
                 this.players[nick].hasActed = false;
                 this.players[nick].role = '';
                 this.players[nick]._trapStreet = -1; // 🪤 체크레이즈 트랩 플래그 초기화 (스트리트 번호 재사용 오발동 방지)
@@ -3518,6 +3531,7 @@ class GameRoom {
         // 🎯 [상황별 조언] 예전엔 승률 하나로만 갈라서 헤즈업·4명·숏스택에서 전부 같은 말을 했다.
         //    상대 수 · 유효 스택(bb) · 포지션 · SPR 을 같이 본다. notes 는 화면에 "지금 상황" 꼬리표로 나간다.
         let notes = [];
+        let sizeHint = '', rawEquity = null;
         const _bbNow = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
         const _liveOpp = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded);
         const _stk = n => this.players[n].chips + (this.players[n].currentBet || 0);
@@ -3536,12 +3550,19 @@ class GameRoom {
             const facingRaise = toCall > 0 && this.currentHighestBet > bb;
             const isBB = p.role && p.role.includes('BB');
             // 🎯 디펜스 폭: 살아있는 인원(나 포함) + 리레이즈 여부 — 봇 botDecide와 동일 컨텍스트
-            const _ctx = { numActive: opponents + 1, threeBetPlus: (this.raiseCountThisStreet || 0) >= 2 };
+            // 누가 열었나(마지막으로 레이즈한 사람의 자리) · 내가 BB 인가 · 헤즈업 테이블인가 — 학습용 방어 기준에 쓴다
+            const _opn = this.playerOrder.find(n => n !== nick && this.players[n] && !this.players[n].isFolded
+                && (this.players[n].currentBet || 0) === this.currentHighestBet && this.currentHighestBet > bb) || null;
+            const _opnPos = _opn ? (this.players[_opn].position || '') : '';
+            const _huTable = this.playerOrder.length === 2;
+            const _ctx = { numActive: opponents + 1, threeBetPlus: (this.raiseCountThisStreet || 0) >= 2,
+                headsUp: _huTable, openerPos: _opnPos, closing: !!isBB };
             const rt = preflopRangeTier(code, p.position || '', facingRaise, _ctx);
+            const _vs = facingRaise ? (_huTable ? ' (헤즈업 — 넓게 방어)' : (_opnPos ? ` (${_opnPos} 오픈 상대${isBB ? ' · BB라 넓게' : ''})` : '')) : '';
             posInfo = { position: p.position || '-', code, rangeScore: rt.score, rangeLabel: rt.label, threshold: openThreshold(p.position || '') };
 
             const canCheck = (toCall === 0); // BB 무료 체크 또는 림프 팟
-            notes.push(opponents === 1 ? '헤즈업' : `${opponents + 1}명`);
+            notes.push(this.playerOrder.length === 2 ? '헤즈업 테이블' : (opponents === 1 ? '상대 1명 남음' : `${opponents + 1}명 남음`));
             notes.push(`유효 스택 ${Math.round(effBB)}bb`);
             // ── 스택이 짧거나 올인을 마주한 상황은 일반 오픈/3벳 표가 아니라 푸시/폴드 기준으로 본다 (봇과 같은 표) ──
             let _special = false;
@@ -3612,8 +3633,15 @@ class GameRoom {
                     reason = `${Math.round(effBB)}bb — 작게 3벳하면 스택의 3분의 1이 들어가 어차피 못 접습니데이. ${_aggrP.position || '상대'} 오픈 상대로 리쉬브 범위는 상위 약 ${_pc(r)}%, ${code}는 상위 ${_pc(_pctl)}% → 올인이 기준.`;
                 }
             }
+            // 📊 레인지 표가 지금 상황에 맞는 표를 그리도록 알려준다 (헤즈업 / 숏스택 푸시 / 6인)
+            posInfo.chart = { players: this.playerOrder.length, headsUp: _huTable, effBB: Math.round(effBB), push: null };
+            if (effBB <= 12 && !facingRaise) {
+                const _bh = Math.max(1, _liveOpp.filter(n => !this.players[n].hasActed && !this.players[n].isAllIn).length);
+                posInfo.chart.push = { range: ShortStack.pushPct(effBB, _bh), behind: _bh };
+            }
             if (_special) {
                 // 위에서 결정됨
+                if (bestAction === 'raise') sizeHint = '올인';
             } else if (!facingRaise) {
                 // 미오픈/오픈 기회 (아직 레이즈 없음) — 정석은 raise-or-fold, 림프 지양 (BB는 공짜 체크 가능)
                 const late = (p.position === 'BTN' || p.position === 'CO' || p.position === 'SB');
@@ -3644,16 +3672,35 @@ class GameRoom {
                 // 레이즈에 직면 — 3벳/콜/폴드
                 if (rt.tier === 'raise') {
                     mix = { fold: 5, call: 35, raise: 60 };
-                    bestAction = 'raise'; reason = `강한 핸드(${code}) — 3벳으로 밸류를 키우이소.`;
+                    bestAction = 'raise'; reason = `강한 핸드(${code}) — 3벳으로 밸류를 키우이소.${_vs}`;
                 } else if (rt.tier === 'call') {
                     mix = { fold: 35, call: 60, raise: 5 };
-                    bestAction = 'call'; reason = `콜 가능한 핸드(${code}, 점수 ${rt.score}) — 콜로 플랍을 보이소.`;
+                    bestAction = 'call'; reason = `콜 가능한 핸드(${code}, 점수 ${rt.score}) — 콜로 플랍을 보이소.${_vs}`;
                 } else {
                     mix = { fold: 88, call: 12, raise: 0 };
-                    bestAction = 'fold'; reason = `레이즈에 약한 핸드(${code}) — 폴드가 정석입니데이.`;
+                    bestAction = 'fold'; reason = `레이즈에 약한 핸드(${code}) — 폴드가 정석입니데이.${_vs}`;
+                }
+            }
+            if (!_special && (bestAction === 'raise' || (mix.raise || 0) >= 30)) {
+                if (!facingRaise) sizeHint = GtoAdvice.openSize(effBB, _huTable);
+                else {
+                    const callers = _liveOpp.filter(n => n !== _opn && (this.players[n].currentBet || 0) === this.currentHighestBet).length;
+                    const inPos = !(p.role && (p.role.includes('SB') || p.role.includes('BB'))) || _huTable && p.role.includes('D');
+                    sizeHint = GtoAdvice.threeBetSize(this.currentHighestBet, callers, inPos, bb, _stk(nick)).text;
                 }
             }
         } else {
+            // 🎯 [벳 범위 반영] 벳을 받았으면 "아무 패 상대 승률"이 아니라 "벳하는 범위 상대 승률"로 본다.
+            //    몬테카를로 승률은 상대가 아무 패나 들고 있다고 가정해서, 큰 벳을 받은 상황에서 과하게 낙관적이었다
+            //    (실측: 승률 66%라며 콜을 권했지만 벳한 범위 상대로는 한참 낮은 경우). 봇이 쓰는 것과 같은 계산이다.
+            if (toCall > 0) {
+                try {
+                    const _bf = toCall / Math.max(_bbNow, potBefore - toCall);
+                    const _ag = HandRead.summarizeVillain(this.actionLog, this.lastAggressorBefore(this.gameStage + 1) || '').aggroStreets || 1;
+                    const share = this.equityVsBettingRange(nick, _bf, _ag);
+                    if (share != null) { rawEquity = equity; equity = RangeEq.blendWithDraws(share, equity, this.gameStage); }
+                } catch (e) {}
+            }
             // 포스트플랍 — 상대 수·포지션·SPR 을 반영한 조언 (lib/gtoadvice.js)
             const pa = GtoAdvice.postflopAdvice({
                 equity, potOdds, toCall, opponents, inPosition: this.isInPosition(nick),
@@ -3661,6 +3708,14 @@ class GameRoom {
             });
             mix = pa.mix; bestAction = pa.bestAction; reason = pa.reason; notes = pa.notes;
             tier = pa.tier; tierLabel = pa.tierLabel; tierColor = pa.tierColor;   // 등급도 "한 명 상대 환산"으로
+            if (rawEquity != null) notes.push('상대 벳 범위 반영');
+            const _tx = this.analyzeBoardTexture() || {};
+            if ((mix.bet || 0) > 0 && bestAction === 'bet') {
+                sizeHint = GtoAdvice.betSize({ opponents, wet: !!_tx.wet, dry: !!_tx.dry, spr: _spr, pot: potBefore }).text;
+            } else if (bestAction === 'raise') {
+                const to = Math.min(p.currentBet + p.chips, this.currentHighestBet * 3);
+                sizeHint = (to >= p.currentBet + p.chips || _spr <= 1.5) ? '올인' : `약 ${to.toLocaleString()} (상대 벳의 3배)`;
+            }
         }
 
         return {
@@ -3670,7 +3725,8 @@ class GameRoom {
             street, opponents, toCall,
             potSize: potBefore,
             mix, bestAction, reason,
-            notes,
+            notes, sizeHint,
+            rawEquity: rawEquity == null ? null : Math.round(rawEquity * 100),
             posInfo,
             handStr: p.hand.join(' ')
         };
@@ -5188,9 +5244,13 @@ io.on('connection', (socket) => {
         const roomId = `🎓학습_${socket.nickname}`;
         // 기존 학습방 있으면 정리
         if (rooms.has(roomId)) { try { destroyRoom(roomId); } catch (e) {} }
-        const settings = { startingChips: 10000, blindUpInterval: 999999, turnTimeLimit: 60, mode: 'cash', cashBlind: 100 };
+        // 📏 스택 깊이 선택 (100 / 40 / 20 / 10bb). 100bb 가 아니면 매 핸드 그 깊이로 다시 채운다 —
+        //    숏스택 판단(푸시/폴드·리쉬브)은 "그 깊이의 핸드"를 반복해야 익는다.
+        const stackBB = [10, 20, 40, 100].includes(data && data.stackBB) ? data.stackBB : 100;
+        const settings = { startingChips: stackBB * 100, blindUpInterval: 999999, turnTimeLimit: 60, mode: 'cash', cashBlind: 100 };
         const room = new GameRoom(roomId, settings);
         room._learnMode = true; // 🎓 학습 모드 플래그
+        room._learnFixedStack = stackBB < 100;
         room._mttFreeChips = true; // 자유 칩 — 뱅크롤에 영향 없음 (순수 연습)
         rooms.set(roomId, room);
 
