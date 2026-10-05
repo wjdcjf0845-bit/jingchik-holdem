@@ -4175,6 +4175,34 @@
         .skd b { font-size: 13px; color: #fff; } .skd span { font-size: 12px; color: #c9d2e6; word-break: keep-all; } .skd span em { font-style: normal; color: #ffb9ae; font-weight: 800; }
         .skd small { font-size: 10.5px; color: var(--txt-dim); }
         @media (max-width: 520px) { .skb-extra { flex-basis: 70px; } .skb-extra svg { width: 70px; } .skb-name { flex-basis: 24%; } }
+    
+        /* 🔎 실력 점수의 근거 */
+        .skbs .skb[data-nick] { cursor: pointer; } .skbs .skb[data-nick]:hover .skb-name { text-decoration: underline; }
+        .sk-tap { font-size: 11.5px; color: var(--txt-dim); margin-top: 7px; line-height: 1.6; word-break: keep-all; }
+        .sk-tap button, .sk-back { font: inherit; font-size: 12px; font-weight: 800; color: #8fd3ff; background: rgba(143,211,255,0.10); border: 1px solid rgba(143,211,255,0.45); border-radius: 999px; padding: 4px 12px; cursor: pointer; margin-left: 4px; }
+        .sk-back { margin: 0 0 8px; }
+        .skx-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+        .skx-head b { font-size: 18px; color: #fff; } .skx-head span { font-family: var(--font-num); font-size: 34px; font-weight: 700; } .skx-head small { font-size: 13px; margin-left: 2px; }
+        .skx-steps { background: rgba(0,0,0,0.28); border-radius: 12px; padding: 4px 12px; }
+        .skx-steps > div { display: grid; grid-template-columns: 1fr auto; align-items: baseline; column-gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.07); }
+        .skx-steps > div:last-child { border-bottom: 0; }
+        .skx-steps span { font-size: 13px; font-weight: 800; color: #dfe6f5; word-break: keep-all; }
+        .skx-steps b { font-family: var(--font-num); font-size: 20px; color: #8fd3ff; } .skx-steps b.neg { color: #ff8a7d; }
+        .skx-steps small { grid-column: 1 / -1; font-size: 11px; color: var(--txt-dim); line-height: 1.5; word-break: keep-all; }
+        .skx-steps .tot span { color: #fff; } .skx-steps .tot b { font-size: 26px; color: #ffe27a; }
+        .skx-dist { display: flex; height: 22px; border-radius: 8px; overflow: hidden; background: rgba(255,255,255,0.07); }
+        .skx-dist i { font-style: normal; font-size: 11px; font-weight: 900; color: #06121f; display: flex; align-items: center; justify-content: center; min-width: 3px; }
+        .skx-dist .best, .skx-legend .best { background: #4be3a0; } .skx-dist .ok, .skx-legend .ok { background: #8fd3ff; }
+        .skx-dist .weak, .skx-legend .weak { background: #ffd97a; } .skx-dist .bad, .skx-legend .bad { background: #ff8a7d; }
+        .skx-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; margin-top: 6px; font-size: 11px; color: #c3cbe0; }
+        .skx-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; }
+        .skr { display: flex; align-items: flex-start; gap: 9px; padding: 8px 9px; margin-bottom: 5px; border-radius: 10px; background: rgba(0,0,0,0.26); }
+        .skr-sc { flex: 0 0 34px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-family: var(--font-num); font-size: 16px; font-weight: 700; color: #06121f; }
+        .skr-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+        .skr-cards .mini-card { min-width: 21px; height: 28px; font-size: 11px; margin-right: 2px; } .skr-cards em { font-style: normal; color: #55607a; margin: 0 5px 0 3px; }
+        .skr-line { font-size: 12px; color: #dfe6f5; line-height: 1.45; word-break: keep-all; } .skr-line b { color: #fff; } .skr-line b.g { color: #4be3a0; } .skr-line u { color: #4be3a0; text-decoration: none; font-weight: 800; }
+        .skr-why { font-size: 11px; color: var(--txt-dim); line-height: 1.5; word-break: keep-all; }
+        .skr-w { flex: 0 0 auto; font-family: var(--font-num); font-size: 11px; color: #9aa6c2; padding-top: 7px; }
     </style>
 </head>
 <body>
@@ -7495,7 +7523,7 @@
         return rows.map(u => {
             if (!u.low) rank++;
             const medal = u.low ? '–' : (rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank);
-            return `<div class="skb${u.me ? ' me' : ''}${u.low ? ' low' : ''}">
+            return `<div class="skb${u.me ? ' me' : ''}${u.low ? ' low' : ''}"${withExtra ? ` data-nick="${esc(u.nick)}" onclick="event.stopPropagation(); socket.emit('getSkillDetail', { nick: this.dataset.nick })" title="점수 근거 보기"` : ''}>
                 <span class="skb-rank">${medal}</span>
                 <span class="skb-name">${esc(u.nick)}${u.me ? '<em>나</em>' : ''}</span>
                 <span class="skb-track"><i style="width:${skBar(u.gto)}%; background:${skColor(u.gto)};"></i></span>
@@ -7530,10 +7558,61 @@
             const detail = rows.map(u => `<div class="skd${u.me ? ' me' : ''}"><b>${esc(u.nick)}</b><span>실력 <b style="color:#8fd3ff;">${u.gto}</b> = 권장과 일치 ${u.raw}${u.penalty ? ` − 실수 감점 ${u.penalty}` : ''}</span><span>${u.top ? `가장 큰 약점: <em>${esc(u.top.name)}</em> (${u.top.n}번, 약 −${u.top.bb}bb)` : '기록된 큰 실수 없음'}</span><small>${u.hands.toLocaleString()}판 · 결정 ${u.decisions.toLocaleString()}번${u.vpip != null ? ` · 참여 ${u.vpip}% / 레이즈 ${u.pfr}%` : ''}${u.low ? ' · 표본 부족(순위 제외)' : ''}</small></div>`).join('');
             list.innerHTML = `<div class="sr-section-title">🏅 실력 점수 순위 <small style="font-weight:400; color:var(--txt-dim);">(오른쪽 선 = 최근 2주 흐름)</small></div>
                 <div class="skbs">${skBars(rows, true)}</div>
+                <div class="sk-tap">👆 이름을 누르면 그 점수가 어떻게 나왔는지 근거를 볼 수 있습니다.${rows.some(u => u.me) ? ` <button type="button" onclick="socket.emit('getSkillDetail', {})">내 점수 근거 보기</button>` : ''}</div>
                 ${grid}
                 <div class="sr-section-title" style="margin-top:14px;">👤 한 줄 요약</div>${detail}
                 <div class="bl-foot" style="margin-top:8px;">실력 점수 = 권장 플레이와 일치한 정도(100점 만점, 뻔한 폴드는 제외하고 큰 판일수록 무겁게) − 큰 실수로 잃은 칩에 따른 감점(최대 30점). ▲▼는 최근 7일이 그 전 3주보다 오른 정도입니다.</div>`;
         }
+        document.getElementById('skill-modal').style.display = 'flex';
+    });
+    // 🔎 점수의 근거 — ① 계산 과정 ② 결정 분포 ③ 스트리트별 ④ 실수 유형 ⑤ (본인만) 최근 결정 한 건 한 건의 점수
+    socket.on('skillDetail', d => {
+        const list = document.getElementById('skill-list');
+        if (!d) return;
+        const back = `<button type="button" class="sk-back" onclick="socket.emit('getSkillBoard')">◀ 순위로</button>`;
+        if (d.empty) { list.innerHTML = back + '<div class="bl-none">아직 점수를 매길 기록이 없습니다.</div>'; document.getElementById('skill-modal').style.display = 'flex'; return; }
+        const B = d.buckets, tot = Math.max(1, B.best + B.ok + B.weak + B.bad);
+        const seg = (n, cls, label) => n ? `<i class="${cls}" style="flex:${n} 1 0;" title="${label} ${n}번">${Math.round(n / tot * 100) >= 8 ? Math.round(n / tot * 100) + '%' : ''}</i>` : '';
+        const stKo = { preflop: '프리플랍', flop: '플랍', turn: '턴', river: '리버' };
+        const actKo = { fold: '폴드', check: '체크', call: '콜', raise: '레이즈', allin: '올인', bet: '벳' };
+        const streets = d.streets.map(x => `<div class="skb"><span class="skb-name" style="flex-basis:64px;">${stKo[x.st]}</span>
+            <span class="skb-track">${x.score != null ? `<i style="width:${skBar(x.score)}%; background:${skColor(x.score)};"></i>` : ''}</span>
+            <span class="skb-score" style="color:${x.score != null ? skColor(x.score) : '#8d98b3'};">${x.score != null ? x.score : '–'}</span><span class="skb-trend" style="flex-basis:56px; color:var(--txt-dim);">${x.n}번</span></div>`).join('');
+        const leaks = d.leaks.length ? d.leaks.map(l => `<div class="bl-leak"><span>${esc(l.name)}</span><b>${l.n}번</b><i>약 −${l.bb}bb</i></div>`).join('') : '<div class="bl-none">기록된 큰 실수가 없습니다.</div>';
+        const when = t => { const x = new Date(t), p = n => String(n).padStart(2, '0'); return `${x.getMonth() + 1}/${x.getDate()} ${p(x.getHours())}:${p(x.getMinutes())}`; };
+        const recent = d.recent == null ? `<div class="bl-none">결정 한 건 한 건의 기록에는 그 사람의 패가 들어 있어서 본인만 볼 수 있습니다.</div>`
+            : (d.recent.length ? d.recent.map(r => {
+                const did = (actKo[r.act] || r.act) + (r.amt > 0 && r.act !== 'fold' && r.act !== 'check' ? ` ${r.amt}bb` : '');
+                const same = r.sc >= 95;
+                return `<div class="skr">
+                    <span class="skr-sc" style="background:${skColor(r.sc)};">${r.sc}</span>
+                    <span class="skr-main">
+                        <span class="skr-cards">${(r.h || []).map(miniCard).join('')}${(r.b || []).length ? `<em>|</em>${r.b.map(miniCard).join('')}` : ''}</span>
+                        <span class="skr-line">${stKo[r.st] || ''}${r.pos ? ' · ' + esc(r.pos) : ''} · 팟 ${r.pot}bb${r.call > 0 ? ` · 콜 ${r.call}bb` : ''} · <b>${esc(did)}</b>${same ? ' <u>= 권장</u>' : ` → 권장은 <b class="g">${actKo[r.best] || r.best}</b>`}</span>
+                        <span class="skr-why">${same ? `권장 액션과 같습니다 (권장 빈도 ${r.bestPct}%).` : `내 선택의 권장 빈도 ${r.pct}% · 권장 액션 ${r.bestPct}% → ${r.sc}점.`} ${esc(r.why || '')}</span>
+                    </span>
+                    <span class="skr-w" title="팟이 클수록 점수에 더 크게 반영됩니다">×${r.w}</span>
+                </div>`;
+            }).join('') : '<div class="bl-none">아직 기록된 결정이 없습니다. 몇 판 치고 나면 여기에 쌓입니다.</div>');
+        list.innerHTML = `${back}
+            <div class="skx-head"><b>${esc(d.nick)}</b><span style="color:${skColor(d.score)};">${d.score}<small>점</small></span></div>
+            <div class="sr-section-title">① 점수가 나온 과정</div>
+            <div class="skx-steps">
+                <div><span>권장 플레이와 일치한 정도</span><b>${d.raw}</b><small>결정 ${d.decisions.toLocaleString()}번의 평균 (큰 판일수록 무겁게)${d.easy ? ` · 쓰레기 패를 접은 뻔한 폴드 ${d.easy.toLocaleString()}번은 제외` : ''}</small></div>
+                <div><span>큰 실수로 잃은 칩에 따른 감점</span><b class="neg">−${d.penalty}</b><small>결정 100번당 약 ${d.loss100}bb 손실 → ${d.penalty}점 (25bb 6점 · 75bb 12점 · 175bb 18점 · 375bb 24점 · 최대 30점)</small></div>
+                <div class="tot"><span>실력 점수</span><b>${d.score}</b><small>${d.raw} − ${d.penalty} · 최근 30일 ${d.hands.toLocaleString()}판</small></div>
+            </div>
+            <div class="sr-section-title" style="margin-top:14px;">② 결정 ${tot.toLocaleString()}번은 이렇게 나뉩니다${(B.best + B.ok + B.weak + B.bad) < d.decisions ? ` <small style="font-weight:400; color:var(--txt-dim);">(②③은 이 화면을 넣은 뒤의 기록만)</small>` : ''}</div>
+            <div class="skx-dist">${seg(B.best, 'best', '권장대로')}${seg(B.ok, 'ok', '괜찮음')}${seg(B.weak, 'weak', '아쉬움')}${seg(B.bad, 'bad', '실수')}</div>
+            <div class="skx-legend"><span><i class="best"></i>권장대로 95점 · ${B.best}번</span><span><i class="ok"></i>괜찮음 60~94점 · ${B.ok}번</span><span><i class="weak"></i>아쉬움 30~59점 · ${B.weak}번</span><span><i class="bad"></i>실수 30점 미만 · ${B.bad}번</span></div>
+            <div class="sr-section-title" style="margin-top:14px;">③ 스트리트별 일치 점수</div>
+            <div class="skbs">${streets}</div>
+            <div class="sr-section-title" style="margin-top:14px;">④ 감점의 근거 — 큰 실수 유형</div>
+            <div class="bl-leaks">${leaks}</div>
+            <div class="sr-section-title" style="margin-top:14px;">⑤ 최근 결정 기록 ${d.recent ? `<small style="font-weight:400; color:var(--txt-dim);">(최근 ${d.recent.length}건 · 왼쪽 숫자가 그 결정의 점수)</small>` : ''}</div>
+            ${recent}
+            <div class="bl-foot" style="margin-top:8px;"><b>한 결정의 점수</b>: 권장 액션을 고르면 95점. 다른 액션은 "그 액션의 권장 빈도 ÷ 권장 액션의 빈도"가 낮을수록 깎여 15~90점. 권장은 그 순간의 승률·팟오즈·포지션·인원·스택으로 계산한 것으로, GTO 학습 모드에서 보여 주는 조언과 같은 기준입니다. ×숫자는 그 결정이 평균에 반영되는 무게(팟 크기에 따라 1~6배)입니다.${d.me ? ' 손실이 컸던 판은 📊 리포트의 "가장 치명적이었던 플레이"에서 더 자세히 볼 수 있습니다.' : ''}</div>`;
+        list.scrollTop = 0;
         document.getElementById('skill-modal').style.display = 'flex';
     });
     // 로비에 들어올 때와 1분마다 순위 카드를 갱신한다

@@ -352,7 +352,8 @@ const MockDB = {
             if (!u || !u.nickname || u.nickname.startsWith('🤖') || u.statsEpoch === this.STATS_EPOCH) return;
             const totals = {};
             this.STAT_FIELDS.forEach(k => { if (u[k]) totals[k] = u[k]; u[k] = 0; });
-            Object.keys(u).filter(k => k.startsWith('lk')).forEach(k => { totals[k] = u[k]; delete u[k]; });
+            Object.keys(u).filter(k => k.startsWith('lk') || k.startsWith('gq')).forEach(k => { totals[k] = u[k]; delete u[k]; });
+            delete u.recentDec;
             const had = Object.keys(totals).length || (u.dailyLog && Object.keys(u.dailyLog).length);
             if (had) {
                 u.statsArchive = (Array.isArray(u.statsArchive) ? u.statsArchive : []).slice(-1);
@@ -590,7 +591,7 @@ const MockDB = {
             seasonPoints: u.seasonPoints || 0,
             seatSum: u.seatSum || 0, seatCnt: u.seatCnt || 0,
             // 실수 유형별 누적 (lkN_*, lkB_*)
-            ...Object.fromEntries(Object.keys(u).filter(k => k.startsWith('lk')).map(k => [k, u[k] || 0]))
+            ...Object.fromEntries(Object.keys(u).filter(k => k.startsWith('lk') || k.startsWith('gq')).map(k => [k, u[k] || 0]))
         };
     },
     // 📅 [일/주/월 리포트] 지정 범위(일수)의 dailyLog를 합산
@@ -605,7 +606,7 @@ const MockDB = {
             if (dt >= cutoff) {
                 const day = log[key];
                 Object.keys(sum).forEach(f => { sum[f] += (day[f] || 0); });
-                Object.keys(day).forEach(f => { if (f.startsWith('lk') || f === 'seatSum' || f === 'seatCnt') sum[f] = (sum[f] || 0) + (day[f] || 0); });
+                Object.keys(day).forEach(f => { if (f.startsWith('lk') || f.startsWith('gq') || f === 'seatSum' || f === 'seatCnt') sum[f] = (sum[f] || 0) + (day[f] || 0); });
             }
         });
         return sum;
@@ -753,6 +754,7 @@ const MockDB = {
             if (ev.faceBet) L.faceBet = (L.faceBet||0)+1;
             if (ev.foldToBet) L.foldToBet = (L.foldToBet||0)+1;
             if (typeof ev.gtoScore === 'number') { const w = ev.gtoWeight || 1; L.gtoScoreSum = (L.gtoScoreSum||0)+ev.gtoScore*w; L.gtoW = (L.gtoW||0)+w; L.gtoScoreCount = (L.gtoScoreCount||0)+1; }
+            this._gqFields(ev).forEach(([k, v]) => { L[k] = Math.round(((L[k] || 0) + v) * 100) / 100; });
             this.save();
             return;
         }
@@ -767,6 +769,7 @@ const MockDB = {
         if (ev.faceBet) { u.faceBet++; daily.faceBet = 1; }
         if (ev.foldToBet) { u.foldToBet++; daily.foldToBet = 1; }
         if (typeof ev.gtoScore === 'number') { const w = ev.gtoWeight || 1; u.gtoScoreSum += ev.gtoScore * w; u.gtoW = (u.gtoW || 0) + w; u.gtoScoreCount++; daily.gtoScoreSum = ev.gtoScore * w; daily.gtoW = w; daily.gtoScoreCount = 1; }
+        this._gqFields(ev).forEach(([k, v]) => { u[k] = Math.round(((u[k] || 0) + v) * 100) / 100; daily[k] = v; });
         this._bumpDaily(u, daily);
         this.save();
     },
@@ -787,6 +790,23 @@ const MockDB = {
         }
         this.save();
         return rec;
+    },
+    // 🔎 점수의 근거로 보여줄 세부 집계 — 스트리트별(가중 합·가중치·건수), 점수 구간별 건수, 점수에서 뺀 뻔한 폴드 수
+    _gqFields(ev) {
+        const out = [];
+        if (ev.gtoEasy) out.push(['gqEasy', 1]);
+        if (typeof ev.gtoScore !== 'number') return out;
+        const w = ev.gtoWeight || 1, st = ev.gtoStreet || 'preflop';
+        out.push(['gqS_' + st, ev.gtoScore * w], ['gqW_' + st, w], ['gqC_' + st, 1]);
+        out.push(['gqN_' + (ev.gtoScore >= 95 ? 'best' : ev.gtoScore >= 60 ? 'ok' : ev.gtoScore >= 30 ? 'weak' : 'bad'), 1]);
+        return out;
+    },
+    // 최근 결정 기록(계정당 40건) — "이 결정이 몇 점이었나"를 본인이 직접 확인할 수 있게
+    recordDecision(nickname, rec, isLearn) {
+        const u = this.users.get(nickname);
+        if (!u || nickname.startsWith('🤖')) return;
+        const box = isLearn ? (u.learnStats || (u.learnStats = {})) : u;
+        box.recentDec = (Array.isArray(box.recentDec) ? box.recentDec : []).concat([rec]).slice(-40);
     },
     async recordShowdownStat(nickname, won, isLearn) {
         if (typeof nickname !== 'string' || nickname.startsWith('🤖')) return;
@@ -3052,7 +3072,7 @@ class GameRoom {
             chips: p.chips, hand: p.hand.slice(), board: this.communityCards.slice(),
             opp: this.playerOrder.filter(n => n !== nick && !this.players[n].isFolded).length
         } : null;
-        if (_blPre) this._statAdv = { nick, advice: _learnAdvice, potBB: _blPre.pot / this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb };
+        if (_blPre) this._statAdv = { nick, advice: _learnAdvice, pre: _blPre, potBB: _blPre.pot / this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb };
 
         let finalAction = type;
 
@@ -3764,10 +3784,24 @@ class GameRoom {
             const sa = this._statAdv;
             const adv = sa && sa.nick === nick ? sa.advice : null;
             const easyFold = !!(adv && adv.street === 'preflop' && type === 'fold' && adv.bestAction === 'fold' && (adv.mix.fold || 0) >= 85);
-            if (!easyFold) {
+            if (easyFold) ev.gtoEasy = true;
+            else {
                 ev.gtoScore = gto;
                 const potBB = sa && sa.nick === nick ? sa.potBB : 1;
                 ev.gtoWeight = Math.round(Math.max(1, Math.min(6, Math.sqrt(Math.max(1, potBB)))) * 100) / 100;
+                ev.gtoStreet = adv ? adv.street : 'preflop';
+                // 🔎 이 결정 한 건을 기록해 둔다(본인만 볼 수 있다)
+                if (adv && sa.pre) {
+                    const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+                    const r1 = x => Math.round(x / bb * 10) / 10;
+                    const key = GtoAdvice.actionKey(adv, type);
+                    MockDB.recordDecision(nick, {
+                        t: Date.now(), st: adv.street, h: sa.pre.hand, b: sa.pre.board, pos: p.position || '',
+                        pot: r1(sa.pre.pot), call: r1(Math.max(0, toCall)), act: type, amt: r1(p.currentBet || 0),
+                        best: adv.bestAction, bestPct: adv.mix[adv.bestAction] || 0, pct: adv.mix[key] || 0,
+                        sc: gto, w: ev.gtoWeight, why: String(adv.reason || '').slice(0, 160)
+                    }, !!this._learnMode);
+                }
             }
         }
 
@@ -5482,6 +5516,27 @@ io.on('connection', (socket) => {
         rows.sort((x, y) => (x.low ? 1 : 0) - (y.low ? 1 : 0) || y.gto - x.gto || x.loss100 - y.loss100);
         socket.emit('skillBoard', { rows: rows.slice(0, 40), days: 30, mini: !!(req && req.mini),
             kinds: Blunder.KIND_KEYS.map(k => ({ id: k, name: Blunder.KINDS[k].name })) });
+    });
+
+    // 🔎 [실력 점수의 근거] 점수가 어떻게 나왔는지 — 누구의 것이든 집계는 볼 수 있고, 패가 드러나는 결정 기록은 본인 것만 준다
+    socket.on('getSkillDetail', (req) => {
+        if (!socket.nickname) return;
+        const nick = req && typeof req.nick === 'string' ? req.nick : socket.nickname;
+        const u = MockDB.users.get(nick);
+        if (!u || nick.startsWith('🤖')) return;
+        const a = MockDB.aggregateRange(u, 30);
+        const si = skillIndex(a);
+        if (!si) { socket.emit('skillDetail', { nick, empty: true }); return; }
+        const me = nick === socket.nickname;
+        const streets = ['preflop', 'flop', 'turn', 'river'].map(st => ({ st, n: a['gqC_' + st] || 0, score: (a['gqW_' + st] > 0) ? Math.round(a['gqS_' + st] / a['gqW_' + st]) : null }));
+        const leaks = Blunder.KIND_KEYS.map(k => ({ name: Blunder.KINDS[k].name, tip: Blunder.KINDS[k].tip, n: a['lkN_' + k] || 0, bb: Math.round((a['lkB_' + k] || 0) * 10) / 10 })).filter(l => l.n > 0).sort((x, y) => y.bb - x.bb);
+        socket.emit('skillDetail', {
+            nick, me, hands: a.handsPlayed || 0, decisions: a.gtoScoreCount || 0, easy: a.gqEasy || 0,
+            score: si.score, raw: si.raw, penalty: si.penalty, loss100: si.loss100,
+            buckets: { best: a.gqN_best || 0, ok: a.gqN_ok || 0, weak: a.gqN_weak || 0, bad: a.gqN_bad || 0 },
+            streets, leaks,
+            recent: me ? (u.recentDec || []).slice(-30).reverse().map(r => Object.assign({}, r, { why: Blunder.std(r.why) })) : null
+        });
     });
 
     // 🍀 [증강 런] 내 기록·순위·진행 중인 런
