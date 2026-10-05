@@ -4282,6 +4282,21 @@ setInterval(() => { if (capacity.queue.length) drainCapacity(); }, 5000);   // �
 // 📋 [세션 리포트] 닉네임 → 이번 세션 시작 시점의 지표 스냅샷 (재접속해도 유지)
 const sessionSnapshots = new Map();
 // 🎯 실력 점수 = 가중 평균. (가중치가 없는 옛 기록은 단순 평균)
+// 🏅 실력 점수(하나의 순위용) = GTO 일치 점수 − 실수 감점.
+//    일치 점수만으로는 "전부 콜"(57점, 100판당 −1879bb)과 "전부 폴드"(55점, −22bb)가 구분되지 않았다(실측).
+//    큰 실수의 손실 어림값(결정 100번당 bb)을 로그로 눌러 최대 30점까지 깎는다:
+//      손실 0 → 0점 · 25bb → 6점 · 75bb → 12점 · 175bb → 18점 · 375bb → 24점 · 775bb 이상 → 30점
+//    실측 결과(6인): 조언대로 95 · 평범한 타이트 60 · 전부 폴드 49 · 전부 콜 34 · 무작위 30 · 전부 올인 0 · 반대로 0 — 수익 순서와 같다.
+function skillIndex(obj) {
+    const cnt = obj.gtoScoreCount || 0;
+    const raw = gtoAvg(obj.gtoScoreSum || 0, obj.gtoW || 0, cnt);
+    if (raw === null) return null;
+    let lossBB = 0;
+    Blunder.KIND_KEYS.forEach(k => { lossBB += obj['lkB_' + k] || 0; });
+    const loss100 = cnt > 0 ? lossBB / cnt * 100 : 0;
+    const penalty = Math.min(30, Math.round(6 * Math.log2(1 + loss100 / 25)));
+    return { raw, loss100: Math.round(loss100 * 10) / 10, penalty, score: Math.max(0, raw - penalty) };
+}
 function gtoAvg(sum, w, cnt) { return w > 0 ? Math.round(sum / w) : (cnt > 0 ? Math.round(sum / cnt) : null); }
 
 // 🎓 [코칭] 세션 지표를 포커 이론 기준으로 진단 → 약점 + 구체적 조언 생성
@@ -5444,15 +5459,16 @@ io.on('connection', (socket) => {
             const a30 = MockDB.aggregateRange(u, 30);
             if ((a30.handsPlayed || 0) < 10 || !(a30.gtoScoreCount > 0)) return;
             const a7 = MockDB.aggregateRange(u, 7);
-            const prevCnt = a30.gtoScoreCount - a7.gtoScoreCount, prevSum = a30.gtoScoreSum - a7.gtoScoreSum, prevW = (a30.gtoW || 0) - (a7.gtoW || 0);
+            const prev = {}; Object.keys(a30).forEach(k => { prev[k] = (a30[k] || 0) - (a7[k] || 0); });
+            const si = skillIndex(a30), si7 = skillIndex(a7), siPrev = skillIndex(prev);
             let lossBB = 0, top = null;
             Blunder.KIND_KEYS.forEach(k => { const bb = a30['lkB_' + k] || 0; lossBB += bb; if (bb > 0 && (!top || bb > top.bb)) top = { name: Blunder.KINDS[k].name, bb: Math.round(bb * 10) / 10, n: a30['lkN_' + k] || 0 }; });
             rows.push({
                 nick: u.nickname, me: u.nickname === socket.nickname,
                 hands: a30.handsPlayed, decisions: a30.gtoScoreCount,
-                gto: gtoAvg(a30.gtoScoreSum, a30.gtoW, a30.gtoScoreCount),
-                trend: (a7.gtoScoreCount >= 15 && prevCnt >= 15) ? (gtoAvg(a7.gtoScoreSum, a7.gtoW, a7.gtoScoreCount) - gtoAvg(prevSum, prevW, prevCnt)) : null,
-                loss100: Math.round(lossBB / a30.gtoScoreCount * 1000) / 10,
+                gto: si.score, raw: si.raw, penalty: si.penalty,          // gto = 실력 점수(일치 점수 − 실수 감점)
+                trend: (a7.gtoScoreCount >= 15 && prev.gtoScoreCount >= 15 && si7 && siPrev) ? (si7.score - siPrev.score) : null,
+                loss100: si.loss100,
                 top,
                 vpip: a30.preflopOpps > 0 ? Math.round(a30.vpipHands / a30.preflopOpps * 100) : null,
                 pfr: a30.preflopOpps > 0 ? Math.round(a30.pfrHands / a30.preflopOpps * 100) : null,
@@ -5460,7 +5476,7 @@ io.on('connection', (socket) => {
                 // 유형별 손실(bb) — 비교표용
                 leaks: Object.fromEntries(Blunder.KIND_KEYS.map(k => [k, Math.round((a30['lkB_' + k] || 0) * 10) / 10]).filter(x => x[1] > 0)),
                 // 날짜별 점수(결정 5번 이상인 날만) — 추세선용
-                spark: dayKeys.map(k => { const d = (u.dailyLog || {})[k]; return d && d.gtoScoreCount >= 5 ? gtoAvg(d.gtoScoreSum, d.gtoW, d.gtoScoreCount) : null; })
+                spark: dayKeys.map(k => { const d = (u.dailyLog || {})[k]; return d && d.gtoScoreCount >= 5 ? skillIndex(d).score : null; })
             });
         });
         rows.sort((x, y) => (x.low ? 1 : 0) - (y.low ? 1 : 0) || y.gto - x.gto || x.loss100 - y.loss100);

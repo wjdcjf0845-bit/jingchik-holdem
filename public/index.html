@@ -4639,7 +4639,7 @@
 <div id="skill-modal" class="overlay" style="display:none; z-index: 4000;">
     <div class="login-box" style="width: 520px;">
         <h2 style="margin-top:0; font-family: var(--font-disp); font-weight:400; letter-spacing:1px; background: linear-gradient(180deg,#8fd3ff,#2f86dd); -webkit-background-clip:text; background-clip:text; color:transparent;">📈 실력 비교</h2>
-        <div style="font-size:12px; color:var(--txt-dim); margin-bottom:6px; line-height:1.5; word-break:keep-all;">최근 30일 · 칩이 아니라 <b style="color:#fff;">결정의 질</b>로 본 순위입니다. 점수는 매 액션을 그 순간의 권장 플레이와 비교한 값입니다.</div>
+        <div style="font-size:12px; color:var(--txt-dim); margin-bottom:6px; line-height:1.5; word-break:keep-all;">최근 30일 · 칩이 아니라 <b style="color:#fff;">결정의 질</b>로 본 순위입니다. 권장 플레이와 얼마나 같게 쳤는지에서, 큰 실수로 잃은 만큼을 뺀 점수입니다.</div>
         <div id="skill-list" style="margin: 10px 0; max-height: 60vh; overflow-y: auto; text-align: left;"></div>
         <button class="btn-join" style="width: 100%; background: linear-gradient(180deg, #3a455f, #232c44 60%, #161c2c); color: white;" onclick="document.getElementById('skill-modal').style.display='none'">닫기</button>
     </div>
@@ -7510,7 +7510,7 @@
         // 로비의 작은 순위 카드
         const mini = document.getElementById('skill-mini');
         if (mini) {
-            if (rows.length) { mini.innerHTML = `<div class="skm-head"><b>📈 실력 순위</b><small>최근 30일 · GTO 점수 · 눌러서 자세히</small></div>${skBars(rows.slice(0, 5), false)}`; mini.style.display = ''; }
+            if (rows.length) { mini.innerHTML = `<div class="skm-head"><b>📈 실력 순위</b><small>최근 30일 · 실력 점수 · 눌러서 자세히</small></div>${skBars(rows.slice(0, 5), false)}`; mini.style.display = ''; }
             else mini.style.display = 'none';
         }
         if (d && d.mini) return;
@@ -7527,12 +7527,12 @@
                     ${kinds.map(k => `<span class="skg-k">${esc(k.name)}</span>` + cols.map(u => { const v = (u.leaks || {})[k.id] || 0; return `<span class="skg-c" style="background:rgba(255,90,77,${v ? (0.12 + 0.6 * v / maxBB).toFixed(2) : 0});">${v ? '−' + v : '·'}</span>`; }).join('')).join('')}
                     <span class="skg-k tot">합계 (결정 100번당)</span>${cols.map(u => `<span class="skg-c tot">−${u.loss100}</span>`).join('')}
                 </div>` : '<div class="bl-none" style="margin-top:10px;">아직 기록된 큰 실수가 없습니다 — 실수 유형 비교는 몇 판 더 치면 나옵니다.</div>';
-            const detail = rows.map(u => `<div class="skd${u.me ? ' me' : ''}"><b>${esc(u.nick)}</b><span>${u.top ? `가장 큰 약점: <em>${esc(u.top.name)}</em> (${u.top.n}번, 약 −${u.top.bb}bb)` : '기록된 큰 실수 없음'}</span><small>${u.hands.toLocaleString()}판 · 결정 ${u.decisions.toLocaleString()}번${u.vpip != null ? ` · 참여 ${u.vpip}% / 레이즈 ${u.pfr}%` : ''}${u.low ? ' · 표본 부족(순위 제외)' : ''}</small></div>`).join('');
-            list.innerHTML = `<div class="sr-section-title">🏅 GTO 점수 순위 <small style="font-weight:400; color:var(--txt-dim);">(오른쪽 선 = 최근 2주 흐름)</small></div>
+            const detail = rows.map(u => `<div class="skd${u.me ? ' me' : ''}"><b>${esc(u.nick)}</b><span>실력 <b style="color:#8fd3ff;">${u.gto}</b> = 권장과 일치 ${u.raw}${u.penalty ? ` − 실수 감점 ${u.penalty}` : ''}</span><span>${u.top ? `가장 큰 약점: <em>${esc(u.top.name)}</em> (${u.top.n}번, 약 −${u.top.bb}bb)` : '기록된 큰 실수 없음'}</span><small>${u.hands.toLocaleString()}판 · 결정 ${u.decisions.toLocaleString()}번${u.vpip != null ? ` · 참여 ${u.vpip}% / 레이즈 ${u.pfr}%` : ''}${u.low ? ' · 표본 부족(순위 제외)' : ''}</small></div>`).join('');
+            list.innerHTML = `<div class="sr-section-title">🏅 실력 점수 순위 <small style="font-weight:400; color:var(--txt-dim);">(오른쪽 선 = 최근 2주 흐름)</small></div>
                 <div class="skbs">${skBars(rows, true)}</div>
                 ${grid}
                 <div class="sr-section-title" style="margin-top:14px;">👤 한 줄 요약</div>${detail}
-                <div class="bl-foot" style="margin-top:8px;">점수는 매 액션을 그 순간의 권장 플레이와 비교한 평균(100점 만점)입니다. ▲▼는 최근 7일이 그 전 3주보다 오른 정도. 실수 손실은 이 기능을 넣은 뒤부터 쌓입니다.</div>`;
+                <div class="bl-foot" style="margin-top:8px;">실력 점수 = 권장 플레이와 일치한 정도(100점 만점, 뻔한 폴드는 제외하고 큰 판일수록 무겁게) − 큰 실수로 잃은 칩에 따른 감점(최대 30점). ▲▼는 최근 7일이 그 전 3주보다 오른 정도입니다.</div>`;
         }
         document.getElementById('skill-modal').style.display = 'flex';
     });
