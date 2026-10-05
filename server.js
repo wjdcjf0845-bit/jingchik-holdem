@@ -1622,6 +1622,13 @@ class GameRoom {
         }
         bluffMod = Math.max(0.2, Math.min(2.2, bluffMod));
         valueMod = Math.max(0.6, Math.min(1.6, valueMod));
+        // 🧲 [콜링 스테이션 응징 — 고수] 벳에 거의 안 접는 상대(폴드율 20% 미만)는 아무 패로나 따라온다.
+        //    실측: 전부 콜만 하는 상대가 헤즈업에서 100핸드당 155bb 밖에 안 잃었다 — 봇이 밸류벳을 너무 좁게, 너무 작게 쳤기 때문.
+        //    그런 상대에겐 ① 블러프를 끊고 ② 승률이 절반을 조금만 넘어도 벳하고 ③ 크게 친다(접지 않으니 큰 벳이 그대로 이득).
+        const _nOppIn = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded).length;
+        const station = !!(persona.proStrategy && process.env.BOT_NOSTATION !== '1' && street >= 2 && oppRead && oppRead.foldToBet != null && oppRead.foldToBet < 0.20);
+        if (station) { bluffMod = Math.min(bluffMod, 0.2); valueMod = Math.max(valueMod, 1.35); }
+        const valueLine = station ? Math.max(0.53 + 0.04 * Math.max(0, _nOppIn - 1), persona.valueThresh - 0.10) : persona.valueThresh;
 
         const sizeBet = (mult) => {
             // 🎯 [사이징 개선] 이산 GTO 버킷 (33%/55%/78%/리버 오버벳 115%) — lib/betsizing.js
@@ -1633,7 +1640,7 @@ class GameRoom {
 
         // ─── 체크 가능 상황 (콜 비용 0) ───
         if (toCall === 0) {
-            if (equity > persona.valueThresh) {
+            if (equity > valueLine) {
                 // 🪤 [체크레이즈 트랩] 매우 강한 핸드 + 내 뒤에 벳할 사람이 남아있으면 일부러 체크.
                 //    이번 스트리트에 벳이 들어오면 아래 트랩 발동 로직이 레이즈로 응징한다.
                 //    드라이 보드(상대가 블러프하기 좋은 판)에서 빈도 ↑, 스킬 비례.
@@ -1642,14 +1649,18 @@ class GameRoom {
                 // 내 뒤에 아직 행동 안 한 활성 플레이어가 있어야 트랩 의미 있음 (체크 후 벳을 받을 수 있는 상황)
                 //   ※ isLikelyLastAggressor 휴리스틱은 2인 팟에서 항상 true라 HU 체크레이즈(교과서 상황)를 막아버림 — hasActed로 정확 판정
                 const someoneBehind = this.playerOrder.some(n => n !== nick && this.players[n] && !this.players[n].isFolded && !this.players[n].isAllIn && !this.players[n].hasActed);
-                if (veryStrong && someoneBehind && trapStreetOk) {
+                if (veryStrong && someoneBehind && trapStreetOk && !station) {   // 벳을 안 하는 스테이션에겐 함정 체크가 공짜 카드만 준다
                     const trapFreq = (board && board.dry ? 0.34 : 0.24) * skill;
                     if (Math.random() < trapFreq) {
                         p._trapStreet = this.gameStage;
                         return { type: 'check' };
                     }
                 }
-                const target = Math.min(p.currentBet + p.chips, p.currentBet + sizeBet(1.0));
+                // 안 접는 상대에겐 강할수록 크게(팟의 75~100%), 얇은 밸류는 절반 — 평소엔 텍스처 기반 균형 사이즈
+                const _vAmt = station
+                    ? Math.max(bb, Math.round(totalPot * (equity > persona.raiseThresh ? (street >= 4 ? 1.0 : 0.8) : (equity > persona.valueThresh ? 0.66 : 0.45))))
+                    : sizeBet(1.0);
+                const target = Math.min(p.currentBet + p.chips, p.currentBet + _vAmt);
                 if (target > this.currentHighestBet && r < Math.min(0.95, persona.valueBetFreq * valueMod)) {
                     // 🧠 밸류 벳 — 의도 기록 (다음 스트리트도 계속 밸류로 이어감)
                     p._plan = { betStreet: street, type: classifyBetPlan({ isValue: true }), eqAtBet: equity };
@@ -1674,6 +1685,7 @@ class GameRoom {
             //    블러프가 더 잘 통하므로 빈도 상향. skill 비례(초보는 못 읽음).
             bluffChance *= Blockers.bluffBlockerMult(p.hand, this.communityCards, skill);
 
+            if (station) bluffChance = Math.min(bluffChance, 0.03);
             if (r < bluffChance && p.chips > bb * 3) {
                 const target = Math.min(p.currentBet + p.chips, p.currentBet + sizeBet(0.85));
                 if (target > this.currentHighestBet) {
