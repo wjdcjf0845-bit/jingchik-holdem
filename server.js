@@ -339,6 +339,36 @@ const MockDB = {
     _remotePushing: false,  // 푸시 직렬화 (동시 upsert 방지)
     _remoteDirty: false,    // 푸시 중 새 변경 발생 시 재푸시 예약
 
+    // 🧹 [통계 기점] 운영자 요청(2026-10-06)으로 플레이 통계를 이 시점부터 새로 센다.
+    //    · 0으로 돌리는 것: 핸드 수·승수, VPIP/PFR 등 지표, GTO 점수, 실수 유형·치명적 플레이, 일별 기록, 학습 모드 통계
+    //    · 그대로 두는 것: 뱅크롤, 우승·토큰·코어, 꾸미기, 업적, 상대전적, 컴까기·런 진행, 문제 풀이 기록
+    //    · 이전 값은 지우지 않고 statsArchive 에 보관한다(되돌릴 수 있게). 계정마다 한 번만 적용된다.
+    STATS_EPOCH: '2026-10-06',
+    STAT_FIELDS: ['handsPlayed', 'handsWon', 'vpipHands', 'preflopOpps', 'pfrHands', 'threeBetCount', 'threeBetOpps', 'aggrBets', 'aggrCalls',
+        'foldToBet', 'faceBet', 'wentToShowdown', 'wonAtShowdown', 'gtoScoreSum', 'gtoScoreCount', 'seatSum', 'seatCnt'],
+    applyStatsEpoch() {
+        let n = 0;
+        this.users.forEach(u => {
+            if (!u || !u.nickname || u.nickname.startsWith('🤖') || u.statsEpoch === this.STATS_EPOCH) return;
+            const totals = {};
+            this.STAT_FIELDS.forEach(k => { if (u[k]) totals[k] = u[k]; u[k] = 0; });
+            Object.keys(u).filter(k => k.startsWith('lk')).forEach(k => { totals[k] = u[k]; delete u[k]; });
+            const had = Object.keys(totals).length || (u.dailyLog && Object.keys(u.dailyLog).length);
+            if (had) {
+                u.statsArchive = (Array.isArray(u.statsArchive) ? u.statsArchive : []).slice(-1);
+                u.statsArchive.push({ until: this.STATS_EPOCH, at: Date.now(), totals, dailyLog: u.dailyLog || {} });
+            }
+            u.dailyLog = {};
+            u.blunders = [];
+            u.learnStats = {};
+            delete u.quizMine;
+            u.statsEpoch = this.STATS_EPOCH;
+            n++;
+        });
+        if (n) { console.log(`🧹 통계 기점(${this.STATS_EPOCH}) 적용: ${n}개 계정의 플레이 통계를 새로 시작 (이전 값은 statsArchive 에 보관)`); this.save(); }
+        return n;
+    },
+
     // 🌐 원격 로드 — 부팅 시 1회 호출. 원격에 데이터가 있으면 그것이 진실(로컬 덮어씀).
     //    원격이 비어있으면(최초 연결) 현재 로컬 데이터를 원격에 올려 시드한다.
     //    로드 실패 시 30초 간격 재시도 — 성공할 때까지 원격 쓰기는 잠긴 상태 유지.
@@ -355,6 +385,7 @@ const MockDB = {
                 console.log(`🌐 원격 전적 DB 로드(Turso): ${this.users.size}명 — 원격이 기준으로 적용됨`);
                 // 원격 기준 데이터를 로컬 파일에도 반영 (아래 flush가 다시 원격 푸시하지만 내용 동일 — 무해)
                 this._remoteLoadOk = true;
+                this.applyStatsEpoch();
                 this.flush();
             } else {
                 // 최초 연결: 원격이 빔 → 로컬 데이터로 시드
@@ -478,7 +509,8 @@ const MockDB = {
                 wentToShowdown: 0,  // 쇼다운까지 간 횟수
                 wonAtShowdown: 0,   // 쇼다운에서 이긴 횟수
                 gtoScoreSum: 0,     // GTO 근접 점수 누적
-                gtoScoreCount: 0    // GTO 평가 횟수
+                gtoScoreCount: 0,   // GTO 평가 횟수
+                statsEpoch: this.STATS_EPOCH
             });
             this.save();
         }
@@ -6458,6 +6490,7 @@ const PORT = process.env.PORT || 3000;
 //    (재배포 직후 빈 로컬 상태로 로그인 받다가 원격 데이터로 뒤늦게 덮어쓰는 레이스 방지)
 //    원격 미설정이면 initRemote()는 즉시 반환 — 기존 동작 그대로.
 MockDB.initRemote().catch(e => console.error('🌐 원격 초기화 오류:', e && e.message)).finally(() => {
+    try { MockDB.applyStatsEpoch(); } catch (e) { console.error('통계 기점 적용 오류:', e && e.message); }
     server.listen(PORT, () => {
         console.log(`✅ [Master Server] 치명 버그 수정 + 보안 패치 + 방 정리 시스템 적용 완료! (포트 ${PORT})`);
     });
