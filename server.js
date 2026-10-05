@@ -5383,9 +5383,12 @@ io.on('connection', (socket) => {
     });
 
     // 📈 [실력 비교] 최근 30일 — 칩이 아니라 "결정의 질"로 나란히 본다 (GTO 근접도 · 실수 손실 · 가장 큰 약점 · 최근 7일 추세)
-    socket.on('getSkillBoard', () => {
+    socket.on('getSkillBoard', (req) => {
         if (!socket.nickname) return;
         const rows = [];
+        // 최근 14일의 날짜 열쇠 (추세선용)
+        const dayKeys = [];
+        { const now = new Date(); for (let i = 13; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i); dayKeys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`); } }
         MockDB.users.forEach(u => {
             if (!u || !u.nickname || u.nickname.startsWith('🤖') || u.nickname === ADMIN_NICK) return;
             const a30 = MockDB.aggregateRange(u, 30);
@@ -5403,11 +5406,16 @@ io.on('connection', (socket) => {
                 top,
                 vpip: a30.preflopOpps > 0 ? Math.round(a30.vpipHands / a30.preflopOpps * 100) : null,
                 pfr: a30.preflopOpps > 0 ? Math.round(a30.pfrHands / a30.preflopOpps * 100) : null,
-                low: a30.gtoScoreCount < 30
+                low: a30.gtoScoreCount < 30,
+                // 유형별 손실(bb) — 비교표용
+                leaks: Object.fromEntries(Blunder.KIND_KEYS.map(k => [k, Math.round((a30['lkB_' + k] || 0) * 10) / 10]).filter(x => x[1] > 0)),
+                // 날짜별 점수(결정 5번 이상인 날만) — 추세선용
+                spark: dayKeys.map(k => { const d = (u.dailyLog || {})[k]; return d && d.gtoScoreCount >= 5 ? Math.round(d.gtoScoreSum / d.gtoScoreCount) : null; })
             });
         });
         rows.sort((x, y) => (x.low ? 1 : 0) - (y.low ? 1 : 0) || y.gto - x.gto || x.loss100 - y.loss100);
-        socket.emit('skillBoard', { rows: rows.slice(0, 40), days: 30 });
+        socket.emit('skillBoard', { rows: rows.slice(0, 40), days: 30, mini: !!(req && req.mini),
+            kinds: Blunder.KIND_KEYS.map(k => ({ id: k, name: Blunder.KINDS[k].name })) });
     });
 
     // 🍀 [증강 런] 내 기록·순위·진행 중인 런
