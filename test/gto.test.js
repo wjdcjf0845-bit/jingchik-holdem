@@ -249,3 +249,33 @@ test('근접도 점수: 올인이 기준인 자리에서 작게 레이즈하면 
     assert.strictEqual(A.wrongSize(adv, 'allin'), false);
     assert.strictEqual(A.wrongSize({ sizeHint: '약 800 (상대 벳의 3배)' }, 'raise'), false);
 });
+
+test('모든 문제에 테이블 장면이 있다: 나는 정확히 한 명, 좌석 2~6개, 스택·벳은 0 이상', () => {
+    const rng = lcg(41);
+    Q.CAT_IDS.forEach(cat => {
+        for (let i = 0; i < 300; i++) {
+            const q = Q.generate(cat, rng);
+            const sc = Q.publicView(q).scene;
+            assert.ok(sc, cat + ': 장면이 없다 — ' + q.prompt.slice(0, 30));
+            assert.strictEqual(sc.seats.filter(x => x.st === 'hero').length, 1, q.prompt.slice(0, 30));
+            assert.ok(sc.seats.length >= 2 && sc.seats.length <= 6);
+            sc.seats.forEach(x => { assert.ok(x.pos && x.stack >= 0 && x.bet >= 0, JSON.stringify(x)); assert.ok(['hero', 'fold', 'in', 'wait', 'allin'].includes(x.st)); });
+            assert.ok(['bb', 'chips'].includes(sc.unit) && sc.pot >= 0);
+            assert.strictEqual(new Set(sc.seats.map(x => x.pos)).size, sc.seats.length, '자리 이름 중복');
+        }
+    });
+});
+
+test('장면: 프리플랍은 블라인드가 놓이고, 내 앞자리는 폴드·뒷자리는 대기가 기본', () => {
+    const sc = Q.preScene('CO', 10, {}, {}, 30);
+    const by = Object.fromEntries(sc.seats.map(x => [x.pos, x]));
+    assert.deepStrictEqual([by.UTG.st, by.HJ.st, by.CO.st, by.BTN.st, by.SB.st, by.BB.st], ['fold', 'fold', 'hero', 'wait', 'wait', 'wait']);
+    assert.deepStrictEqual([by.SB.bet, by.BB.bet, by.CO.stack, by.BB.stack], [0.5, 1, 10, 29]);
+    const sh = Q.preScene('BB', 40, { BTN: 'a9', SB: 'f' }, { BTN: 9 }, 40);
+    const btn = sh.seats.find(x => x.pos === 'BTN');
+    assert.deepStrictEqual([btn.st, btn.bet, btn.stack], ['allin', 9, 0]);
+});
+
+test('손으로 쓴 문제마다 장면이 하나씩 짝지어져 있다', () => {
+    ['multiway', 'depth'].forEach(c => assert.strictEqual(Q.AUTHORED[c].length, Q.AUTHORED_SCENES[c].length, c));
+});

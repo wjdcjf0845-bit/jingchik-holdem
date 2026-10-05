@@ -3606,6 +3606,83 @@
         .lrp-mode { font-size: 10px; font-weight: 800; color: #c3cbe0; margin-bottom: 6px; padding: 3px 6px; border-radius: 6px; background: rgba(255,255,255,0.06); text-align: center; word-break: keep-all; line-height: 1.35; }
         .lrp-mode-hubtn, .lrp-mode-hubb { color: #9fd4ff; background: rgba(47,125,246,0.18); }
         .lrp-mode-push { color: #ffc0b8; background: rgba(240,72,58,0.18); }
+    
+        /* ═══ 🎬 GTO 문제 — 테이블 장면 ═══ */
+        .qs-table { position: relative; height: 306px; margin: 2px 0 12px; }
+        .qs-felt {
+            position: absolute; left: 7%; right: 7%; top: 13%; bottom: 17%; border-radius: 999px;
+            background: radial-gradient(ellipse at center, #1fae78 0%, #12714d 55%, #063824 100%);
+            border: 6px solid #141a2a; box-shadow: inset 0 0 0 2px rgba(255,214,120,0.85), inset 0 0 40px rgba(0,0,0,0.55), 0 10px 24px rgba(0,0,0,0.5);
+        }
+        .qs-center { position: absolute; left: 50%; top: 37%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: 2; }
+        .qs-table:not(.has-board) .qs-center { top: 40%; }
+        .qs-street { font-family: var(--font-num); font-size: 10px; letter-spacing: 3px; color: rgba(255,255,255,0.6); }
+        .qs-pot { font-family: var(--font-num); font-size: 11px; letter-spacing: 1px; color: #c3cbe0; background: rgba(4,7,14,0.82); border: 1px solid rgba(255,200,87,0.4); border-radius: 999px; padding: 2px 11px; white-space: nowrap; }
+        .qs-pot b { color: var(--gold); font-size: 14px; margin-left: 3px; }
+        .qs-board { display: flex; gap: 4px; margin-top: 2px; }
+        .qs-board .qz-card { width: 32px; height: 44px; border-radius: 5px; }
+        .qs-board .qz-card b { font-size: 15px; } .qs-board .qz-card i { font-size: 13px; margin-top: 1px; }
+        .qs-seat {
+            position: absolute; transform: translate(-50%, -50%); z-index: 3; min-width: 62px; padding: 4px 8px 5px; text-align: center;
+            display: flex; flex-direction: column; align-items: center; gap: 1px; line-height: 1.15;
+            background: linear-gradient(165deg, rgba(38,48,80,0.97), rgba(15,20,38,0.98)); border: 1px solid rgba(255,255,255,0.18); border-radius: 11px;
+            box-shadow: 0 5px 12px rgba(0,0,0,0.5);
+        }
+        .qs-pos { font-size: 11px; font-weight: 900; color: #fff; white-space: nowrap; }
+        .qs-d { font-style: normal; display: inline-block; width: 14px; height: 14px; line-height: 14px; margin-left: 3px; border-radius: 50%; background: #fff; color: #1b2233; font-size: 9px; font-weight: 900; }
+        .qs-me { font-style: normal; margin-left: 3px; font-size: 9px; font-weight: 900; color: #2c1c00; background: var(--gold-grad); border-radius: 999px; padding: 0 5px; }
+        .qs-stack { font-family: var(--font-num); font-size: 11.5px; font-weight: 700; color: var(--gold); white-space: nowrap; }
+        .qs-act { font-size: 10px; font-weight: 900; color: #ffb347; white-space: nowrap; }
+        .qs-act.wait { color: #8d98b3; font-weight: 700; }
+        .qs-seat.st-fold { opacity: 0.5; filter: grayscale(0.9); }
+        .qs-seat.st-fold .qs-act { color: #c3cbe0; }
+        .qs-seat.st-wait { border-style: dashed; }
+        .qs-seat.st-allin { border-color: rgba(255,90,77,0.95); background: linear-gradient(165deg, rgba(92,26,30,0.97), rgba(34,9,14,0.98)); box-shadow: 0 0 16px rgba(240,72,58,0.5); }
+        .qs-seat.st-allin .qs-stack, .qs-seat.st-allin .qs-act { color: #fff; }
+        .qs-seat.st-hero { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(255,200,87,0.5), 0 0 18px rgba(255,200,87,0.4); min-width: 74px; }
+        .qs-bet {
+            position: absolute; transform: translate(-50%, -50%); z-index: 4; white-space: nowrap; pointer-events: none;
+            font-family: var(--font-num); font-size: 11px; font-weight: 700; color: #ffe7a8; padding: 1px 8px 1px 18px; border-radius: 999px;
+            background: rgba(4,6,12,0.92); border: 1px solid rgba(255,200,87,0.5);
+        }
+        .qs-bet::before { content: ''; position: absolute; left: 3px; top: 50%; transform: translateY(-50%); width: 11px; height: 11px; border-radius: 50%; background: radial-gradient(circle at 32% 28%, #ff9d8f, #c0392b 80%); border: 1px dashed rgba(255,255,255,0.85); }
+        .qs-bet.allin { color: #fff; border-color: rgba(255,90,77,0.9); background: rgba(120,20,16,0.92); }
+        .qs-bet.dead { opacity: 0.55; }
+        /* 내 패는 보드 아래·내 좌석 위 — 보드와 겹치지 않게 */
+        .qs-hand { position: absolute; left: 50%; top: 70%; transform: translate(-50%, -50%); display: flex; gap: 4px; z-index: 5; }
+        .qs-hand .qz-card { width: 38px; height: 52px; box-shadow: 0 6px 14px rgba(0,0,0,0.6), 0 0 0 2px rgba(255,200,87,0.55); }
+        .qs-table .qs-seat.st-hero { top: 92% !important; }
+        .qz-prompt.short { font-size: 15.5px; text-align: center; margin-bottom: 8px; }
+        .qz-more { font-size: 12px; color: #9aa6c2; line-height: 1.6; margin: 0 0 11px; word-break: keep-all; }
+        .qz-more summary { cursor: pointer; font-weight: 800; color: #8d98b3; text-align: center; list-style: none; }
+        .qz-more summary::-webkit-details-marker { display: none; }
+        .qz-more[open] { background: rgba(6,9,18,0.5); border-radius: 10px; padding: 8px 11px; }
+        .qz-more[open] summary { margin-bottom: 5px; }
+        /* 보기 = 실제 게임의 액션 버튼 색 */
+        .qz-choice.c-fold  { background: linear-gradient(180deg, #5b6680, #3a4358); }
+        .qz-choice.c-call  { background: linear-gradient(180deg, #2bd389, #12995c); color: #03281a; border-color: transparent; }
+        .qz-choice.c-raise { background: linear-gradient(180deg, #ffb347, #f08a1c); color: #2c1500; border-color: transparent; }
+        .qz-choice.c-allin { background: linear-gradient(180deg, #ff5a4d, #c9261a); border-color: transparent; }
+        .qz-choice.right, .qz-choice.wrong { color: #fff; }
+        .qz-choice.right { box-shadow: 0 0 0 3px #4be3a0, 0 0 18px rgba(75,227,160,0.6); }
+        .qz-choice.wrong { box-shadow: 0 0 0 3px #ff5a4d; filter: saturate(0.6) brightness(0.8); }
+        .qz-choice.c-call.right, .qz-choice.c-raise.right { color: #03281a; }
+        @media screen and (max-width: 560px) {
+            .qs-table { height: 280px; }
+            .qs-seat { min-width: 54px; padding: 3px 5px 4px; } .qs-seat.st-hero { min-width: 64px; }
+            .qs-pos { font-size: 10px; } .qs-stack { font-size: 10.5px; } .qs-act { font-size: 9px; }
+            .qs-bet { font-size: 10px; padding: 0 6px 0 16px; }
+            .qs-board .qz-card { width: 27px; height: 37px; } .qs-board .qz-card b { font-size: 13px; }
+            .qs-hand .qz-card { width: 34px; height: 46px; }
+        }
+        @media screen and (max-width: 960px) and (orientation: landscape) {
+            .qs-table { height: 232px; margin-bottom: 6px; }
+            .qs-seat { min-width: 54px; padding: 2px 6px 3px; }
+            .qs-pos { font-size: 10px; } .qs-stack { font-size: 10px; } .qs-act { font-size: 9px; }
+            .qs-board .qz-card { width: 26px; height: 35px; } .qs-board .qz-card b { font-size: 12px; } .qs-board .qz-card i { font-size: 11px; }
+            .qs-hand .qz-card { width: 30px; height: 40px; }
+            .qz-tags { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -4486,18 +4563,75 @@
         if (st) document.getElementById('quiz-score').innerHTML = `정답 ${st.ok} / ${st.total}` + (st.total ? ` · ${Math.round(st.ok / st.total * 100)}%` : '') + (st.streak >= 2 ? ` · 🔥 ${st.streak}연속` : '');
     }
     socket.on('quizInfo', d => { if (!d) return; _quizCats = d.cats || []; _quizStats = d.stats || null; renderQuizCats(); });
+    // 🎬 문제의 상황을 글이 아니라 테이블로 그린다: 좌석(자리·남은 스택·한 행동) · 앞에 놓인 칩 · 가운데 팟과 보드 · 내 패
+    //    나는 항상 아래 가운데, 나머지는 실제 게임처럼 시계 방향.
+    const QS_POS = {
+        2: [[50, 86], [50, 13]],
+        3: [[50, 86], [15, 30], [85, 30]],
+        4: [[50, 86], [9, 50], [50, 11], [91, 50]],
+        5: [[50, 86], [10, 62], [24, 15], [76, 15], [90, 62]],
+        6: [[50, 86], [9, 64], [14, 24], [50, 9], [86, 24], [91, 64]]
+    };
+    function quizScene(q) {
+        const sc = q.scene;
+        if (!sc || !Array.isArray(sc.seats) || !QS_POS[sc.seats.length]) return '';
+        const hi = Math.max(0, sc.seats.findIndex(x => x.st === 'hero'));
+        const order = sc.seats.slice(hi).concat(sc.seats.slice(0, hi));
+        const xy = QS_POS[order.length];
+        const fmt = v => sc.unit === 'bb' ? (Math.round(v * 10) / 10) + 'bb' : Number(v).toLocaleString();
+        const sumBets = order.reduce((a, x) => a + (x.bet || 0), 0);
+        const ST = { fold: 'fold', allin: 'allin', hero: 'hero', wait: 'wait', in: 'in' };
+        let html = '';
+        order.forEach((x, i) => {
+            const [px, py] = xy[i];
+            const st = ST[x.st] || 'in';
+            html += `<div class="qs-seat st-${st}" style="left:${px}%; top:${py}%;">
+                <span class="qs-pos">${esc(x.pos)}${x.pos === sc.dealer ? '<i class="qs-d">D</i>' : ''}${st === 'hero' ? '<i class="qs-me">나</i>' : ''}</span>
+                <span class="qs-stack">${st === 'allin' ? 'ALL IN' : fmt(x.stack)}</span>
+                ${x.act ? `<span class="qs-act">${esc(x.act)}</span>` : (st === 'wait' ? '<span class="qs-act wait">대기</span>' : '')}
+            </div>`;
+            if (x.bet > 0) {
+                // 위쪽 가운데 좌석의 칩은 팟 표시와 겹치므로 옆으로 비킨다
+                const top = px === 50 && py < 20;
+                // 내 칩(블라인드 등)은 내 패에 가리지 않게 좌석 오른쪽 위로
+                const bx = st === 'hero' ? 69 : (top ? 63 : px + (50 - px) * 0.40), by = st === 'hero' ? 80 : (top ? py + 9 : py + (48 - py) * 0.42);
+                html += `<div class="qs-bet${st === 'allin' ? ' allin' : ''}${st === 'fold' ? ' dead' : ''}" style="left:${bx}%; top:${by}%;">${fmt(x.bet)}</div>`;
+            }
+        });
+        const streetKo = { preflop: '프리플랍', flop: '플랍', turn: '턴', river: '리버' }[sc.street] || '';
+        const potShown = sc.pot > 0 ? sc.pot : sumBets;
+        const board = (q.board && q.board.length) ? `<div class="qs-board">${q.board.map(quizCard).join('')}</div>` : '';
+        const hand = (q.hand && q.hand.length === 2) ? `<div class="qs-hand">${q.hand.map(quizCard).join('')}</div>` : '';
+        return `<div class="qs-table n${order.length}${board ? ' has-board' : ''}">
+            <div class="qs-felt"></div>
+            <div class="qs-center"><span class="qs-street">${streetKo}</span><span class="qs-pot">POT <b>${fmt(potShown)}</b></span>${board}</div>
+            ${html}${hand}
+        </div>`;
+    }
+    // 보기 버튼 색: 실제 게임의 폴드(회색)·콜(초록)·레이즈(주황)·올인(빨강)에 맞춘다
+    function quizChoiceCls(id) {
+        if (['fold', 'nocall', 'no'].includes(id)) return ' c-fold';
+        if (['call', 'check'].includes(id)) return ' c-call';
+        if (['raise', 'bet', 'open', 'big', 'small', 'limp'].includes(id)) return ' c-raise';
+        if (['push', 'yes'].includes(id)) return ' c-allin';
+        return '';
+    }
     socket.on('quizQuestion', q => {
         if (!q) return;
         _quizQ = q; _quizDone = false;
-        const cards = (q.hand && q.hand.length === 2)
+        const scene = quizScene(q);
+        const cards = (!scene && q.hand && q.hand.length === 2)
             ? `<div class="qz-cards"><span class="qz-lbl">내 패</span>${q.hand.map(quizCard).join('')}${(q.board && q.board.length) ? `<span class="qz-lbl board">보드</span>${q.board.map(quizCard).join('')}` : ''}</div>` : '';
+        // 장면이 있고 보기가 "행동"이면 짧은 질문만 — 긴 설명은 접어 둔다
+        const short = scene && q.ask;
         document.getElementById('quiz-body').innerHTML = `
             <div class="qz-q">
                 <div class="qz-cat-name">${q.catIcon || ''} ${esc(q.catName || '')}</div>
                 <div class="qz-tags">${(q.tags || []).map(t => `<span>${esc(t)}</span>`).join('')}</div>
-                ${cards}
-                <div class="qz-prompt">${esc(q.prompt)}</div>
-                <div class="qz-choices">${q.choices.map((c, i) => `<button class="qz-choice" data-i="${i}" onclick="quizAnswer(${i})">${esc(c.label)}</button>`).join('')}</div>
+                ${scene}${cards}
+                <div class="qz-prompt${short ? ' short' : ''}">${esc(short ? q.ask : q.prompt)}</div>
+                ${short ? `<details class="qz-more"><summary>상황을 글로 보기</summary>${esc(q.prompt)}</details>` : ''}
+                <div class="qz-choices">${q.choices.map((c, i) => `<button class="qz-choice${quizChoiceCls(c.id)}" data-i="${i}" onclick="quizAnswer(${i})">${esc(c.label)}</button>`).join('')}</div>
                 <div id="qz-result"></div>
             </div>`;
     });
