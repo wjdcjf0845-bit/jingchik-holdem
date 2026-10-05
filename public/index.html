@@ -3720,6 +3720,41 @@
         @media screen and (max-width: 960px) and (orientation: landscape) {
             .qz-viz { margin-bottom: 7px; padding: 6px 10px; } .qv-bar { height: 36px; } .qv-seg b { font-size: 13px; }
         }
+    
+        /* ═══ 💥 리포트 — 치명적 플레이 ═══ */
+        .bl-card { background: rgba(40,10,10,0.45); border: 1px solid rgba(255,107,107,0.35); border-left: 3px solid #ff6b6b; border-radius: 11px; padding: 10px 12px; margin-bottom: 9px; }
+        .bl-top { display: flex; align-items: center; gap: 7px; }
+        .bl-rank { flex: 0 0 20px; height: 20px; border-radius: 50%; background: #ff6b6b; color: #2a0505; font-size: 11.5px; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; }
+        .bl-title { flex: 1 1 auto; font-size: 13.5px; font-weight: 800; color: #ffd1cb; word-break: keep-all; }
+        .bl-cost { flex: 0 0 auto; font-family: var(--font-num); font-size: 13px; font-weight: 700; color: #ff8a7d; white-space: nowrap; }
+        .bl-meta { font-size: 10.5px; color: var(--txt-dim); margin: 2px 0 7px 27px; }
+        .bl-cards { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 7px; }
+        .bl-hand { padding-right: 12px; border-right: 1px solid rgba(255,255,255,0.15); }
+        .bl-cards .mini-card { margin-right: 2px; }
+        .bl-noboard { font-size: 11px; color: var(--txt-dim); }
+        .bl-situ { font-size: 11.5px; color: #c9d2e6; line-height: 1.5; word-break: keep-all; }
+        .bl-vs { display: flex; align-items: stretch; gap: 6px; margin: 8px 0 6px; }
+        .bl-did, .bl-should { flex: 1 1 0; min-width: 0; border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; line-height: 1.25; }
+        .bl-did { background: rgba(255,107,107,0.14); border: 1px solid rgba(255,107,107,0.4); }
+        .bl-should { background: rgba(75,227,160,0.12); border: 1px solid rgba(75,227,160,0.45); }
+        .bl-vs small { font-size: 10px; color: var(--txt-dim); font-weight: 700; }
+        .bl-vs b { font-size: 14px; color: #fff; }
+        .bl-vs i { font-style: normal; font-size: 10.5px; color: #aab4cc; }
+        .bl-arrow { align-self: center; color: #8d98b3; font-weight: 900; }
+        .bl-nums { display: flex; gap: 12px; font-size: 11px; color: var(--txt-dim); margin-bottom: 6px; }
+        .bl-nums b { color: #fff; font-family: var(--font-num); }
+        .bl-why { font-size: 12px; color: #ffe1dc; line-height: 1.55; word-break: keep-all; }
+        .bl-tip { font-size: 11.5px; color: var(--txt); opacity: 0.9; line-height: 1.5; margin-top: 4px; word-break: keep-all; }
+        .bl-net { font-size: 11px; margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.14); line-height: 1.45; }
+        .bl-net.down { color: #ff9d8f; } .bl-net.up { color: #9fe6bd; }
+        .bl-none { font-size: 12px; color: var(--txt-dim); text-align: center; padding: 10px 0; }
+        .bl-leaks { background: rgba(0,0,0,0.28); border-radius: 10px; padding: 4px 12px; }
+        .bl-leak { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 12px; }
+        .bl-leak:last-child { border-bottom: 0; }
+        .bl-leak span { flex: 1 1 auto; color: var(--txt); word-break: keep-all; }
+        .bl-leak b { color: #fff; font-family: var(--font-num); white-space: nowrap; }
+        .bl-leak i { font-style: normal; color: #ff8a7d; font-family: var(--font-num); white-space: nowrap; min-width: 64px; text-align: right; }
+        .bl-foot { font-size: 10.5px; color: var(--txt-dim); line-height: 1.5; margin-top: 6px; word-break: keep-all; }
     </style>
 </head>
 <body>
@@ -7722,6 +7757,40 @@
         document.getElementById('session-body').innerHTML = '<div class="pf-empty" style="text-align:center; padding:30px 0;">불러오는 중...</div>';
         socket.emit('getSessionReport', { range });
     }
+    // 💥 리포트: 가장 치명적이었던 플레이 — 상황 · 내 플레이 · 권장 · 무엇이 문제였나 · 그 판의 결과
+    function blunderHtml(r) {
+        const list = r.blunders || [], leaks = r.leaks || [];
+        if (!list.length && !leaks.length) {
+            return r.stats && r.stats.sampleActions >= 10
+                ? `<div class="sr-section-title" style="margin-top:14px;">💥 가장 치명적이었던 플레이</div><div class="bl-none">이 기간에는 큰 실수가 기록되지 않았습니데이. 👍</div>` : '';
+        }
+        const when = t => { const d = new Date(t), p = n => String(n).padStart(2, '0'); return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+        const cards = list.map((b, i) => {
+            const board = b.board.length ? b.board.map(miniCard).join('') : '<span class="bl-noboard">보드 없음</span>';
+            const net = b.netBB == null ? '' : `<div class="bl-net ${b.netBB >= 0 ? 'up' : 'down'}">그 판 결과: ${b.netBB >= 0 ? '+' : ''}${b.netBB}bb${b.netBB >= 0 ? ' — 결과는 좋았지만 운이 따른 것, 같은 선택을 반복하면 손해입니데이.' : ''}</div>`;
+            const nums = (b.potOdds > 0 || b.equityLabel === '내 승률') ? `<span>${esc(b.equityLabel)} <b>${b.equity}%</b></span>${b.potOdds > 0 ? `<span>필요 승률 <b>${b.potOdds}%</b></span>` : ''}` : `<span>${esc(b.equityLabel)} <b>${b.equity}%</b></span>`;
+            return `<div class="bl-card">
+                <div class="bl-top"><span class="bl-rank">${i + 1}</span><span class="bl-title">${esc(b.title)}</span><span class="bl-cost">약 −${b.costBB}bb</span></div>
+                <div class="bl-meta">${when(b.t)}${b.modeLabel ? ' · ' + esc(b.modeLabel) : ''}</div>
+                <div class="bl-cards"><span class="bl-hand">${b.hand.map(miniCard).join('')}</span><span class="bl-board">${board}</span></div>
+                <div class="bl-situ">📍 ${esc(b.situation)}</div>
+                <div class="bl-vs">
+                    <div class="bl-did"><small>내 플레이</small><b>${esc(b.did)}</b><i>권장 빈도 ${b.didPct}%</i></div>
+                    <div class="bl-arrow">→</div>
+                    <div class="bl-should"><small>권장</small><b>${esc(b.should)}</b><i>권장 빈도 ${b.shouldPct}%</i></div>
+                </div>
+                <div class="bl-nums">${nums}</div>
+                <div class="bl-why">❗ ${esc(b.why)}</div>
+                <div class="bl-tip">💡 ${esc(b.tip)}</div>
+                ${net}
+            </div>`;
+        }).join('');
+        const leakRows = leaks.slice(0, 4).map(l => `<div class="bl-leak"><span>${esc(l.name)}</span><b>${l.n}번</b><i>약 −${l.bb}bb</i></div>`).join('');
+        return `<div class="sr-section-title" style="margin-top:14px;">💥 가장 치명적이었던 플레이</div>
+            ${cards || '<div class="bl-none">상황까지 저장된 큰 실수는 없습니데이.</div>'}
+            ${leakRows ? `<div class="sr-section-title" style="margin-top:12px;">🩹 자주 나온 실수 유형</div><div class="bl-leaks">${leakRows}</div>
+            <div class="bl-foot">손실은 "그 결정 하나로 기대값이 얼마나 깎였나"의 어림값입니데이. 그 판에서 실제로 이겼는지와는 별개입니데이.</div>` : ''}`;
+    }
     socket.on('sessionReport', r => {
         const body = document.getElementById('session-body');
         if (!body) return;
@@ -7847,6 +7916,7 @@
                 <div class="sr-stat-row"><span class="label">GTO 근접도</span><span class="val" style="color:var(--gold);">${r.stats.gto !== null ? r.stats.gto + '점' : '–'}</span></div>
             </div>
             ${gtoComment ? `<div style="font-size:11.5px; color:var(--txt-dim); text-align:center; margin-top:8px; line-height:1.5;">💡 ${gtoComment}${r.stats.sampleActions ? ` (${r.stats.sampleActions}개 액션 분석)` : ''}</div>` : ''}
+            ${blunderHtml(r)}
             ${coachHtml}
             ${newAchHtml}
         `;

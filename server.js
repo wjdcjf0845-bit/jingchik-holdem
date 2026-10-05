@@ -107,6 +107,7 @@ const ShortStack = require('./lib/shortstack'); // 🤖 숏스택 푸시/폴드 
 const OppModel = require('./lib/oppmodel');     // 🧠 상대 읽기 — 세션 표본 + 계정 누적 전적
 const Challenge = require('./lib/challenge');   // 🤖 컴까기(AI 도장깨기) 단계표·보상
 const Rogue = require('./lib/roguerun');        // 🍀 증강 컴까기(로그라이크 런) — 층·증강·정산
+const Blunder = require('./lib/blunder');       // 💥 리포트의 '치명적 플레이' 기록
 const GtoAdvice = require('./lib/gtoadvice');   // 🎓 학습모드 조언 — 상대 수·포지션·스택 깊이별
 const Quiz = require('./lib/gtoquiz');          // 🧠 GTO 문제 학습
 // 칭호는 화면에 그대로 찍히는 문구라 id 대신 문구를 내려보낸다 (클라이언트에 카탈로그 사본을 두지 않으려고)
@@ -550,7 +551,10 @@ const MockDB = {
             gtoScoreSum: u.gtoScoreSum || 0,
             gtoScoreCount: u.gtoScoreCount || 0,
             achievements: (u.achievements || []).slice(),
-            seasonPoints: u.seasonPoints || 0
+            seasonPoints: u.seasonPoints || 0,
+            seatSum: u.seatSum || 0, seatCnt: u.seatCnt || 0,
+            // 실수 유형별 누적 (lkN_*, lkB_*)
+            ...Object.fromEntries(Object.keys(u).filter(k => k.startsWith('lk')).map(k => [k, u[k] || 0]))
         };
     },
     // 📅 [일/주/월 리포트] 지정 범위(일수)의 dailyLog를 합산
@@ -565,6 +569,7 @@ const MockDB = {
             if (dt >= cutoff) {
                 const day = log[key];
                 Object.keys(sum).forEach(f => { sum[f] += (day[f] || 0); });
+                Object.keys(day).forEach(f => { if (f.startsWith('lk') || f === 'seatSum' || f === 'seatCnt') sum[f] = (sum[f] || 0) + (day[f] || 0); });
             }
         });
         return sum;
@@ -703,6 +708,7 @@ const MockDB = {
             // 🎓 학습 모드 — 실전 통계와 분리해 learnStats에 누적
             const L = u.learnStats || (u.learnStats = {});
             if (ev.preflopOpp) L.preflopOpps = (L.preflopOpps||0)+1;
+            if (ev.seats) { L.seatSum = (L.seatSum||0)+ev.seats; L.seatCnt = (L.seatCnt||0)+1; }
             if (ev.pfr) L.pfrHands = (L.pfrHands||0)+1;
             if (ev.threeBetOpp) L.threeBetOpps = (L.threeBetOpps||0)+1;
             if (ev.threeBet) L.threeBetCount = (L.threeBetCount||0)+1;
@@ -716,6 +722,7 @@ const MockDB = {
         }
         const daily = {};
         if (ev.preflopOpp) { u.preflopOpps++; daily.preflopOpps = 1; }
+        if (ev.seats) { u.seatSum = (u.seatSum || 0) + ev.seats; u.seatCnt = (u.seatCnt || 0) + 1; daily.seatSum = ev.seats; daily.seatCnt = 1; }
         if (ev.pfr) { u.pfrHands++; daily.pfrHands = 1; }
         if (ev.threeBetOpp) { u.threeBetOpps++; daily.threeBetOpps = 1; }
         if (ev.threeBet) { u.threeBetCount++; daily.threeBetCount = 1; }
@@ -726,6 +733,24 @@ const MockDB = {
         if (typeof ev.gtoScore === 'number') { u.gtoScoreSum += ev.gtoScore; u.gtoScoreCount++; daily.gtoScoreSum = ev.gtoScore; daily.gtoScoreCount = 1; }
         this._bumpDaily(u, daily);
         this.save();
+    },
+    // 💥 실수 한 건 기록 — 유형별 횟수·손실(bb) 누적 + 손실이 큰 플레이는 상황째로 보관. 보관한 기록 객체를 돌려준다(핸드가 끝나면 결과를 덧붙임).
+    recordBlunder(nickname, rec, kind, costBB, isLearn) {
+        if (typeof nickname !== 'string' || nickname.startsWith('🤖')) return null;
+        const u = this.users.get(nickname);
+        if (!u) return null;
+        const nK = 'lkN_' + kind, bK = 'lkB_' + kind;
+        if (isLearn) {
+            const L = u.learnStats || (u.learnStats = {});
+            L[nK] = (L[nK] || 0) + 1; L[bK] = Math.round(((L[bK] || 0) + costBB) * 10) / 10;
+            L.blunders = Blunder.add(L.blunders, rec);
+        } else {
+            u[nK] = (u[nK] || 0) + 1; u[bK] = Math.round(((u[bK] || 0) + costBB) * 10) / 10;
+            this._bumpDaily(u, { [nK]: 1, [bK]: costBB });
+            u.blunders = Blunder.add(u.blunders, rec);
+        }
+        this.save();
+        return rec;
     },
     async recordShowdownStat(nickname, won, isLearn) {
         if (typeof nickname !== 'string' || nickname.startsWith('🤖')) return;
@@ -2730,6 +2755,8 @@ class GameRoom {
         io.to(this.roomId).emit('shuffleCommit', { handId: this.handId, commit: this._commitHash, entropy: this._clientEntropy });
 
         this.vpipThisHand = new Set(); // 💡 이번 핸드 자발적 참여자(VPIP)
+        this.settleBlunders();          // 💥 지난 핸드에 기록한 실수에 그 판의 결과(칩 증감)를 덧붙인다
+        this._pfSeen = { opp: new Set(), pfr: new Set() };
         this.communityCards = [];
         this.gameStage = 1;
         this.pot = 0;
@@ -2954,6 +2981,12 @@ class GameRoom {
             const _sc = GtoAdvice.scoreAction(_learnAdvice, type);
             if (_sc != null) this._pendingGto = { nick, score: _sc };
         }
+        // 💥 리포트용: 액션 전 상황 (실수로 판정되면 이 상황째로 저장한다)
+        const _blPre = (_learnAdvice && p && !p.isBot) ? {
+            pot: this.pot + Object.values(this.players).reduce((s, x) => s + (x.currentBet || 0), 0),
+            chips: p.chips, hand: p.hand.slice(), board: this.communityCards.slice(),
+            opp: this.playerOrder.filter(n => n !== nick && !this.players[n].isFolded).length
+        } : null;
 
         let finalAction = type;
 
@@ -3027,6 +3060,7 @@ class GameRoom {
         // 📊 포커 분석 지표 수집 (봇 제외)
         if (!p.isBot) {
             try { this.collectActionStats(nick, type, p, beforeBet, beforeHighest, raisesBeforeAction); } catch (e) {}
+            try { if (_blPre) this.noteBlunder(nick, type, p, _learnAdvice, _blPre, beforeBet, beforeHighest); } catch (e) {}
         }
 
         // 🧠 [#2] 상대 성향 추적 (봇 익스플로잇용) — 사람·봇 전부 기록
@@ -3590,6 +3624,44 @@ class GameRoom {
         if (leaving.length) destroyIfNoHumans(this.roomId);
     }
 
+    // 💥 [리포트] 방금 한 액션이 큰 실수면 상황째로 저장한다 (기준은 학습 조언과 같다)
+    noteBlunder(nick, type, p, advice, pre, beforeBet, beforeHighest) {
+        const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+        const toCall = Math.max(0, Math.min(beforeHighest - beforeBet, pre.chips));
+        const putIn = Math.max(0, (p.currentBet || 0) - beforeBet);
+        const a = Blunder.assess(advice, type, { bb, pot: pre.pot, toCall, putIn, equity: (advice.equity || 0) / 100, street: advice.street });
+        if (!a) return;
+        const key = GtoAdvice.actionKey(advice, type);
+        const r1 = x => Math.round(x / bb * 10) / 10;
+        const ch = this._challenge;
+        const rec = {
+            t: Date.now(), learn: !!this._learnMode, kind: a.kind, costBB: a.costBB,
+            modeLabel: this._learnMode ? '학습' : (ch ? (ch.run ? '증강 컴까기' : '컴까기') : (this.mode === 'cash' ? '캐시' : '토너먼트')),
+            street: advice.street, hand: pre.hand, board: pre.board,
+            pos: p.position || '', seats: this.playerOrder.length, opp: pre.opp,
+            potBB: r1(pre.pot), toCallBB: r1(toCall), stackBB: r1(pre.chips + beforeBet),
+            act: p.isAllIn && type !== 'fold' && type !== 'check' && type !== 'call' ? 'allin' : type, amtBB: r1(p.currentBet || 0),
+            best: advice.bestAction, allinBest: advice.sizeHint === '올인',
+            bestPct: advice.mix[advice.bestAction] || 0, didPct: advice.mix[key] || 0,
+            eq: advice.equity, odds: advice.potOdds, eqLabel: advice.equityLabel || '내 승률',
+            reason: String(advice.reason || '').slice(0, 260)
+        };
+        const saved = MockDB.recordBlunder(nick, rec, a.kind, a.costBB, !!this._learnMode);
+        if (saved) (this._handBl || (this._handBl = [])).push({ nick, rec: saved, bb });
+    }
+    // 다음 핸드를 시작하기 직전(또는 방이 끝날 때): 그 판에서 실제로 칩이 얼마나 오갔는지 적는다
+    settleBlunders() {
+        const list = this._handBl;
+        this._handBl = [];
+        if (!list || !list.length || !this.handStartStacks) return;
+        list.forEach(({ nick, rec, bb }) => {
+            const pl = this.players[nick], start = this.handStartStacks[nick];
+            if (!pl || typeof start !== 'number') return;
+            rec.netBB = Math.round((pl.chips - start) / bb * 10) / 10;
+        });
+        MockDB.save();
+    }
+
     // 📊 [신규] 액션 단위 포커 지표 + GTO 근접도 수집
     collectActionStats(nick, type, p, beforeBet, beforeHighest, raisesBefore) {
         const ev = {};
@@ -3598,8 +3670,11 @@ class GameRoom {
         const isRaise = (type === 'raise' || type === 'allin') && p.currentBet > beforeHighest;
 
         if (this.gameStage === 1) { // 프리플랍
-            ev.preflopOpp = true;
-            if (isRaise) ev.pfr = true;
+            // 🐛 예전엔 프리플랍 액션마다 "기회 +1"을 세서, 한 핸드에 두 번 행동하면(오픈 → 3벳에 콜) 분모가 2가 됐다.
+            //    VPIP 는 핸드당 한 번만 세니 VPIP·PFR 이 실제보다 낮게 나왔다. 기회와 레이즈 모두 핸드당 한 번만 센다.
+            const seen = this._pfSeen || (this._pfSeen = { opp: new Set(), pfr: new Set() });
+            if (!seen.opp.has(nick)) { seen.opp.add(nick); ev.preflopOpp = true; ev.seats = this.playerOrder.length; }
+            if (isRaise && !seen.pfr.has(nick)) { seen.pfr.add(nick); ev.pfr = true; }
             if (facingBet && raisesBefore >= 1) {
                 ev.threeBetOpp = true;
                 if (isRaise) ev.threeBet = true;
@@ -4103,9 +4178,13 @@ const sessionSnapshots = new Map();
 
 // 🎓 [코칭] 세션 지표를 포커 이론 기준으로 진단 → 약점 + 구체적 조언 생성
 //   각 지표의 건강 범위는 6맥스 캐시/토너 기준 통념값
-function buildCoaching(s, handsPlayed) {
+function buildCoaching(s, handsPlayed, extra) {
     const issues = [];   // { area, severity, msg, tip }
     const strengths = [];
+    const ex = extra || {};
+    // 🐛 예전엔 헤즈업·3인 판에서도 6인 기준(VPIP 18~28%)으로 "너무 많이 참여한다"고 진단했다. 평균 테이블 인원에 맞춘 기준을 쓴다.
+    const seats = ex.avgSeats || 6;
+    const V = seats <= 2.5 ? { hi: 92, lo: 50, pfrLo: 30, name: '헤즈업' } : seats <= 4.2 ? { hi: 55, lo: 22, pfrLo: 14, name: '3~4인' } : { hi: 40, lo: 14, pfrLo: 8, name: '5~6인' };
     if (handsPlayed < 10) {
         return { headline: '아직 표본이 적어 정밀 진단은 어렵습니데이. 좀 더 쳐보이소!', issues: [], strengths: [], sample: 'low' };
     }
@@ -4113,14 +4192,14 @@ function buildCoaching(s, handsPlayed) {
 
     // 1) VPIP (팟 참여율) — 건강범위 대략 18~28% (6맥스)
     if (vpip !== null) {
-        if (vpip > 40) issues.push({ area: 'VPIP', severity: 'high', msg: `너무 많은 핸드로 팟에 참여합니다 (${vpip}%).`, tip: '프리플랍 핸드 선택을 좁히이소. 약한 오프수트(예: J5o, Q7o)는 폴드하고, 포지션이 나쁘면 더 타이트하게 가는 게 장기적으로 이득입니데이.' });
-        else if (vpip < 14) issues.push({ area: 'VPIP', severity: 'mid', msg: `너무 타이트합니다 (${vpip}%).`, tip: '좋은 핸드만 기다리면 블라인드에 칩이 샙니다. 버튼·컷오프 같은 좋은 포지션에선 수딧 커넥터나 작은 페어도 적극적으로 들어가 보이소.' });
+        if (vpip > V.hi) issues.push({ area: 'VPIP', severity: 'high', msg: `너무 많은 핸드로 팟에 참여합니다 (${vpip}% · ${V.name} 테이블 기준 ${V.hi}% 이하가 적정).`, tip: '프리플랍 핸드 선택을 좁히이소. 약한 오프수트(예: J5o, Q7o)는 폴드하고, 포지션이 나쁘면 더 타이트하게 가는 게 장기적으로 이득입니데이.' });
+        else if (vpip < V.lo) issues.push({ area: 'VPIP', severity: 'mid', msg: `너무 타이트합니다 (${vpip}% · ${V.name} 테이블 기준 ${V.lo}% 이상이 적정).`, tip: '좋은 핸드만 기다리면 블라인드에 칩이 샙니다. 버튼·컷오프 같은 좋은 포지션에선 수딧 커넥터나 작은 페어도 적극적으로 들어가 보이소.' });
         else strengths.push(`팟 참여율(VPIP ${vpip}%)이 건강한 범위입니데이.`);
     }
     // 2) PFR vs VPIP 갭 — 갭이 크면 너무 수동적(콜만 많음)
     if (vpip !== null && pfr !== null) {
         const gap = vpip - pfr;
-        if (pfr < 8 && vpip >= 18) issues.push({ area: 'PFR', severity: 'high', msg: `프리플랍에서 레이즈 없이 콜만 많습니다 (PFR ${pfr}%).`, tip: '들어갈 가치가 있는 핸드면 림프(콜) 대신 레이즈로 들어가이소. 주도권을 쥐면 상대를 폴드시키거나 팟을 키울 수 있습니데이.' });
+        if (pfr < V.pfrLo && vpip >= V.lo + 4) issues.push({ area: 'PFR', severity: 'high', msg: `프리플랍에서 레이즈 없이 콜만 많습니다 (PFR ${pfr}%).`, tip: '들어갈 가치가 있는 핸드면 림프(콜) 대신 레이즈로 들어가이소. 주도권을 쥐면 상대를 폴드시키거나 팟을 키울 수 있습니데이.' });
         else if (gap > 18) issues.push({ area: '수동성', severity: 'mid', msg: `참여는 많은데 레이즈가 적습니다 (VPIP-PFR 갭 ${gap}).`, tip: '콜링 위주 플레이는 주도권을 내줍니다. 핸드가 좋으면 레이즈로 압박하고, 애매하면 차라리 폴드하는 양극화 전략이 좋습니데이.' });
         else if (pfr >= 12 && gap <= 12) strengths.push(`프리플랍 공격성(PFR ${pfr}%)이 좋습니데이.`);
     }
@@ -4145,6 +4224,13 @@ function buildCoaching(s, handsPlayed) {
         if (gto >= 75) strengths.push(`GTO 근접도 ${gto}점 — 의사결정이 이론에 매우 가깝습니데이! 👏`);
         else if (gto < 55) issues.push({ area: 'GTO', severity: 'mid', msg: `전반적 의사결정 점수가 낮습니다 (GTO ${gto}점).`, tip: '매 액션 전에 "내 승률 vs 팟 오즈"를 떠올리이소. 콜 비용보다 이길 확률이 높으면 콜, 낮으면 폴드가 기본입니데이.' });
     }
+
+    // 7) 실제로 저지른 실수 유형 — 통계 추정보다 정확하다(그 순간의 인원·스택·포지션을 반영한 조언과 비교한 것). 손실이 큰 유형을 맨 앞에.
+    const lk = (ex.leaks || []).filter(l => l.n >= 2 && l.bb >= 3).slice(0, 2);
+    lk.reverse().forEach(l => {
+        const rate = ex.decisions > 0 ? ` · 결정 ${ex.decisions}번 중` : '';
+        issues.unshift({ area: l.name, severity: l.bb >= 10 ? 'high' : 'mid', msg: `${l.n}번 나왔고, 합쳐서 약 ${l.bb}bb를 잃은 셈입니다${rate}.`, tip: l.tip, leak: true });
+    });
 
     // 우선순위: high > mid, 최대 3개만
     issues.sort((a, b) => (a.severity === 'high' ? 0 : 1) - (b.severity === 'high' ? 0 : 1));
@@ -4741,6 +4827,7 @@ function launchRunFloor(socket, run) {
 function destroyRoom(roomId) {
     const room = rooms.get(roomId);
     if (!room) return;
+    try { room.settleBlunders(); } catch (e) {}
     // 💰 캐시 테이블 정리 시 사람 플레이어의 잔여 칩을 뱅크롤로 환수 (학습모드 제외)
     if (room.mode === 'cash' && !room._learnMode) {
         Object.keys(room.players).forEach(nick => {
@@ -6037,6 +6124,9 @@ io.on('connection', (socket) => {
 
         let handsPlayed, handsWon, pfOpps, vpipH, pfrH, tbCount, tbOpps, aggrBets, aggrCalls, foldToBet, faceBet, wtsd, wsd, gtoSum, gtoCnt;
         let metaTop = {};
+        let since = 0, src = u, blSrc = u.blunders, seatSum = 0, seatCnt = 0;
+        const leaks = {};
+        const leakFrom = get => Blunder.KIND_KEYS.forEach(k => { const n = get('lkN_' + k) || 0; if (n > 0) leaks[k] = { n, bb: Math.round((get('lkB_' + k) || 0) * 10) / 10 }; });
 
         if (range === 'learn') {
             // 🎓 학습 모드 누적 통계 (실전과 분리)
@@ -6046,6 +6136,8 @@ io.on('connection', (socket) => {
             aggrBets = L.aggrBets || 0; aggrCalls = L.aggrCalls || 0; foldToBet = L.foldToBet || 0; faceBet = L.faceBet || 0;
             wtsd = L.wentToShowdown || 0; wsd = L.wonAtShowdown || 0; gtoSum = L.gtoScoreSum || 0; gtoCnt = L.gtoScoreCount || 0;
             metaTop = { durationMin: null, bankrollStart: null, bankrollDelta: null, tourneyWins: null, seasonPointsGained: null, newAchievements: [] };
+            blSrc = L.blunders; seatSum = L.seatSum || 0; seatCnt = L.seatCnt || 0;
+            leakFrom(k => L[k]);
         } else if (range === 'session') {
             const snap = sessionSnapshots.get(socket.nickname);
             if (!snap) { socket.emit('sessionReport', null); return; }
@@ -6054,6 +6146,8 @@ io.on('connection', (socket) => {
             vpipH = d('vpipHands'); pfrH = d('pfrHands'); tbCount = d('threeBetCount'); tbOpps = d('threeBetOpps');
             aggrBets = d('aggrBets'); aggrCalls = d('aggrCalls'); foldToBet = d('foldToBet'); faceBet = d('faceBet');
             wtsd = d('wentToShowdown'); wsd = d('wonAtShowdown'); gtoSum = d('gtoScoreSum'); gtoCnt = d('gtoScoreCount');
+            since = snap.ts; seatSum = d('seatSum'); seatCnt = d('seatCnt');
+            leakFrom(k => (u[k] || 0) - (snap[k] || 0));
             const prevAch = new Set(snap.achievements || []);
             const newAch = (u.achievements || []).filter(id => !prevAch.has(id)).map(id => ACHIEVEMENTS[id] ? { id, ...ACHIEVEMENTS[id] } : null).filter(Boolean);
             metaTop = {
@@ -6071,6 +6165,9 @@ io.on('connection', (socket) => {
             vpipH = agg.vpipHands; pfrH = agg.pfrHands; tbCount = agg.threeBetCount; tbOpps = agg.threeBetOpps;
             aggrBets = agg.aggrBets; aggrCalls = agg.aggrCalls; foldToBet = agg.foldToBet; faceBet = agg.faceBet;
             wtsd = agg.wentToShowdown; wsd = agg.wonAtShowdown; gtoSum = agg.gtoScoreSum; gtoCnt = agg.gtoScoreCount;
+            { const now = new Date(); since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)).getTime(); }
+            seatSum = agg.seatSum || 0; seatCnt = agg.seatCnt || 0;
+            leakFrom(k => agg[k]);
             metaTop = { durationMin: null, bankrollStart: null, bankrollDelta: null, tourneyWins: null, seasonPointsGained: null, newAchievements: [] };
         }
 
@@ -6093,7 +6190,12 @@ io.on('connection', (socket) => {
                 sampleActions: gtoCnt
             }
         };
-        report.coaching = buildCoaching(report.stats, handsPlayed);
+        // 💥 가장 치명적이었던 플레이 (손실 어림값이 큰 순) + 실수 유형별 합계
+        report.blunders = Blunder.top(blSrc, since, 3).map(Blunder.describe);
+        report.leaks = Object.keys(leaks).map(k => ({ kind: k, name: Blunder.KINDS[k].name, tip: Blunder.KINDS[k].tip, n: leaks[k].n, bb: leaks[k].bb }))
+            .sort((a, b) => b.bb - a.bb);
+        report.avgSeats = seatCnt >= 5 ? Math.round(seatSum / seatCnt * 10) / 10 : null;
+        report.coaching = buildCoaching(report.stats, handsPlayed, { avgSeats: report.avgSeats, leaks: report.leaks, decisions: gtoCnt });
         socket.emit('sessionReport', report);
     });
 
