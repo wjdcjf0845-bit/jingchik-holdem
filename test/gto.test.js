@@ -236,9 +236,11 @@ test('근접도 점수: 권장 액션이면 95, 믹스 비중이 낮을수록 �
     const adv = { mix: { fold: 6, raise: 94 }, bestAction: 'raise', sizeHint: '2.2~2.5bb' };
     assert.strictEqual(A.scoreAction(adv, 'raise'), 95);
     assert.strictEqual(A.scoreAction(adv, 'allin'), 95, '올인은 레이즈로 본다');
-    assert.strictEqual(A.scoreAction(adv, 'fold'), 40);
+    assert.strictEqual(A.scoreAction(adv, 'fold'), 25, '권장(94%)에 비해 6% 짜리 선택');
     assert.strictEqual(A.scoreAction(adv, 'call'), 15, '믹스에 없는 림프');
-    assert.strictEqual(A.scoreAction({ mix: { check: 55, bet: 45 }, bestAction: 'check' }, 'raise'), 88, '체크 가능한 자리의 레이즈는 벳으로 본다');
+    assert.strictEqual(A.scoreAction({ mix: { check: 55, bet: 45 }, bestAction: 'check' }, 'raise'), 80, '체크 가능한 자리의 레이즈는 벳으로 본다 — 권장과 비슷한 빈도면 높은 점수');
+    assert.strictEqual(A.scoreAction({ mix: { fold: 93, call: 5, raise: 2 }, bestAction: 'fold' }, 'call'), 23, '폴드가 정석인 자리의 콜');
+    assert.ok(A.postflopAdvice({ equity: 0.15, potOdds: 0.33, toCall: 500, opponents: 1, inPosition: true, spr: 5, pot: 1000 }).mix.call < 15, '크게 모자란 콜은 실수로 잡힌다');
     assert.strictEqual(A.scoreAction(null, 'call'), null);
 });
 

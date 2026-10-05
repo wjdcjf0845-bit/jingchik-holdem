@@ -343,9 +343,9 @@ const MockDB = {
     //    · 0으로 돌리는 것: 핸드 수·승수, VPIP/PFR 등 지표, GTO 점수, 실수 유형·치명적 플레이, 일별 기록, 학습 모드 통계
     //    · 그대로 두는 것: 뱅크롤, 우승·토큰·코어, 꾸미기, 업적, 상대전적, 컴까기·런 진행, 문제 풀이 기록
     //    · 이전 값은 지우지 않고 statsArchive 에 보관한다(되돌릴 수 있게). 계정마다 한 번만 적용된다.
-    STATS_EPOCH: '2026-10-06',
+    STATS_EPOCH: '2026-10-06b',   // b: 점수 계산을 가중 평균으로 바꾸면서 같은 날 한 번 더 맞췄다
     STAT_FIELDS: ['handsPlayed', 'handsWon', 'vpipHands', 'preflopOpps', 'pfrHands', 'threeBetCount', 'threeBetOpps', 'aggrBets', 'aggrCalls',
-        'foldToBet', 'faceBet', 'wentToShowdown', 'wonAtShowdown', 'gtoScoreSum', 'gtoScoreCount', 'seatSum', 'seatCnt'],
+        'foldToBet', 'faceBet', 'wentToShowdown', 'wonAtShowdown', 'gtoScoreSum', 'gtoScoreCount', 'gtoW', 'seatSum', 'seatCnt'],
     applyStatsEpoch() {
         let n = 0;
         this.users.forEach(u => {
@@ -536,7 +536,7 @@ const MockDB = {
         normalizeCosmetics(u); // 🎨 꾸미기 — 구버전/손상 레코드 복구
         // 📊 포커 분석 지표 마이그레이션
         ['pfrHands','preflopOpps','threeBetCount','threeBetOpps','aggrBets','aggrCalls',
-         'foldToBet','faceBet','wentToShowdown','wonAtShowdown','gtoScoreSum','gtoScoreCount']
+         'foldToBet','faceBet','wentToShowdown','wonAtShowdown','gtoScoreSum','gtoScoreCount','gtoW']
             .forEach(k => { if (u[k] === undefined) u[k] = 0; });
         // 🏆 시즌 롤오버: 시즌이 바뀌면 시즌 포인트 리셋
         if (u.seasonId !== CURRENT_SEASON) { u.seasonId = CURRENT_SEASON; u.seasonPoints = 0; }
@@ -585,6 +585,7 @@ const MockDB = {
             wonAtShowdown: u.wonAtShowdown || 0,
             gtoScoreSum: u.gtoScoreSum || 0,
             gtoScoreCount: u.gtoScoreCount || 0,
+            gtoW: u.gtoW || 0,
             achievements: (u.achievements || []).slice(),
             seasonPoints: u.seasonPoints || 0,
             seatSum: u.seatSum || 0, seatCnt: u.seatCnt || 0,
@@ -596,7 +597,7 @@ const MockDB = {
     aggregateRange(user, days) {
         const log = user.dailyLog || {};
         const now = new Date();
-        const sum = { handsPlayed: 0, handsWon: 0, vpipHands: 0, preflopOpps: 0, pfrHands: 0, threeBetCount: 0, threeBetOpps: 0, aggrBets: 0, aggrCalls: 0, foldToBet: 0, faceBet: 0, wentToShowdown: 0, wonAtShowdown: 0, gtoScoreSum: 0, gtoScoreCount: 0 };
+        const sum = { handsPlayed: 0, handsWon: 0, vpipHands: 0, preflopOpps: 0, pfrHands: 0, threeBetCount: 0, threeBetOpps: 0, aggrBets: 0, aggrCalls: 0, foldToBet: 0, faceBet: 0, wentToShowdown: 0, wonAtShowdown: 0, gtoScoreSum: 0, gtoScoreCount: 0, gtoW: 0 };
         const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
         Object.keys(log).forEach(key => {
             const [y, m, dd] = key.split('-').map(Number);
@@ -678,7 +679,7 @@ const MockDB = {
         if (!user.dailyLog) user.dailyLog = {};
         const key = this._todayKey();
         if (!user.dailyLog[key]) {
-            user.dailyLog[key] = { handsPlayed: 0, handsWon: 0, vpipHands: 0, preflopOpps: 0, pfrHands: 0, threeBetCount: 0, threeBetOpps: 0, aggrBets: 0, aggrCalls: 0, foldToBet: 0, faceBet: 0, wentToShowdown: 0, wonAtShowdown: 0, gtoScoreSum: 0, gtoScoreCount: 0, netChips: 0 };
+            user.dailyLog[key] = { handsPlayed: 0, handsWon: 0, vpipHands: 0, preflopOpps: 0, pfrHands: 0, threeBetCount: 0, threeBetOpps: 0, aggrBets: 0, aggrCalls: 0, foldToBet: 0, faceBet: 0, wentToShowdown: 0, wonAtShowdown: 0, gtoScoreSum: 0, gtoScoreCount: 0, gtoW: 0, netChips: 0 };
         }
         const day = user.dailyLog[key];
         Object.keys(fields).forEach(f => { day[f] = (day[f] || 0) + fields[f]; });
@@ -751,7 +752,7 @@ const MockDB = {
             if (ev.aggrCall) L.aggrCalls = (L.aggrCalls||0)+1;
             if (ev.faceBet) L.faceBet = (L.faceBet||0)+1;
             if (ev.foldToBet) L.foldToBet = (L.foldToBet||0)+1;
-            if (typeof ev.gtoScore === 'number') { L.gtoScoreSum = (L.gtoScoreSum||0)+ev.gtoScore; L.gtoScoreCount = (L.gtoScoreCount||0)+1; }
+            if (typeof ev.gtoScore === 'number') { const w = ev.gtoWeight || 1; L.gtoScoreSum = (L.gtoScoreSum||0)+ev.gtoScore*w; L.gtoW = (L.gtoW||0)+w; L.gtoScoreCount = (L.gtoScoreCount||0)+1; }
             this.save();
             return;
         }
@@ -765,7 +766,7 @@ const MockDB = {
         if (ev.aggrCall) { u.aggrCalls++; daily.aggrCalls = 1; }
         if (ev.faceBet) { u.faceBet++; daily.faceBet = 1; }
         if (ev.foldToBet) { u.foldToBet++; daily.foldToBet = 1; }
-        if (typeof ev.gtoScore === 'number') { u.gtoScoreSum += ev.gtoScore; u.gtoScoreCount++; daily.gtoScoreSum = ev.gtoScore; daily.gtoScoreCount = 1; }
+        if (typeof ev.gtoScore === 'number') { const w = ev.gtoWeight || 1; u.gtoScoreSum += ev.gtoScore * w; u.gtoW = (u.gtoW || 0) + w; u.gtoScoreCount++; daily.gtoScoreSum = ev.gtoScore * w; daily.gtoW = w; daily.gtoScoreCount = 1; }
         this._bumpDaily(u, daily);
         this.save();
     },
@@ -3045,11 +3046,13 @@ class GameRoom {
             if (_sc != null) this._pendingGto = { nick, score: _sc };
         }
         // 💥 리포트용: 액션 전 상황 (실수로 판정되면 이 상황째로 저장한다)
+        this._statAdv = null;
         const _blPre = (_learnAdvice && p && !p.isBot) ? {
             pot: this.pot + Object.values(this.players).reduce((s, x) => s + (x.currentBet || 0), 0),
             chips: p.chips, hand: p.hand.slice(), board: this.communityCards.slice(),
             opp: this.playerOrder.filter(n => n !== nick && !this.players[n].isFolded).length
         } : null;
+        if (_blPre) this._statAdv = { nick, advice: _learnAdvice, potBB: _blPre.pot / this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb };
 
         let finalAction = type;
 
@@ -3753,7 +3756,20 @@ class GameRoom {
         }
 
         const gto = this.gtoProximity(nick, type, p, toCall);
-        if (gto !== null) ev.gtoScore = gto;
+        if (gto !== null) {
+            // 🎯 [점수 보정 — 실측으로 찾은 두 가지 왜곡]
+            //   ① 프리플랍에 쓰레기 패를 접는 건 누구나 맞히는 결정이다. 이걸 전부 세면 "전부 폴드만 하는 사람"이 84점,
+            //      제대로 치는 사람이 88점으로 거의 같게 나왔다 → 뻔한 폴드(폴드 권장 85% 이상을 폴드)는 점수에서 뺀다.
+            //   ② 1bb 짜리 결정과 50bb 짜리 결정을 똑같이 세면 큰 판의 실수가 묻힌다 → 팟 크기(bb)의 제곱근으로 가중(1~6배).
+            const sa = this._statAdv;
+            const adv = sa && sa.nick === nick ? sa.advice : null;
+            const easyFold = !!(adv && adv.street === 'preflop' && type === 'fold' && adv.bestAction === 'fold' && (adv.mix.fold || 0) >= 85);
+            if (!easyFold) {
+                ev.gtoScore = gto;
+                const potBB = sa && sa.nick === nick ? sa.potBB : 1;
+                ev.gtoWeight = Math.round(Math.max(1, Math.min(6, Math.sqrt(Math.max(1, potBB)))) * 100) / 100;
+            }
+        }
 
         MockDB.recordActionStats(nick, ev, !!this._learnMode);
     }
@@ -4265,6 +4281,8 @@ setInterval(() => { if (capacity.queue.length) drainCapacity(); }, 5000);   // �
 
 // 📋 [세션 리포트] 닉네임 → 이번 세션 시작 시점의 지표 스냅샷 (재접속해도 유지)
 const sessionSnapshots = new Map();
+// 🎯 실력 점수 = 가중 평균. (가중치가 없는 옛 기록은 단순 평균)
+function gtoAvg(sum, w, cnt) { return w > 0 ? Math.round(sum / w) : (cnt > 0 ? Math.round(sum / cnt) : null); }
 
 // 🎓 [코칭] 세션 지표를 포커 이론 기준으로 진단 → 약점 + 구체적 조언 생성
 //   각 지표의 건강 범위는 6맥스 캐시/토너 기준 통념값
@@ -5426,14 +5444,14 @@ io.on('connection', (socket) => {
             const a30 = MockDB.aggregateRange(u, 30);
             if ((a30.handsPlayed || 0) < 10 || !(a30.gtoScoreCount > 0)) return;
             const a7 = MockDB.aggregateRange(u, 7);
-            const prevCnt = a30.gtoScoreCount - a7.gtoScoreCount, prevSum = a30.gtoScoreSum - a7.gtoScoreSum;
+            const prevCnt = a30.gtoScoreCount - a7.gtoScoreCount, prevSum = a30.gtoScoreSum - a7.gtoScoreSum, prevW = (a30.gtoW || 0) - (a7.gtoW || 0);
             let lossBB = 0, top = null;
             Blunder.KIND_KEYS.forEach(k => { const bb = a30['lkB_' + k] || 0; lossBB += bb; if (bb > 0 && (!top || bb > top.bb)) top = { name: Blunder.KINDS[k].name, bb: Math.round(bb * 10) / 10, n: a30['lkN_' + k] || 0 }; });
             rows.push({
                 nick: u.nickname, me: u.nickname === socket.nickname,
                 hands: a30.handsPlayed, decisions: a30.gtoScoreCount,
-                gto: Math.round(a30.gtoScoreSum / a30.gtoScoreCount),
-                trend: (a7.gtoScoreCount >= 15 && prevCnt >= 15) ? Math.round(a7.gtoScoreSum / a7.gtoScoreCount - prevSum / prevCnt) : null,
+                gto: gtoAvg(a30.gtoScoreSum, a30.gtoW, a30.gtoScoreCount),
+                trend: (a7.gtoScoreCount >= 15 && prevCnt >= 15) ? (gtoAvg(a7.gtoScoreSum, a7.gtoW, a7.gtoScoreCount) - gtoAvg(prevSum, prevW, prevCnt)) : null,
                 loss100: Math.round(lossBB / a30.gtoScoreCount * 1000) / 10,
                 top,
                 vpip: a30.preflopOpps > 0 ? Math.round(a30.vpipHands / a30.preflopOpps * 100) : null,
@@ -5442,7 +5460,7 @@ io.on('connection', (socket) => {
                 // 유형별 손실(bb) — 비교표용
                 leaks: Object.fromEntries(Blunder.KIND_KEYS.map(k => [k, Math.round((a30['lkB_' + k] || 0) * 10) / 10]).filter(x => x[1] > 0)),
                 // 날짜별 점수(결정 5번 이상인 날만) — 추세선용
-                spark: dayKeys.map(k => { const d = (u.dailyLog || {})[k]; return d && d.gtoScoreCount >= 5 ? Math.round(d.gtoScoreSum / d.gtoScoreCount) : null; })
+                spark: dayKeys.map(k => { const d = (u.dailyLog || {})[k]; return d && d.gtoScoreCount >= 5 ? gtoAvg(d.gtoScoreSum, d.gtoW, d.gtoScoreCount) : null; })
             });
         });
         rows.sort((x, y) => (x.low ? 1 : 0) - (y.low ? 1 : 0) || y.gto - x.gto || x.loss100 - y.loss100);
@@ -6234,7 +6252,7 @@ io.on('connection', (socket) => {
                 foldToBet: pct(u.foldToBet || 0, u.faceBet || 0),          // 벳 대응 폴드율
                 wsd: pct(u.wonAtShowdown || 0, u.wentToShowdown || 0),     // 쇼다운 승률
                 wtsd: pct(u.wentToShowdown || 0, hp),                      // 쇼다운 도달률
-                gto: (u.gtoScoreCount || 0) > 0 ? Math.round((u.gtoScoreSum || 0) / u.gtoScoreCount) : null, // GTO 근접도
+                gto: gtoAvg(u.gtoScoreSum || 0, u.gtoW || 0, u.gtoScoreCount || 0), // GTO 근접도
                 sampleActions: u.gtoScoreCount || 0
             }
         });
@@ -6282,7 +6300,7 @@ io.on('connection', (socket) => {
         const range = (data && ['session', 'day', 'week', 'month', 'learn'].includes(data.range)) ? data.range : 'session';
         const pct = (num, den) => den > 0 ? Math.round((num / den) * 100) : null;
 
-        let handsPlayed, handsWon, pfOpps, vpipH, pfrH, tbCount, tbOpps, aggrBets, aggrCalls, foldToBet, faceBet, wtsd, wsd, gtoSum, gtoCnt;
+        let handsPlayed, handsWon, pfOpps, vpipH, pfrH, tbCount, tbOpps, aggrBets, aggrCalls, foldToBet, faceBet, wtsd, wsd, gtoSum, gtoCnt, gtoWt = 0;
         let metaTop = {};
         let since = 0, src = u, blSrc = u.blunders, seatSum = 0, seatCnt = 0;
         const leaks = {};
@@ -6294,7 +6312,7 @@ io.on('connection', (socket) => {
             handsPlayed = L.handsPlayed || 0; handsWon = L.handsWon || 0; pfOpps = L.preflopOpps || 0;
             vpipH = L.vpipHands || 0; pfrH = L.pfrHands || 0; tbCount = L.threeBetCount || 0; tbOpps = L.threeBetOpps || 0;
             aggrBets = L.aggrBets || 0; aggrCalls = L.aggrCalls || 0; foldToBet = L.foldToBet || 0; faceBet = L.faceBet || 0;
-            wtsd = L.wentToShowdown || 0; wsd = L.wonAtShowdown || 0; gtoSum = L.gtoScoreSum || 0; gtoCnt = L.gtoScoreCount || 0;
+            wtsd = L.wentToShowdown || 0; wsd = L.wonAtShowdown || 0; gtoSum = L.gtoScoreSum || 0; gtoCnt = L.gtoScoreCount || 0; gtoWt = L.gtoW || 0;
             metaTop = { durationMin: null, bankrollStart: null, bankrollDelta: null, tourneyWins: null, seasonPointsGained: null, newAchievements: [] };
             blSrc = L.blunders; seatSum = L.seatSum || 0; seatCnt = L.seatCnt || 0;
             leakFrom(k => L[k]);
@@ -6305,7 +6323,7 @@ io.on('connection', (socket) => {
             handsPlayed = d('handsPlayed'); handsWon = d('handsWon'); pfOpps = d('preflopOpps');
             vpipH = d('vpipHands'); pfrH = d('pfrHands'); tbCount = d('threeBetCount'); tbOpps = d('threeBetOpps');
             aggrBets = d('aggrBets'); aggrCalls = d('aggrCalls'); foldToBet = d('foldToBet'); faceBet = d('faceBet');
-            wtsd = d('wentToShowdown'); wsd = d('wonAtShowdown'); gtoSum = d('gtoScoreSum'); gtoCnt = d('gtoScoreCount');
+            wtsd = d('wentToShowdown'); wsd = d('wonAtShowdown'); gtoSum = d('gtoScoreSum'); gtoCnt = d('gtoScoreCount'); gtoWt = d('gtoW');
             since = snap.ts; seatSum = d('seatSum'); seatCnt = d('seatCnt');
             leakFrom(k => (u[k] || 0) - (snap[k] || 0));
             const prevAch = new Set(snap.achievements || []);
@@ -6324,7 +6342,7 @@ io.on('connection', (socket) => {
             handsPlayed = agg.handsPlayed; handsWon = agg.handsWon; pfOpps = agg.preflopOpps;
             vpipH = agg.vpipHands; pfrH = agg.pfrHands; tbCount = agg.threeBetCount; tbOpps = agg.threeBetOpps;
             aggrBets = agg.aggrBets; aggrCalls = agg.aggrCalls; foldToBet = agg.foldToBet; faceBet = agg.faceBet;
-            wtsd = agg.wentToShowdown; wsd = agg.wonAtShowdown; gtoSum = agg.gtoScoreSum; gtoCnt = agg.gtoScoreCount;
+            wtsd = agg.wentToShowdown; wsd = agg.wonAtShowdown; gtoSum = agg.gtoScoreSum; gtoCnt = agg.gtoScoreCount; gtoWt = agg.gtoW || 0;
             { const now = new Date(); since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)).getTime(); }
             seatSum = agg.seatSum || 0; seatCnt = agg.seatCnt || 0;
             leakFrom(k => agg[k]);
@@ -6346,7 +6364,7 @@ io.on('connection', (socket) => {
                 foldToBet: pct(foldToBet, faceBet),
                 wsd: pct(wsd, wtsd),
                 wtsd: pct(wtsd, handsPlayed),
-                gto: gtoCnt > 0 ? Math.round(gtoSum / gtoCnt) : null,
+                gto: gtoAvg(gtoSum, gtoWt, gtoCnt),
                 sampleActions: gtoCnt
             }
         };
