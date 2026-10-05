@@ -3196,6 +3196,7 @@
         #lobby-overlay .lb-tile b { font-weight: 900; font-size: 14.5px; color: #fff !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         #lobby-overlay .lb-tile small { font-weight: 600; font-size: 11px; color: #9aa6c2 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         #challenge-btn.lb-tile { --tile: #5ad1ff; --tile-grad: linear-gradient(180deg, #5ad1ff, #1f86e0); }
+        #guide-btn.lb-tile     { --tile: #ffe27a; --tile-grad: linear-gradient(180deg, #ffe27a, #f0b21c); }
         #learn-btn.lb-tile     { --tile: #2bd389; --tile-grad: linear-gradient(180deg, #2bd389, #12995c); }
         #daily-btn.lb-tile     { --tile: #ffb84d; --tile-grad: linear-gradient(180deg, #ffb84d, #f08a1c); }
         #shop-btn.lb-tile      { --tile: #b47bff; --tile-grad: linear-gradient(180deg, #b47bff, #7a45e0); }
@@ -3755,6 +3756,42 @@
         .bl-leak b { color: #fff; font-family: var(--font-num); white-space: nowrap; }
         .bl-leak i { font-style: normal; color: #ff8a7d; font-family: var(--font-num); white-space: nowrap; min-width: 64px; text-align: right; }
         .bl-foot { font-size: 10.5px; color: var(--txt-dim); line-height: 1.5; margin-top: 6px; word-break: keep-all; }
+    
+        /* ═══ 🐣 처음 배우는 홀덤 ═══ */
+        .gd-bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.09); overflow: hidden; margin: 2px 0 10px; }
+        .gd-bar i { display: block; height: 100%; width: 0; border-radius: 3px; background: linear-gradient(90deg, #ffe27a, #f0b21c); transition: width .25s; }
+        #guide-chs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+        .gd-title { font-size: 17px; font-weight: 900; color: #ffe9a8; margin-bottom: 10px; word-break: keep-all; }
+        .gd-text { font-size: 14px; line-height: 1.75; color: #dfe6f5; word-break: keep-all; margin-bottom: 12px; }
+        .gd-text b { color: #fff; } .gd-text u { text-decoration-color: #ffc857; text-underline-offset: 3px; }
+        .gd-q { background: rgba(47,125,246,0.12); border: 1px solid rgba(90,160,255,0.4); border-radius: 12px; padding: 10px 12px; }
+        .gd-rows { background: rgba(6,9,18,0.55); border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; padding: 6px 12px; margin-bottom: 12px; }
+        .gd-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.06); flex-wrap: wrap; }
+        .gd-row:last-child { border-bottom: 0; }
+        .gd-rl { font-size: 13px; font-weight: 800; color: #c3cbe0; word-break: keep-all; flex: 1 1 150px; }
+        .gd-rc { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+        .gd-pair { display: inline-flex; gap: 2px; margin-right: 8px; }
+        .gd-rows.small .qz-card { width: 30px; height: 42px; border-radius: 5px; }
+        .gd-rows.small .qz-card b { font-size: 15px; } .gd-rows.small .qz-card i { font-size: 13px; margin-top: 0; }
+        .gd-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+        .gd-two.three { grid-template-columns: 1fr; }
+        .gd-two > div { background: rgba(6,9,18,0.55); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.6; color: #c9d2e6; }
+        .gd-two > div b { display: block; color: #ffe27a; font-size: 14px; margin-bottom: 3px; }
+        .gd-acts { display: grid; gap: 6px; margin-bottom: 12px; }
+        .gd-acts > div { display: flex; align-items: center; gap: 10px; background: rgba(6,9,18,0.55); border-radius: 10px; padding: 8px 10px; font-size: 13px; line-height: 1.5; color: #c9d2e6; }
+        .gd-acts b { flex: 0 0 92px; text-align: center; padding: 7px 0; border-radius: 9px; font-size: 13.5px; color: #fff; }
+        .gd-acts .a-fold { background: linear-gradient(180deg, #5b6680, #3a4358); }
+        .gd-acts .a-check { background: linear-gradient(180deg, #4f7fd6, #2c55a8); }
+        .gd-acts .a-call { background: linear-gradient(180deg, #2bd389, #12995c); color: #03281a; }
+        .gd-acts .a-raise { background: linear-gradient(180deg, #ffb347, #f08a1c); color: #2c1500; }
+        .gd-acts .a-allin { background: linear-gradient(180deg, #ff5a4d, #c9261a); }
+        .gd-nav { display: flex; gap: 8px; margin-top: 12px; }
+        .gd-nav button { flex: 1 1 0; }
+        .gd-nav button:disabled { opacity: 0.45; cursor: default; }
+        .gd-nav .gd-next:not(:disabled) { background: linear-gradient(180deg, #ffe27a, #f0b21c); color: #2c1c00; font-weight: 900; border-color: transparent; }
+        .gd-end { display: grid; gap: 8px; }
+        .gd-end .gd-go { width: 100%; background: linear-gradient(180deg, #2c9a5f, #1a6b3f); color: #fff; }
+        @media (max-width: 520px) { .gd-two { grid-template-columns: 1fr; } .gd-acts b { flex-basis: 78px; } }
     </style>
 </head>
 <body>
@@ -3796,6 +3833,23 @@
         <div id="quiz-cats"></div>
         <div id="quiz-body"></div>
         <button class="btn-close-modal" style="margin-top:12px; width:100%;" onclick="document.getElementById('quiz-modal').style.display='none'">닫기</button>
+    </div>
+</div>
+
+<div id="guide-modal" class="overlay" style="display:none; z-index:4400;">
+    <div class="shop-card quiz-card">
+        <div class="shop-head">
+            <div class="shop-title">🐣 처음 배우는 홀덤</div>
+            <div class="shop-bank" id="guide-prog">1 / 1</div>
+        </div>
+        <div class="gd-bar"><i id="guide-bar"></i></div>
+        <div id="guide-chs"></div>
+        <div id="guide-body"></div>
+        <div class="gd-nav">
+            <button class="btn-close-modal" id="guide-prev" onclick="guideGo(-1)">◀ 이전</button>
+            <button class="btn-close-modal gd-next" id="guide-next" onclick="guideGo(1)">다음 ▶</button>
+        </div>
+        <button class="btn-close-modal" style="margin-top:8px; width:100%;" onclick="document.getElementById('guide-modal').style.display='none'">닫기 (이어서 볼 수 있습니데이)</button>
     </div>
 </div>
 
@@ -3958,6 +4012,7 @@
        <div class="lb-col lb-play">
         <div class="lb-sec">🎮 바로 즐기기</div>
         <div class="lb-tiles">
+            <button id="guide-btn" class="btn-join lb-tile" onclick="openGuide()"><span class="lt-ico">🐣</span><span class="lt-txt"><b>처음 배우기</b><small>규칙부터 한 판 따라 치기</small></span><span id="guide-badge" class="daily-badge" style="display:none;">NEW</span></button>
             <button id="challenge-btn" class="btn-join lb-tile" onclick="openChallenge()"><span class="lt-ico">🤖</span><span class="lt-txt"><b>컴까기</b><small>AI 도장깨기 10단계</small></span></button>
             <button id="learn-btn" class="btn-join lb-tile" onclick="startLearnMode()"><span class="lt-ico">🎓</span><span class="lt-txt"><b>GTO 학습</b><small>AI 5명과 실전 코칭</small></span></button>
             <button id="daily-btn" class="btn-join lb-tile" onclick="openDaily()"><span class="lt-ico">🎁</span><span class="lt-txt"><b>출석 · 미션</b><small>매일 뱅크롤 보상</small></span><span id="daily-badge" class="daily-badge" style="display:none;">!</span></button>
@@ -4255,7 +4310,7 @@
             <button class="learn-bot-opt" data-bots="4" onclick="selectLearnBots(4)">4명<span>5인</span></button>
             <button class="learn-bot-opt active" data-bots="5" onclick="selectLearnBots(5)">5명<span>6인 풀링</span></button>
         </div>
-        <div style="font-size:12px; color:var(--txt-dim); margin:14px 0 8px; text-align:left;">스택 깊이 <span style="font-size:11px;">(100bb 외에는 매 핸드 그 깊이로 다시 시작 — 숏스택 연습용)</span></div>
+        <div style="font-size:12px; color:var(--txt-dim); margin:14px 0 8px; text-align:left;">스택 깊이 <span style="font-size:11px;">(매 핸드 이 깊이로 다시 시작 — 칩을 따거나 잃지 않고, 뱅크롤과도 무관합니데이)</span></div>
         <div id="learn-stack-select" class="learn-bot-grid" style="grid-template-columns:repeat(4,1fr);">
             <button class="learn-bot-opt active" data-stack="100" onclick="selectLearnStack(100)">100bb<span>딥 (기본)</span></button>
             <button class="learn-bot-opt" data-stack="40" onclick="selectLearnStack(40)">40bb<span>미들</span></button>
@@ -4611,6 +4666,139 @@
     // ═══ 🧠 GTO 문제 학습 ═══
     //   서버가 상황별 문제를 만들어 보낸다(정답·해설은 답을 낸 뒤에 온다). 분야: 숏스택·올인 받기·리쉬브·포지션·헤즈업·멀티웨이·계산·스택 깊이
     let _quizCat = 'all', _quizCats = [], _quizStats = null, _quizQ = null, _quizDone = false;
+    // ═══ 🐣 처음 배우는 홀덤 — 완전 초보용 가이드 플레이 ═══
+    //   글로 읽는 설명서가 아니라, 테이블 그림을 보면서 직접 버튼을 눌러 한 판을 따라 친다. 서버와 무관(칩·전적에 영향 없음).
+    const GUIDE_CH = ['홀덤이란', '족보', '한 판 따라 치기', '버튼 고르기', '처음엔 이것만'];
+    const gS = (street, pot, seats) => ({ unit: 'bb', street, pot, dealer: '버튼', seats: seats.map(x => ({ pos: x[0], st: x[1], act: x[2] || '', bet: x[3] || 0, stack: x[4] == null ? 100 : x[4] })) });
+    const GUIDE = [
+        // ── 0. 홀덤이란 ──
+        { ch: 0, t: '카드 2장 + 모두의 카드 5장', rows: [['내 카드 (나만 봄)', ['As', 'Kd']], ['공유 카드 (모두 같이 씀)', ['Kh', '7s', '2d', '9c', '3s']]],
+          x: '홀덤은 <b>내 카드 2장</b>과 테이블 가운데 깔리는 <b>공유 카드 5장</b>, 합쳐서 7장 중 <b>가장 좋은 5장</b>으로 승부하는 게임입니데이.<br>위 그림에서는 내 K와 가운데 K가 만나 <b>K 원페어</b>가 됐습니데이.' },
+        { ch: 0, t: '이기는 방법은 두 가지', x: '<div class="gd-two"><div><b>① 끝까지 가서 이기기</b>마지막에 카드를 까서(쇼다운) 족보가 가장 높은 사람이 가져갑니데이.</div><div><b>② 상대를 접게 만들기</b>내가 칩을 걸었는데 상대가 모두 포기(폴드)하면, 카드를 안 보여줘도 내가 가져갑니데이.</div></div>그래서 홀덤은 <b>좋은 패가 없어도 이길 수 있고, 좋은 패로도 질 수 있는</b> 게임입니데이. 카드 운이 아니라 "언제 걸고 언제 접느냐"가 실력입니데이.' },
+        { ch: 0, t: '칩 · 팟 · bb', viz: { t: 'bar', parts: [['팟 (가운데 모인 칩)', 6, 'pot'], ['상대가 건 칩', 4, 'bet']] },
+          x: '<b>칩</b>은 점수입니데이. 한 판에 걸린 칩이 가운데 모인 것을 <b>팟</b>이라 하고, 그 판을 이긴 사람이 팟을 전부 가져갑니데이.<br><b>bb</b>는 "기본 판돈(빅블라인드)의 몇 배"라는 단위입니데이. <b>3bb</b>면 기본 판돈의 3배를 건다는 뜻입니데이.' },
+        // ── 1. 족보 ──
+        { ch: 1, t: '족보 ① 강한 쪽 (위가 더 강함)', small: true, rows: [
+            ['로열 스트레이트 플러시 — 같은 무늬 10·J·Q·K·A', ['Ts', 'Js', 'Qs', 'Ks', 'As']],
+            ['스트레이트 플러시 — 같은 무늬로 숫자 5개 연속', ['5h', '6h', '7h', '8h', '9h']],
+            ['포카드 — 같은 숫자 4장', ['9s', '9h', '9d', '9c', 'Kd']],
+            ['풀하우스 — 같은 숫자 3장 + 2장', ['Qs', 'Qh', 'Qd', '7c', '7d']],
+            ['플러시 — 같은 무늬 5장', ['Ad', 'Jd', '8d', '5d', '2d']]],
+          x: '위로 갈수록 드물고 강합니데이. 외우기 어려우면 테이블 화면의 📖 도움말에서 언제든 다시 볼 수 있습니데이.' },
+        { ch: 1, t: '족보 ② 자주 나오는 쪽', small: true, rows: [
+            ['스트레이트 — 숫자 5개 연속 (무늬 상관없음)', ['6c', '7d', '8s', '9h', 'Td']],
+            ['트리플 — 같은 숫자 3장', ['8s', '8h', '8d', 'Kc', '4d']],
+            ['투페어 — 페어 두 개', ['Ks', 'Kh', '5d', '5c', '9d']],
+            ['원페어 — 같은 숫자 2장', ['As', 'Ad', 'Jc', '7h', '3d']],
+            ['하이카드 — 아무것도 없음 (높은 카드로 비교)', ['Ah', 'Jd', '9s', '6c', '2h']]],
+          x: '실전에서는 <b>원페어·투페어</b>로 승부가 나는 판이 대부분입니데이. 숫자는 <b>A가 가장 높고</b> K, Q, J, 10 … 2 순서입니데이.' },
+        { ch: 1, t: '누가 이길까요? ①', rows: [['공유 카드', ['Kh', '7s', '2d', '9c', '3s']], ['철수', ['As', 'Kd']], ['영희', ['7h', '7d']]],
+          q: '두 사람이 끝까지 갔습니데이. 누가 이깁니꺼?', choices: [['철수 (A♠ K♦)', '', false, '철수는 K 원페어입니데이. 영희는 손에 든 7 두 장과 가운데 7이 만나 <b>7 트리플</b> — 트리플이 원페어보다 높습니데이.'], ['영희 (7♥ 7♦)', '', true, '맞습니데이! 영희는 <b>7 트리플</b>, 철수는 K 원페어. 숫자가 낮아도 족보가 높으면 이깁니데이.']] },
+        { ch: 1, t: '누가 이길까요? ②', rows: [['공유 카드', ['9h', '8h', '2h', 'Tc', 'Jd']], ['철수', ['Qs', 'Kd']], ['영희', ['Ah', '3h']]],
+          q: '누가 이깁니꺼?', choices: [['철수 (Q♠ K♦)', '', false, '철수는 9·10·J·Q·K <b>스트레이트</b>입니데이. 하지만 영희는 하트가 5장 — <b>플러시</b>가 스트레이트보다 높습니데이.'], ['영희 (A♥ 3♥)', '', true, '맞습니데이! 하트 5장 <b>플러시</b>가 스트레이트를 이깁니데이. 가운데 같은 무늬가 3장 깔리면 플러시를 조심해야 합니데이.']] },
+        { ch: 1, t: '누가 이길까요? ③', rows: [['공유 카드', ['Kh', '7s', '2d', '9c', '3s']], ['철수', ['Kc', 'Qc']], ['영희', ['As', 'Kd']]],
+          q: '둘 다 K 원페어입니데이. 누가 이깁니꺼?', choices: [['철수 (K♣ Q♣)', '', false, '둘 다 K 페어면 <b>나머지 카드 중 가장 높은 카드(키커)</b>로 가립니데이. 영희의 A가 철수의 Q보다 높습니데이.'], ['영희 (A♠ K♦)', '', true, '맞습니데이! 같은 페어면 옆에 든 카드, <b>키커</b>가 높은 쪽이 이깁니데이. 그래서 A-K가 K-Q보다 좋은 패입니데이.'], ['비김', '', false, '5장이 완전히 같을 때만 비깁니데이. 여기서는 영희의 A 키커가 철수의 Q보다 높습니데이.']] },
+        // ── 2. 한 판 따라 치기 ──
+        { ch: 2, t: '① 판이 시작되면 — 블라인드', scene: gS('preflop', 0, [['버튼', 'hero'], ['SB', 'in', '', 0.5, 99.5], ['BB', 'in', '', 1, 99]]),
+          x: '카드를 받기 전에 두 사람이 <b>의무로</b> 칩을 냅니데이. <b>SB</b>(스몰 블라인드) 0.5bb, <b>BB</b>(빅 블라인드) 1bb. 이게 있어야 팟에 먹을 게 생깁니데이.<br><b>D</b> 표시가 딜러 버튼인데, 매 판 시계 방향으로 한 칸씩 돌아가서 블라인드도 돌아가며 냅니데이. 이번 판은 내가 버튼이라 공짜입니데이.' },
+        { ch: 2, t: '② 내 카드를 받았습니데이 (프리플랍)', hand: ['As', 'Kd'], scene: gS('preflop', 0, [['버튼', 'hero'], ['SB', 'in', '', 0.5, 99.5], ['BB', 'in', '', 1, 99]]),
+          q: 'A♠ K♦ — 아주 좋은 시작 패입니데이. 계속하려면 최소 1bb(BB가 낸 만큼)를 내야 합니데이. 어떻게 합니꺼?',
+          choices: [['폴드 (포기)', 'c-fold', false, 'A-K는 받을 수 있는 패 중 손꼽히게 좋습니데이. 이런 패를 접으면 이길 기회가 없습니데이. 다시 골라 보이소.'], ['콜 1bb (따라가기)', 'c-call', false, '따라가도 되지만, 좋은 패는 <b>레이즈</b>로 판을 키우는 게 정석입니데이. 약한 패들이 싸게 따라와서 역전하는 걸 막아 줍니데이. 다시 골라 보이소.'], ['레이즈 3bb (올리기)', 'c-raise', true, '좋습니데이! 좋은 패는 <b>레이즈</b>로 판을 키우이소. 상대는 3bb를 내고 따라오거나 접어야 합니데이.']] },
+        { ch: 2, t: '③ 플랍 — 공유 카드 3장', hand: ['As', 'Kd'], board: ['Kh', '7s', '2d'], scene: gS('flop', 6.5, [['버튼', 'hero', '', 0, 97], ['SB', 'fold', '폴드'], ['BB', 'in', '체크', 0, 97]]),
+          q: 'SB는 접었고 BB가 따라왔습니데이. 가운데 3장(플랍)이 깔렸는데 K가 떴습니데이 — 나는 <b>K 원페어에 A 키커</b>. BB는 "체크"(칩을 안 걸고 차례를 넘김)했습니데이.',
+          choices: [['체크 (나도 넘기기)', 'c-fold', false, '체크하면 공짜로 다음 카드를 보여 주게 됩니데이. 지금 내가 이기고 있을 가능성이 높으니, 벳해서 값을 받는 게 좋습니데이. 다시 골라 보이소.'], ['벳 4bb (칩 걸기)', 'c-raise', true, '좋습니데이! 이기고 있을 때 칩을 거는 것을 <b>밸류벳</b>이라 합니데이. 나보다 약한 패(다른 K, 7 페어 등)가 따라오면 그만큼 법니데이.']] },
+        { ch: 2, t: '④ 턴 — 네 번째 카드', hand: ['As', 'Kd'], board: ['Kh', '7s', '2d', '9c'], scene: gS('turn', 14.5, [['버튼', 'hero', '', 0, 93], ['SB', 'fold', '폴드'], ['BB', 'in', '체크', 0, 93]]),
+          q: 'BB가 콜했고, 네 번째 카드(턴) 9♣가 깔렸습니데이. 내 패를 위협하는 카드는 아닙니데이. BB가 또 체크했습니데이.',
+          choices: [['체크', 'c-fold', false, '여전히 내가 앞서 있을 가능성이 높습니데이. 체크하면 상대가 공짜로 역전 카드를 볼 수 있습니데이. 다시 골라 보이소.'], ['벳 10bb', 'c-raise', true, '좋습니데이! 팟이 커졌으니 벳도 커집니데이. 보통 <b>팟의 절반~3분의 2</b> 정도를 겁니데이.']] },
+        { ch: 2, t: '⑤ 리버 — 마지막 카드', hand: ['As', 'Kd'], board: ['Kh', '7s', '2d', '9c', '3s'], scene: gS('river', 34.5, [['버튼', 'hero', '', 0, 83], ['SB', 'fold', '폴드'], ['BB', 'in', '체크', 0, 83]]),
+          q: 'BB가 또 콜했고, 마지막 카드(리버) 3♠. 이제 더 깔릴 카드는 없습니데이. BB가 체크했습니데이. 마지막 기회입니데이.',
+          choices: [['체크 (그냥 카드 까기)', 'c-fold', false, '체크해도 이기긴 하겠지만, 상대가 계속 따라왔다는 건 뭔가 들고 있다는 뜻입니데이. 한 번 더 걸면 더 벌 수 있습니데이. 다시 골라 보이소.'], ['벳 20bb', 'c-raise', true, '좋습니데이! 리버에서는 "나보다 약한 패가 콜해 줄까?"만 생각하면 됩니데이. 상대가 K를 들고 있다면 콜할 겁니데이.']] },
+        { ch: 2, t: '⑥ 쇼다운 — 카드 공개', rows: [['공유 카드', ['Kh', '7s', '2d', '9c', '3s']], ['나 — K 원페어, 키커 A  ✅ 승리', ['As', 'Kd']], ['BB — K 원페어, 키커 Q', ['Kc', 'Qc']]],
+          x: 'BB가 콜해서 둘 다 카드를 깠습니데이. 둘 다 K 원페어지만 <b>내 A 키커</b>가 Q보다 높아서 <b>팟 74.5bb</b>를 내가 가져갑니데이! 🎉<br><br>이 판의 흐름을 기억하이소: <b>좋은 패로 시작 → 맞으면 계속 벳 → 약한 패에게 값 받기</b>. 이게 홀덤에서 칩을 버는 가장 기본적인 방법입니데이.' },
+        // ── 3. 버튼 고르기 ──
+        { ch: 3, t: '내 차례에 누를 수 있는 버튼', x: '<div class="gd-acts"><div><b class="a-fold">폴드</b>이번 판을 포기. 이미 낸 칩은 못 돌려받지만 더 잃지도 않습니데이.</div><div><b class="a-check">체크</b>칩을 안 걸고 차례를 넘김. <u>앞에서 아무도 안 걸었을 때만</u> 가능.</div><div><b class="a-call">콜</b>상대가 건 만큼 똑같이 내고 따라감.</div><div><b class="a-raise">벳 · 레이즈</b>내가 칩을 검(벳). 상대가 건 것보다 더 올림(레이즈).</div><div><b class="a-allin">올인</b>가진 칩을 전부 검.</div></div>낼 칩이 없을 때는 <b>폴드할 이유가 없습니데이</b> — 체크하면 공짜입니데이. 이제 상황별로 골라 보이소.' },
+        { ch: 3, t: '상황 ① 아무것도 못 맞췄는데 공짜', hand: ['8c', '7c'], board: ['Ah', 'Kd', '4s'], scene: gS('flop', 4, [['버튼', 'hero', '', 0, 98], ['SB', 'fold', '폴드'], ['BB', 'in', '체크', 0, 98]]),
+          q: '내 패는 8♣ 7♣, 가운데는 A K 4 — 하나도 안 맞았습니데이. 상대는 체크했습니데이.', choices: [['폴드', 'c-fold', false, '낼 칩이 없는데 접을 이유가 없습니데이! 체크하면 공짜로 다음 카드를 봅니데이. 다시 골라 보이소.'], ['체크', 'c-call', true, '맞습니데이. 공짜면 일단 체크. 다음 카드에 뭔가 맞을 수도 있습니데이.'], ['벳 3bb', 'c-raise', false, '아무것도 없이 거는 것을 블러프라 합니데이. 통할 때도 있지만 처음에는 권하지 않습니데이 — 맞았을 때 걸고, 안 맞았으면 체크하는 것부터 익히이소.']] },
+        { ch: 3, t: '상황 ② 약한 패인데 상대가 크게 걸었다', hand: ['5s', '5d'], board: ['Ah', 'Kc', '9d'], scene: gS('flop', 6, [['버튼', 'hero', '', 0, 97], ['SB', 'fold', '폴드'], ['BB', 'in', '벳 5', 5, 92]]),
+          q: '내 패는 5 원페어. 가운데에 A, K, 9 — 나보다 높은 카드가 3장이나 있습니데이. 상대가 5bb를 걸었습니데이.', choices: [['폴드', 'c-fold', true, '맞습니데이. 상대가 A나 K 한 장만 들고 있어도 내 5 페어는 집니데이. <b>잘 접는 것</b>이 초보를 벗어나는 첫걸음입니데이.'], ['콜 5bb', 'c-call', false, '"혹시 블러프 아닐까" 하고 따라가는 콜이 가장 크게 칩을 잃는 습관입니데이. A·K가 깔린 판에서 5 페어는 거의 지고 있습니데이. 다시 골라 보이소.'], ['레이즈 15bb', 'c-raise', false, '약한 패로 판을 키우면 나보다 좋은 패만 따라옵니데이. 다시 골라 보이소.']] },
+        { ch: 3, t: '상황 ③ 아주 강한 패인데 상대가 걸었다', hand: ['9s', '9h'], board: ['9d', 'Kc', '4s'], scene: gS('flop', 6, [['버튼', 'hero', '', 0, 97], ['SB', 'fold', '폴드'], ['BB', 'in', '벳 4', 4, 93]]),
+          q: '손에 9 두 장, 가운데 9 — <b>9 트리플</b>입니데이! 상대가 4bb를 걸었습니데이.', choices: [['폴드', 'c-fold', false, '트리플은 아주 강한 패입니데이. 절대 접으면 안 됩니데이!'], ['콜 4bb', 'c-call', true, '괜찮습니데이. 다만 이렇게 강한 패는 <b>레이즈</b>로 팟을 더 키우는 쪽이 보통 더 많이 법니데이.'], ['레이즈 12bb', 'c-raise', true, '좋습니데이! 강한 패는 팟을 키워야 크게 이깁니데이. 상대가 K를 들고 있다면 따라올 겁니데이.']] },
+        { ch: 3, t: '상황 ④ 시작 패가 나쁘다', hand: ['7d', '2c'], scene: gS('preflop', 0, [['버튼', 'hero'], ['SB', 'in', '', 0.5, 99.5], ['BB', 'in', '', 1, 99]]),
+          q: '7♦ 2♣ — 숫자도 낮고, 무늬도 다르고, 이어지지도 않습니데이.', choices: [['폴드', 'c-fold', true, '맞습니데이. <b>대부분의 패는 접는 게 정답</b>입니데이. 잘 치는 사람도 열 판 중 일곱 판쯤은 카드를 받자마자 접습니데이. 지루해도 그게 이기는 길입니데이.'], ['콜 1bb', 'c-call', false, '"싸니까 한번 보자"가 쌓이면 칩이 줄줄 샙니데이. 나쁜 패는 맞아도 더 좋은 패에게 집니데이. 다시 골라 보이소.'], ['레이즈 3bb', 'c-raise', false, '나쁜 패로 판을 키울 이유가 없습니데이. 다시 골라 보이소.']] },
+        // ── 4. 처음엔 이것만 ──
+        { ch: 4, t: '처음에는 이런 패만 치이소', small: true, rows: [['큰 페어 — 무조건 레이즈', ['As', 'Ad'], ['Kh', 'Kc'], ['Qs', 'Qd'], ['Jh', 'Jc']], ['A + 큰 카드 — 레이즈', ['As', 'Kd'], ['Ah', 'Qc'], ['Ad', 'Js']], ['같은 무늬의 큰 카드 두 장', ['Kh', 'Qh'], ['Qs', 'Js'], ['Jd', 'Td']], ['중간 페어 — 싸게 볼 수 있으면', ['Ts', 'Td'], ['9h', '9c'], ['8s', '8d']]],
+          x: '이 밖의 패는 <b>대부분 접어도</b> 손해가 아닙니데이. 익숙해지면 조금씩 넓히면 됩니데이.' },
+        { ch: 4, t: '자리(포지션)가 중요합니데이', scene: gS('preflop', 0, [['버튼', 'hero'], ['SB', 'in', '', 0.5, 99.5], ['BB', 'in', '', 1, 99], ['앞자리', 'in'], ['중간', 'in'], ['컷오프', 'in']]),
+          x: '<b>나중에 행동할수록 유리</b>합니데이 — 남들이 어떻게 하는지 다 보고 정할 수 있으니까예. 가장 늦게 행동하는 <b>버튼(D)</b>이 제일 좋은 자리입니데이.<br>그래서 <b>앞자리에서는 아주 좋은 패만</b>, 버튼 근처에서는 조금 더 넓게 칩니데이.' },
+        { ch: 4, t: '초보가 가장 많이 하는 실수 3가지', x: '<div class="gd-two three"><div><b>① 너무 많은 패로 참여</b>아무 패나 "한번 보자"고 들어가면 블라인드처럼 조금씩 다 새어 나갑니데이.</div><div><b>② 아까워서 끝까지 콜</b>이미 낸 칩은 내 것이 아닙니데이. 지고 있다 싶으면 접으이소.</div><div><b>③ 좋은 패로 체크만</b>이기고 있을 때 걸어야 법니데이. 상대가 걸어 주길 기다리지 마이소.</div></div>게임이 끝난 뒤 <b>📊 리포트</b>를 열면 내가 한 실수를 상황째로 보여 줍니데이.' },
+        { ch: 4, t: '콜할까 말까 — 딱 한 가지 계산', viz: { t: 'bar', parts: [['팟', 100, 'pot'], ['상대 벳', 50, 'bet'], ['내 콜', 50, 'call']] },
+          x: '상대가 걸었을 때는 "<b>얼마 내고 얼마를 먹나</b>"를 보이소. 위 그림은 50을 내고 합계 200을 노리는 상황 — <b>네 번에 한 번(25%)만 이겨도 본전</b>입니데이.<br>상대 벳이 <b>작으면</b> 약한 패로도 따라갈 만하고, <b>크면</b> 좋은 패가 아니면 접는 게 맞습니데이. 이걸 <b>팟오즈</b>라 합니데이.' },
+        { ch: 4, t: '이제 직접 쳐 볼 차례입니데이! 🎉', end: true,
+          x: '규칙과 기본기는 다 배웠습니데이. <b>🎓 GTO 학습</b>에서는 봇과 치는 동안 매 순간 "지금은 이렇게 치는 게 좋다"를 옆에서 알려 줍니데이. <b>칩을 잃어도 뱅크롤에는 아무 영향이 없으니</b> 마음껏 눌러 보이소.' }
+    ];
+    let _gi = 0, _gOk = {};
+    try { _gi = Math.max(0, Math.min(GUIDE.length - 1, parseInt(localStorage.getItem('guideIdx') || '0', 10) || 0)); } catch (e) {}
+    function guideBadge() { try { const b = document.getElementById('guide-badge'); if (b) b.style.display = localStorage.getItem('guideSeen') ? 'none' : ''; } catch (e) {} }
+    function openGuide() {
+        document.getElementById('guide-modal').style.display = 'flex';
+        try { localStorage.setItem('guideSeen', '1'); } catch (e) {}
+        guideBadge();
+        renderGuide();
+    }
+    function guideJump(ch) { _gi = Math.max(0, GUIDE.findIndex(s => s.ch === ch)); renderGuide(); }
+    function guideGo(d) {
+        const st = GUIDE[_gi];
+        if (d > 0 && st.choices && !_gOk[_gi]) return;
+        _gi = Math.max(0, Math.min(GUIDE.length - 1, _gi + d));
+        renderGuide();
+    }
+    function guideRows(st) {
+        const cell = c => Array.isArray(c) ? `<span class="gd-pair">${c.map(quizCard).join('')}</span>` : quizCard(c);
+        return `<div class="gd-rows${st.small ? ' small' : ''}">${st.rows.map(r => {
+            const cards = Array.isArray(r[1][0]) || r.length > 2 ? r.slice(1).map(cell).join('') : r[1].map(quizCard).join('');
+            return `<div class="gd-row"><span class="gd-rl">${esc(r[0])}</span><span class="gd-rc">${cards}</span></div>`;
+        }).join('')}</div>`;
+    }
+    function renderGuide() {
+        const st = GUIDE[_gi];
+        try { localStorage.setItem('guideIdx', String(_gi)); } catch (e) {}
+        document.getElementById('guide-prog').textContent = `${_gi + 1} / ${GUIDE.length}`;
+        document.getElementById('guide-bar').style.width = ((_gi + 1) / GUIDE.length * 100) + '%';
+        document.getElementById('guide-chs').innerHTML = GUIDE_CH.map((n, i) => `<button class="qz-cat${st.ch === i ? ' on' : ''}" onclick="guideJump(${i})">${i + 1}. ${esc(n)}</button>`).join('');
+        const scene = st.scene ? quizScene({ scene: st.scene, hand: st.hand, board: st.board }) : '';
+        const handOnly = (!st.scene && st.hand) ? `<div class="gd-rows"><div class="gd-row"><span class="gd-rl">내 카드</span><span class="gd-rc">${st.hand.map(quizCard).join('')}</span></div></div>` : '';
+        const choices = st.choices ? `<div class="qz-choices">${st.choices.map((c, i) => `<button class="qz-choice ${c[1]}" data-i="${i}" onclick="guidePick(${i})">${quizLabel(c[0])}</button>`).join('')}</div><div id="guide-fb"></div>` : '';
+        const end = st.end ? `<div class="gd-end">
+            <button class="btn-join gd-go" onclick="guideStartPractice()">🎓 봇 2명과 연습 시작 (칩 걱정 없음)</button>
+            <button class="btn-close-modal" onclick="guideJump(0)">↺ 처음부터 다시 보기</button></div>` : '';
+        document.getElementById('guide-body').innerHTML = `<div class="gd-title">${esc(st.t)}</div>
+            ${scene}${handOnly}${st.rows ? guideRows(st) : ''}${st.viz ? quizViz(st.viz) : ''}
+            ${st.x ? `<div class="gd-text">${st.x}</div>` : ''}
+            ${st.q ? `<div class="gd-text gd-q">${st.q}</div>` : ''}
+            ${choices}${end}`;
+        document.getElementById('guide-prev').disabled = _gi === 0;
+        const nx = document.getElementById('guide-next');
+        nx.style.visibility = _gi === GUIDE.length - 1 ? 'hidden' : '';
+        nx.disabled = !!(st.choices && !_gOk[_gi]);
+        nx.textContent = (st.choices && !_gOk[_gi]) ? '위에서 골라 보이소' : '다음 ▶';
+        const card = document.querySelector('#guide-modal .quiz-card'); if (card) card.scrollTop = 0;
+    }
+    function guidePick(i) {
+        const st = GUIDE[_gi], c = st.choices[i];
+        const btns = document.querySelectorAll('#guide-body .qz-choice');
+        btns.forEach((b, k) => { b.classList.remove('right', 'wrong'); if (k === i) b.classList.add(c[2] ? 'right' : 'wrong'); });
+        document.getElementById('guide-fb').innerHTML = `<div class="qz-res ${c[2] ? 'ok' : 'no'}"><div class="qz-res-head">${c[2] ? '✅ 좋습니데이' : '🤔 다시 생각해 보이소'}</div><div class="gd-text" style="margin:0;">${c[3]}</div></div>`;
+        if (c[2]) {
+            _gOk[_gi] = true;
+            const nx = document.getElementById('guide-next'); nx.disabled = false; nx.textContent = '다음 ▶';
+        }
+    }
+    function guideStartPractice() {
+        document.getElementById('guide-modal').style.display = 'none';
+        socket.emit('createLearnMode', { botCount: 2, stackBB: 100 });
+    }
+    setTimeout(guideBadge, 0);
+
     function openQuiz() {
         document.getElementById('quiz-modal').style.display = 'flex';
         socket.emit('quizInfo');

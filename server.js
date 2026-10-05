@@ -3607,7 +3607,7 @@ class GameRoom {
         leaving.forEach(nick => {
             const p = this.players[nick];
             if (!p) return;
-            if (!p.isBot && p.chips > 0) {
+            if (!p.isBot && p.chips > 0 && !this._learnMode) {   // 🎓 학습 칩은 연습용 — 뱅크롤로 환수하지 않는다
                 MockDB.recordCashNet(nick, p.chips);
                 MockDB.adjustBankroll(nick, p.chips).then(nb => {
                     if (p.socketId) io.to(p.socketId).emit('bankrollUpdate', { bankroll: nb || 0 });
@@ -5178,7 +5178,8 @@ io.on('connection', (socket) => {
         }
 
         if (p._disconnectTimer) clearTimeout(p._disconnectTimer);
-        if (room.mode === 'cash' && p.chips > 0) {
+        // 🐛 학습 모드(공짜 연습 칩)에서 나가면 테이블 칩이 통째로 뱅크롤에 들어왔다(실측 100,000 → 107,027). 학습은 뱅크롤과 무관해야 한다.
+        if (room.mode === 'cash' && p.chips > 0 && !room._learnMode) {
             // 💵 캐시아웃 → 뱅크롤 환수. 환수액을 본인 화면에도 즉시 반영한다.
             MockDB.recordCashNet(nick, p.chips);
             MockDB.adjustBankroll(nick, p.chips).then(nb => socket.emit('bankrollUpdate', { bankroll: nb || 0 }));
@@ -5495,7 +5496,7 @@ io.on('connection', (socket) => {
         const settings = { startingChips: stackBB * 100, blindUpInterval: 999999, turnTimeLimit: 60, mode: 'cash', cashBlind: 100 };
         const room = new GameRoom(roomId, settings);
         room._learnMode = true; // 🎓 학습 모드 플래그
-        room._learnFixedStack = stackBB < 100;
+        room._learnFixedStack = true;   // 🎓 학습은 칩을 따거나 잃지 않는다 — 매 핸드 전원이 고른 깊이로 다시 시작
         room._mttFreeChips = true; // 자유 칩 — 뱅크롤에 영향 없음 (순수 연습)
         rooms.set(roomId, room);
 
@@ -5910,7 +5911,7 @@ io.on('connection', (socket) => {
             socket.emit('gameMessage', '🚨 이번 핸드가 끝난 뒤에 관전으로 바꿀 수 있습니데이.');
             return;
         }
-        const back = p.chips || 0;
+        const back = room._learnMode ? 0 : (p.chips || 0);
         if (back > 0) {
             MockDB.recordCashNet(socket.nickname, back);
             MockDB.adjustBankroll(socket.nickname, back).then(nb => socket.emit('bankrollUpdate', { bankroll: nb || 0 }));
