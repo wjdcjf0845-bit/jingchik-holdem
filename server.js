@@ -107,6 +107,8 @@ const ShortStack = require('./lib/shortstack'); // 🤖 숏스택 푸시/폴드 
 const OppModel = require('./lib/oppmodel');     // 🧠 상대 읽기 — 세션 표본 + 계정 누적 전적
 const Challenge = require('./lib/challenge');   // 🤖 컴까기(AI 도장깨기) 단계표·보상
 const Rogue = require('./lib/roguerun');        // 🍀 증강 컴까기(로그라이크 런) — 층·증강·정산
+const GtoAdvice = require('./lib/gtoadvice');   // 🎓 학습모드 조언 — 상대 수·포지션·스택 깊이별
+const Quiz = require('./lib/gtoquiz');          // 🧠 GTO 문제 학습
 // 칭호는 화면에 그대로 찍히는 문구라 id 대신 문구를 내려보낸다 (클라이언트에 카탈로그 사본을 두지 않으려고)
 // ⚠️ COSMETICS 는 평범한 객체라 COSMETICS['__proto__'] 같은 상속 키가 걸려든다.
 //    클라이언트가 보낸 id 는 반드시 이 함수로만 조회할 것 (자기 소유 키만 통과).
@@ -3513,6 +3515,15 @@ class GameRoom {
         let mix = {}; // {fold, check, call, raise, bet}
         let bestAction, reason;
         let posInfo = null;
+        // 🎯 [상황별 조언] 예전엔 승률 하나로만 갈라서 헤즈업·4명·숏스택에서 전부 같은 말을 했다.
+        //    상대 수 · 유효 스택(bb) · 포지션 · SPR 을 같이 본다. notes 는 화면에 "지금 상황" 꼬리표로 나간다.
+        let notes = [];
+        const _bbNow = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+        const _liveOpp = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded);
+        const _stk = n => this.players[n].chips + (this.players[n].currentBet || 0);
+        const effBB = (_liveOpp.length ? Math.min(_stk(nick), Math.max(..._liveOpp.map(_stk))) : _stk(nick)) / _bbNow;
+        const _effBehind = _liveOpp.length ? Math.min(p.chips, Math.max(..._liveOpp.map(n => this.players[n].chips))) : p.chips;
+        const _spr = potBefore > 0 ? _effBehind / potBefore : 99;
 
         if (street === 'preflop') {
             // 🎯 프리플랍 — 포지션별 레인지 기반 (승률이 아닌 핸드 레인지로 판단)
@@ -3530,10 +3541,87 @@ class GameRoom {
             posInfo = { position: p.position || '-', code, rangeScore: rt.score, rangeLabel: rt.label, threshold: openThreshold(p.position || '') };
 
             const canCheck = (toCall === 0); // BB 무료 체크 또는 림프 팟
-            if (!facingRaise) {
+            notes.push(opponents === 1 ? '헤즈업' : `${opponents + 1}명`);
+            notes.push(`유효 스택 ${Math.round(effBB)}bb`);
+            // ── 스택이 짧거나 올인을 마주한 상황은 일반 오픈/3벳 표가 아니라 푸시/폴드 기준으로 본다 (봇과 같은 표) ──
+            let _special = false;
+            const _pctl = ShortStack.handPercentile(code);
+            const _pc = x => Math.round(x * 100);
+            const _raises = this.raiseCountThisStreet || 0;
+            const _aggr = _liveOpp.find(n => (this.players[n].currentBet || 0) === this.currentHighestBet && this.currentHighestBet > bb) || null;
+            const _aggrP = _aggr ? this.players[_aggr] : null;
+            const _aggrAllIn = !!(_aggrP && (_aggrP.isAllIn || _aggrP.chips === 0));
+            if (facingRaise && toCall > 0 && (toCall >= p.chips * 0.4 || (_aggrAllIn && toCall >= bb * 3))) {
+                // (가) 올인(또는 내 스택의 큰 몫)을 받는 상황 — "올인하는 사람의 범위 상대 승률"로 판단
+                let x;
+                if (_aggrAllIn) x = ShortStack.shoverPct(_aggr ? _stk(_aggr) / bb : effBB, Math.max(1, _liveOpp.length), _raises);
+                else x = _raises >= 3 ? 0.03 : _raises === 2 ? 0.07 : ShortStack.openPct(_aggrP ? _aggrP.position : '');
+                if (_aggr && _aggrAllIn) { const js = this.jamStat(_aggr); if (js.j >= 2 && js.h >= 3) x = Math.max(x, Math.min(1, js.j / js.h)); }
+                x = Math.min(1, x);
+                const res = ShortStack.shouldCallShove(code, x, potOdds, 0.02);
+                notes.push('올인 받기');
+                _special = true;
+                if (res.call) {
+                    const jam = res.equity > 0.60 && p.chips > toCall;
+                    mix = jam ? { fold: 0, call: 40, raise: 60 } : { fold: 8, call: 92 };
+                    bestAction = jam ? 'raise' : 'call';
+                    reason = `상대가 스택을 건 범위는 상위 약 ${_pc(x)}%로 봅니데이. 그 범위 상대로 ${code}의 승률은 약 ${_pc(res.equity)}% — 필요 승률(${_pc(potOdds)}%)을 넘으니 ${jam ? '올인' : '콜'}.`;
+                } else {
+                    mix = { fold: 90, call: 10 };
+                    bestAction = 'fold';
+                    reason = `상대가 스택을 건 범위는 상위 약 ${_pc(x)}%. 그 범위 상대로 ${code}의 승률은 약 ${_pc(res.equity)}%라 필요 승률(${_pc(potOdds)}%)에 못 미칩니데이 — 폴드. ("아무 패 상대 승률"로 보면 넓게 받게 됩니데이.)`;
+                }
+            } else if (effBB <= 12 && p.chips > 0) {
+                // (나) 12bb 이하: 올인 아니면 폴드
+                if (!facingRaise) {
+                    const behind = Math.max(1, _liveOpp.filter(n => !this.players[n].hasActed && !this.players[n].isAllIn).length);
+                    const range = ShortStack.pushPct(effBB, behind);
+                    notes.push('숏스택 — 푸시/폴드');
+                    _special = true;
+                    if (_pctl <= range) {
+                        mix = canCheck ? { check: 8, raise: 92 } : { fold: 8, raise: 92 };
+                        bestAction = 'raise';
+                        reason = `${Math.round(effBB)}bb 숏스택 — 작게 열고 접을 칩이 없습니데이. 올인 아니면 폴드: 뒤에 ${behind}명이면 푸시 범위는 상위 약 ${_pc(range)}%, ${code}는 상위 ${_pc(_pctl)}% → 올인.`;
+                    } else if (canCheck) {
+                        mix = { check: 100 }; bestAction = 'check';
+                        reason = `${Math.round(effBB)}bb 숏스택 — ${code}는 푸시 범위(상위 약 ${_pc(range)}%) 밖입니데이. 공짜로 플랍을 보이소.`;
+                    } else {
+                        mix = { fold: 94, raise: 6 }; bestAction = 'fold';
+                        reason = `${Math.round(effBB)}bb 숏스택 — 올인 아니면 폴드입니데이. 뒤에 ${behind}명이면 푸시 범위는 상위 약 ${_pc(range)}%인데 ${code}는 상위 ${_pc(_pctl)}% → 폴드. (작게 열거나 림프하면 칩만 흘립니데이.)`;
+                    }
+                } else if (!(isBB && toCall <= bb * 1.5 && effBB >= 6)) {
+                    const openX = _raises >= 2 ? 0.07 : ShortStack.openPct(_aggrP ? _aggrP.position : '');
+                    const r = ShortStack.reshovePct(openX, effBB);
+                    notes.push('숏스택 — 리쉬브/폴드');
+                    _special = true;
+                    if (_pctl <= r) {
+                        mix = { fold: 6, call: 4, raise: 90 }; bestAction = 'raise';
+                        reason = `${Math.round(effBB)}bb로 오픈을 받았습니데이 — 콜하면 플랍 뒤에 할 수 있는 게 없어 올인(리쉬브) 아니면 폴드. 리쉬브 범위 상위 약 ${_pc(r)}%, ${code}는 상위 ${_pc(_pctl)}% → 올인.`;
+                    } else {
+                        mix = { fold: 92, call: 6, raise: 2 }; bestAction = 'fold';
+                        reason = `${Math.round(effBB)}bb로 오픈을 받았습니데이 — 올인 아니면 폴드. 리쉬브 범위는 상위 약 ${_pc(r)}%인데 ${code}는 상위 ${_pc(_pctl)}% → 폴드.`;
+                    }
+                }
+            } else if (effBB <= 20 && facingRaise && _raises <= 1 && _aggrP && !_aggrAllIn) {
+                // (다) 13~20bb: 넓은 오픈에는 리쉬브가 3벳보다 낫다
+                const r = ShortStack.reshovePct(ShortStack.openPct(_aggrP.position), effBB);
+                if (_pctl <= r) {
+                    notes.push('리쉬브 스택');
+                    _special = true;
+                    mix = { fold: 8, call: 17, raise: 75 }; bestAction = 'raise';
+                    reason = `${Math.round(effBB)}bb — 작게 3벳하면 스택의 3분의 1이 들어가 어차피 못 접습니데이. ${_aggrP.position || '상대'} 오픈 상대로 리쉬브 범위는 상위 약 ${_pc(r)}%, ${code}는 상위 ${_pc(_pctl)}% → 올인이 기준.`;
+                }
+            }
+            if (_special) {
+                // 위에서 결정됨
+            } else if (!facingRaise) {
                 // 미오픈/오픈 기회 (아직 레이즈 없음) — 정석은 raise-or-fold, 림프 지양 (BB는 공짜 체크 가능)
                 const late = (p.position === 'BTN' || p.position === 'CO' || p.position === 'SB');
-                if (rt.tier === 'raise') {
+                if (opponents === 1 && !canCheck && rt.tier !== 'raise' && rt.score > Quiz.HU_OPEN_SCORE) {
+                    // 헤즈업 버튼(SB)은 6인 버튼 차트보다 훨씬 넓게 연다
+                    mix = { fold: 15, raise: 85 };
+                    bestAction = 'raise'; reason = `헤즈업 버튼 — 상대가 한 명뿐이고 플랍 뒤에도 포지션이 내 것이라 전체 패의 4분의 3쯤을 엽니데이. ${code}는 6인 테이블에선 접을 패지만 여기선 오픈.`;
+                } else if (rt.tier === 'raise') {
                     mix = canCheck ? { check: 8, raise: 92 } : { fold: 6, raise: 94 };
                     bestAction = 'raise'; reason = `${p.position || ''} 오픈 레인지에 드는 핸드(${code}) — 오픈 레이즈가 정석입니데이.`;
                 } else if (rt.tier === 'call') {
@@ -3565,37 +3653,14 @@ class GameRoom {
                     bestAction = 'fold'; reason = `레이즈에 약한 핸드(${code}) — 폴드가 정석입니데이.`;
                 }
             }
-        } else if (toCall === 0) {
-            // 포스트플랍 체크 가능 상황 (벳 or 체크) — 폴라라이즈 이론
-            if (equity >= 0.68) {
-                mix = { check: 25, bet: 75 };
-                bestAction = 'bet'; reason = '강한 밸류 핸드 — 베팅으로 칩을 키우이소.';
-            } else if (equity >= 0.50) {
-                mix = { check: 55, bet: 45 };
-                bestAction = 'check'; reason = '중상 핸드 — 얇은 밸류벳도 가능하지만 체크가 무난합니데이.';
-            } else if (equity <= 0.28) {
-                mix = { check: 60, bet: 40 };
-                bestAction = 'check'; reason = '약한 핸드 — 가끔 블러프벳, 보통은 체크입니데이.';
-            } else {
-                mix = { check: 80, bet: 20 };
-                bestAction = 'check'; reason = '쇼다운 가치는 있으나 밸류벳은 약함 — 체크가 최적.';
-            }
         } else {
-            // 포스트플랍 콜/폴드/레이즈 상황 — EV 비교
-            const margin = equity - potOdds;
-            if (margin >= 0.15) {
-                mix = { fold: 0, call: 45, raise: 55 };
-                bestAction = 'raise'; reason = `승률(${Math.round(equity*100)}%)이 팟오즈(${Math.round(potOdds*100)}%)보다 훨씬 높음 — 레이즈로 밸류!`;
-            } else if (margin >= 0.02) {
-                mix = { fold: 5, call: 75, raise: 20 };
-                bestAction = 'call'; reason = `승률이 팟오즈보다 높아 콜은 +EV입니데이.`;
-            } else if (margin >= -0.03) {
-                mix = { fold: 55, call: 42, raise: 3 };
-                bestAction = 'fold'; reason = `경계선 — 승률(${Math.round(equity*100)}%)이 팟오즈(${Math.round(potOdds*100)}%)와 비슷. 상대 블러프 의심되면 콜, 아니면 폴드.`;
-            } else {
-                mix = { fold: 80, call: 18, raise: 2 };
-                bestAction = 'fold'; reason = `승률(${Math.round(equity*100)}%)이 팟오즈(${Math.round(potOdds*100)}%)보다 낮음 — 폴드가 정석.`;
-            }
+            // 포스트플랍 — 상대 수·포지션·SPR 을 반영한 조언 (lib/gtoadvice.js)
+            const pa = GtoAdvice.postflopAdvice({
+                equity, potOdds, toCall, opponents, inPosition: this.isInPosition(nick),
+                spr: _spr, stackShare: p.chips > 0 ? toCall / p.chips : 1
+            });
+            mix = pa.mix; bestAction = pa.bestAction; reason = pa.reason; notes = pa.notes;
+            tier = pa.tier; tierLabel = pa.tierLabel; tierColor = pa.tierColor;   // 등급도 "한 명 상대 환산"으로
         }
 
         return {
@@ -3605,6 +3670,7 @@ class GameRoom {
             street, opponents, toCall,
             potSize: potBefore,
             mix, bestAction, reason,
+            notes,
             posInfo,
             handStr: p.hand.join(' ')
         };
@@ -4907,6 +4973,32 @@ io.on('connection', (socket) => {
         room.sendState();
         // 인트로 연출(보스전은 더 길다)이 끝난 뒤에 첫 카드를 돌린다
         setTimeout(() => { if (rooms.get(roomId) === room && !room._challenge.done) room.startNextHand(); }, boss ? 4600 : 3200);
+    });
+
+    // 🧠 [GTO 문제 학습] 분야 목록 + 내 기록
+    socket.on('quizInfo', async () => {
+        if (!socket.nickname) return;
+        const u = await MockDB.getUser(socket.nickname);
+        socket.emit('quizInfo', { cats: Quiz.catList(), stats: Quiz.statsOf(u) });
+    });
+    // 문제 하나 — 정답·해설은 서버가 쥐고 있다가 답을 받은 뒤에 보낸다
+    socket.on('quizNext', (data) => {
+        if (!socket.nickname) return;
+        const q = Quiz.generate(data && typeof data.cat === 'string' ? data.cat : 'all', Math.random);
+        socket._quiz = q;
+        socket.emit('quizQuestion', Quiz.publicView(q));
+    });
+    socket.on('quizAnswer', async (data) => {
+        if (!socket.nickname) return;
+        const q = socket._quiz;
+        if (!q) return;
+        socket._quiz = null;                          // 한 문제에 한 번만 채점
+        const choice = data && typeof data.choice === 'string' ? data.choice : '';
+        const correct = choice === q.answer;
+        const u = await MockDB.getUser(socket.nickname);
+        const stats = u ? Quiz.record(u, q.cat, correct) : Quiz.statsOf(null);
+        if (u) MockDB.save();
+        socket.emit('quizResult', { correct, answer: q.answer, choice, explain: q.explain, ref: q.ref, stats });
     });
 
     // 🍀 [증강 런] 내 기록·순위·진행 중인 런

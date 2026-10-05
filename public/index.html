@@ -3548,6 +3548,56 @@
             .action-bubble.ab-float, .street-banner, .stack-delta, .bust-stamp { animation-duration: 0.01s !important; }
             body.turn-urgent::after { animation: none; }
         }
+    
+        /* ═══ 🎓 조언 패널: 지금 상황 꼬리표 ═══ */
+        .gto-notes { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 6px; }
+        .gto-notes span { font-size: 10.5px; font-weight: 800; color: #9fd4ff; background: rgba(47,125,246,0.16); border: 1px solid rgba(47,125,246,0.45); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+
+        /* ═══ 🧠 GTO 문제 학습 ═══ */
+        #quiz-btn.lb-tile { --tile: #ff8bd8; --tile-grad: linear-gradient(180deg, #ff9fe0, #d6459f); }
+        .lb-tiles #shop-btn.lb-tile { grid-column: 1 / -1; }   /* 타일이 5개라 마지막(상점)은 한 줄을 다 쓴다 */
+        #quiz-modal { align-items: center; justify-content: center; }
+        .quiz-card { width: 600px; max-width: 96vw; max-height: calc(100dvh - 20px); overflow-y: auto; text-align: left; }
+        .qz-intro { font-size: 12px; color: #9aa6c2; margin-bottom: 10px; word-break: keep-all; }
+        #quiz-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+        .qz-cat { font: inherit; font-size: 12px; font-weight: 800; padding: 6px 11px; border-radius: 999px; cursor: pointer; color: #c3cbe0; background: rgba(6,9,18,0.55); border: 1px solid rgba(255,255,255,0.13); white-space: nowrap; }
+        .qz-cat small { margin-left: 5px; font-family: var(--font-num); font-weight: 700; color: #8d98b3; }
+        .qz-cat.on { color: #2c1c00; background: var(--gold-grad); border-color: transparent; }
+        .qz-cat.on small { color: rgba(44,28,0,0.7); }
+        .qz-loading { padding: 40px 0; text-align: center; color: #8d98b3; font-size: 13px; }
+        .qz-q { background: rgba(6,9,18,0.45); border: 1px solid rgba(255,255,255,0.09); border-radius: 16px; padding: 14px 15px 15px; }
+        .qz-cat-name { font-size: 12px; font-weight: 900; letter-spacing: 1px; color: var(--gold); margin-bottom: 7px; }
+        .qz-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 11px; }
+        .qz-tags span { font-size: 11.5px; font-weight: 800; color: #e8edf9; background: rgba(47,125,246,0.18); border: 1px solid rgba(47,125,246,0.45); border-radius: 8px; padding: 3px 9px; white-space: nowrap; }
+        .qz-cards { display: flex; align-items: center; gap: 6px; margin-bottom: 11px; flex-wrap: wrap; }
+        .qz-lbl { font-size: 11px; font-weight: 800; color: #8d98b3; margin-right: 2px; }
+        .qz-lbl.board { margin-left: 12px; }
+        .qz-card { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 40px; height: 54px; border-radius: 7px; background: linear-gradient(155deg, #fff, #ececE6); color: #151a26; box-shadow: 0 4px 10px rgba(0,0,0,0.5); line-height: 1; }
+        .qz-card b { font-family: var(--font-num); font-size: 19px; font-weight: 700; }
+        .qz-card i { font-style: normal; font-size: 17px; margin-top: 2px; }
+        .qz-card.red { color: #d9261c; }
+        .qz-prompt { font-size: 14.5px; font-weight: 700; color: #fff; line-height: 1.6; word-break: keep-all; margin-bottom: 13px; }
+        .qz-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+        .qz-choice { font: inherit; font-size: 14px; font-weight: 900; padding: 12px 8px; border-radius: 12px; cursor: pointer; color: #fff; background: linear-gradient(180deg, #33405f, #222b44); border: 1px solid rgba(255,255,255,0.16); transition: transform 0.12s, border-color 0.12s; word-break: keep-all; }
+        .qz-choice:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--gold); }
+        .qz-choice:disabled { cursor: default; opacity: 0.55; }
+        .qz-choice.right { opacity: 1; background: linear-gradient(180deg, #2bd389, #12995c); color: #03281a; border-color: transparent; }
+        .qz-choice.wrong { opacity: 1; background: linear-gradient(180deg, #ff5a4d, #b81e14); border-color: transparent; }
+        .qz-res { margin-top: 13px; border-radius: 13px; padding: 12px 13px; border: 1px solid; }
+        .qz-res.ok { background: rgba(35,201,122,0.10); border-color: rgba(75,227,160,0.5); }
+        .qz-res.no { background: rgba(240,72,58,0.10); border-color: rgba(255,120,105,0.5); }
+        .qz-res-head { font-size: 15px; font-weight: 900; margin-bottom: 6px; }
+        .qz-res.ok .qz-res-head { color: #4be3a0; } .qz-res.no .qz-res-head { color: #ff8a78; }
+        .qz-explain { font-size: 13px; color: #e8edf9; line-height: 1.7; word-break: keep-all; }
+        .qz-ref { margin-top: 8px; font-size: 11px; color: #8d98b3; }
+        .qz-next { width: 100%; margin-top: 10px !important; padding: 12px 0 !important; font-size: 15px !important; }
+        @media screen and (max-width: 960px) and (orientation: landscape) {
+            .quiz-card { padding: 12px 16px; width: 760px; }
+            .qz-intro { display: none; } #quiz-cats { margin-bottom: 8px; }
+            .qz-q { padding: 10px 12px; } .qz-prompt { font-size: 13px; margin-bottom: 9px; }
+            .qz-card { width: 32px; height: 44px; } .qz-card b { font-size: 15px; } .qz-card i { font-size: 13px; }
+            .qz-choice { padding: 8px 6px; font-size: 13px; }
+        }
     </style>
 </head>
 <body>
@@ -3576,6 +3626,19 @@
         <div class="ch-top-title">🏅 컴까기 순위</div>
         <div id="ch-top"></div>
         <button class="btn-close-modal" style="margin-top:14px; width:100%;" onclick="document.getElementById('challenge-modal').style.display='none'">닫기</button>
+    </div>
+</div>
+
+<div id="quiz-modal" class="overlay" style="display:none; z-index:4400;">
+    <div class="shop-card quiz-card">
+        <div class="shop-head">
+            <div class="shop-title">🧠 GTO 문제 학습</div>
+            <div class="shop-bank" id="quiz-score">0 / 0</div>
+        </div>
+        <div class="qz-intro">인원·스택·자리에 따라 정답이 달라지는 상황을 문제로 풉니데이. 분야를 고르면 그 분야만 나옵니데이.</div>
+        <div id="quiz-cats"></div>
+        <div id="quiz-body"></div>
+        <button class="btn-close-modal" style="margin-top:12px; width:100%;" onclick="document.getElementById('quiz-modal').style.display='none'">닫기</button>
     </div>
 </div>
 
@@ -3741,6 +3804,7 @@
             <button id="challenge-btn" class="btn-join lb-tile" onclick="openChallenge()"><span class="lt-ico">🤖</span><span class="lt-txt"><b>컴까기</b><small>AI 도장깨기 10단계</small></span></button>
             <button id="learn-btn" class="btn-join lb-tile" onclick="startLearnMode()"><span class="lt-ico">🎓</span><span class="lt-txt"><b>GTO 학습</b><small>AI 5명과 실전 코칭</small></span></button>
             <button id="daily-btn" class="btn-join lb-tile" onclick="openDaily()"><span class="lt-ico">🎁</span><span class="lt-txt"><b>출석 · 미션</b><small>매일 뱅크롤 보상</small></span><span id="daily-badge" class="daily-badge" style="display:none;">!</span></button>
+            <button id="quiz-btn" class="btn-join lb-tile" onclick="openQuiz()"><span class="lt-ico">🧠</span><span class="lt-txt"><b>GTO 문제</b><small>상황별 정답 맞히기</small></span></button>
             <button id="shop-btn" class="btn-join lb-tile" onclick="openShop()"><span class="lt-ico">🎨</span><span class="lt-txt"><b>꾸미기 상점</b><small>뒷면 · 아바타 · 칭호</small></span></button>
         </div>
 
@@ -4378,6 +4442,73 @@
             </div>`;
         }
         modal.classList.add('show');
+    });
+
+    // ═══ 🧠 GTO 문제 학습 ═══
+    //   서버가 상황별 문제를 만들어 보낸다(정답·해설은 답을 낸 뒤에 온다). 분야: 숏스택·올인 받기·리쉬브·포지션·헤즈업·멀티웨이·계산·스택 깊이
+    let _quizCat = 'all', _quizCats = [], _quizStats = null, _quizQ = null, _quizDone = false;
+    function openQuiz() {
+        document.getElementById('quiz-modal').style.display = 'flex';
+        socket.emit('quizInfo');
+        if (!_quizQ || _quizDone) quizNext();
+    }
+    function quizPick(cat) { _quizCat = cat; renderQuizCats(); quizNext(); }
+    function quizNext() {
+        _quizQ = null; _quizDone = false;
+        document.getElementById('quiz-body').innerHTML = '<div class="qz-loading">문제를 만드는 중...</div>';
+        socket.emit('quizNext', { cat: _quizCat });
+    }
+    function quizCard(c) {
+        if (!c || c.length < 2) return '';
+        const red = c[1] === 'h' || c[1] === 'd';
+        return `<span class="qz-card${red ? ' red' : ''}"><b>${c[0] === 'T' ? '10' : c[0]}</b><i>${{ s: '♠', h: '♥', d: '♦', c: '♣' }[c[1]] || ''}</i></span>`;
+    }
+    function renderQuizCats() {
+        const st = _quizStats;
+        const chip = (id, icon, name, n, ok) => `<button class="qz-cat${_quizCat === id ? ' on' : ''}" onclick="quizPick('${id}')">${icon} ${esc(name)}${n ? `<small>${ok}/${n}</small>` : ''}</button>`;
+        document.getElementById('quiz-cats').innerHTML = chip('all', '🎲', '전체', st ? st.total : 0, st ? st.ok : 0) +
+            _quizCats.filter(c => /^[a-z]+$/.test(c.id)).map(c => chip(c.id, c.icon, c.name, st ? st.cats[c.id].n : 0, st ? st.cats[c.id].ok : 0)).join('');
+        if (st) document.getElementById('quiz-score').innerHTML = `정답 ${st.ok} / ${st.total}` + (st.total ? ` · ${Math.round(st.ok / st.total * 100)}%` : '') + (st.streak >= 2 ? ` · 🔥 ${st.streak}연속` : '');
+    }
+    socket.on('quizInfo', d => { if (!d) return; _quizCats = d.cats || []; _quizStats = d.stats || null; renderQuizCats(); });
+    socket.on('quizQuestion', q => {
+        if (!q) return;
+        _quizQ = q; _quizDone = false;
+        const cards = (q.hand && q.hand.length === 2)
+            ? `<div class="qz-cards"><span class="qz-lbl">내 패</span>${q.hand.map(quizCard).join('')}${(q.board && q.board.length) ? `<span class="qz-lbl board">보드</span>${q.board.map(quizCard).join('')}` : ''}</div>` : '';
+        document.getElementById('quiz-body').innerHTML = `
+            <div class="qz-q">
+                <div class="qz-cat-name">${q.catIcon || ''} ${esc(q.catName || '')}</div>
+                <div class="qz-tags">${(q.tags || []).map(t => `<span>${esc(t)}</span>`).join('')}</div>
+                ${cards}
+                <div class="qz-prompt">${esc(q.prompt)}</div>
+                <div class="qz-choices">${q.choices.map((c, i) => `<button class="qz-choice" data-i="${i}" onclick="quizAnswer(${i})">${esc(c.label)}</button>`).join('')}</div>
+                <div id="qz-result"></div>
+            </div>`;
+    });
+    function quizAnswer(i) {
+        if (_quizDone || !_quizQ || !_quizQ.choices[i]) return;
+        _quizDone = true;
+        document.querySelectorAll('.qz-choice').forEach(b => { b.disabled = true; });
+        socket.emit('quizAnswer', { choice: _quizQ.choices[i].id });
+    }
+    socket.on('quizResult', r => {
+        if (!r || !_quizQ) return;
+        document.querySelectorAll('.qz-choice').forEach(b => {
+            const c = _quizQ.choices[Number(b.dataset.i)];
+            if (!c) return;
+            if (c.id === r.answer) b.classList.add('right');
+            else if (c.id === r.choice) b.classList.add('wrong');
+        });
+        const box = document.getElementById('qz-result');
+        if (box) box.innerHTML = `<div class="qz-res ${r.correct ? 'ok' : 'no'}">
+                <div class="qz-res-head">${r.correct ? '⭕ 정답!' : '✖ 오답'}</div>
+                <div class="qz-explain">${esc(r.explain)}</div>
+                <div class="qz-ref">${esc(r.ref || '')}</div>
+            </div>
+            <button class="btn-join qz-next" onclick="quizNext()">다음 문제 ▶</button>`;
+        if (r.stats) { _quizStats = r.stats; renderQuizCats(); }
+        if (r.correct && typeof SFX !== 'undefined' && SFX.win) { try { SFX.win(); } catch (e) {} }
     });
 
     // ═══ 🍀 증강 컴까기 (로그라이크 런) ═══
@@ -6997,6 +7128,7 @@
             </div>
             <div class="gto-collapsible">
             ${posHeader}
+            ${(a.notes && a.notes.length) ? '<div class="gto-notes">' + a.notes.map(n => '<span>' + esc(n) + '</span>').join('') + '</div>' : ''}
             <div class="gto-metrics">
                 <div class="gto-metric"><div class="gm-v" style="color:${a.tierColor}">${a.equity}%</div><div class="gm-k">내 승률</div></div>
                 <div class="gto-metric"><div class="gm-v" style="color:#8fd3ff">${a.toCall>0?a.potOdds+'%':'—'}</div><div class="gm-k">팟 오즈</div></div>
@@ -7868,7 +8000,7 @@
 
     // 📱 [모바일] 정보성 모달은 배경(바깥) 탭으로 닫기 — 폰에서 닫기 편의
     (function enableBackdropClose() {
-        const closable = ['hof-modal', 'season-modal', 'session-modal', 'help-modal', 'daily-modal', 'learn-setup-modal', 'bankroll-modal', 'history-modal', 'mttchamp-modal', 'replay-modal', 'shop-modal', 'challenge-modal'];
+        const closable = ['hof-modal', 'season-modal', 'session-modal', 'help-modal', 'daily-modal', 'learn-setup-modal', 'bankroll-modal', 'history-modal', 'mttchamp-modal', 'replay-modal', 'shop-modal', 'challenge-modal', 'quiz-modal'];
         closable.forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
