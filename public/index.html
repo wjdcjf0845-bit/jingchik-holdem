@@ -2110,7 +2110,7 @@
             font-size: 34px; letter-spacing: 2px; line-height: 1.15;
         }
         #lobby-overlay .login-box > h2::after {
-            content: '— 오늘도 좋은 핸드 되이소 —';
+            content: '— 오늘도 좋은 핸드 되세요 —';
             display: block; margin-top: 6px;
             font-family: var(--font-disp); font-style: italic; font-weight: 600;
             font-size: 13px; letter-spacing: 1px; color: var(--verm); -webkit-text-fill-color: var(--verm);
@@ -2546,7 +2546,7 @@
             color: transparent !important; -webkit-text-fill-color: transparent !important;
         }
         #lobby-overlay .login-box > h2::after {
-            content: '오늘도 좋은 핸드 되이소'; font-family: var(--font-body); font-style: normal; font-weight: 700;
+            content: '오늘도 좋은 핸드 되세요'; font-family: var(--font-body); font-style: normal; font-weight: 700;
             font-size: 12px; letter-spacing: 3px; color: #8d98b3; -webkit-text-fill-color: #8d98b3;
         }
         #lobby-overlay .login-box > h2 span, #lobby-overlay .login-box > h2 small { color: #fff !important; -webkit-text-fill-color: #fff !important; font-family: var(--font-body); font-weight: 800; }
@@ -3805,6 +3805,94 @@
             .gd-rows { margin-bottom: 6px; } .gd-row { padding: 4px 0; }
             .gd-nav { margin-top: 8px; } .gd-nav button { padding-top: 8px; padding-bottom: 8px; }
         }
+    
+        /* ═══════════════════════════════════════════════════════════════
+           📱 가로 폰 — 테이블을 화면 전체로, 버튼은 아래 양쪽 모서리로
+           예전: [테이블 62vw] [오른쪽 세로 패널 31vw]. 내 차례가 아닐 땐 오른쪽 3분의 1이 통째로 비었다.
+           지금: 테이블이 가운데 넓게. 아래 가운데는 내 좌석 자리라 비워 두고,
+                 왼쪽 아래 = 레이즈 금액(퀵벳·슬라이더), 오른쪽 아래 = 폴드·콜·레이즈·올인.
+                 테이블 좌우 아래 좌석보다 더 아래(화면 바닥)에 붙어서 펠트·좌석과 겹치지 않는다.
+           채팅은 상단 💬 버튼 → 테이블 위로 겹쳐 열린다.
+           ═══════════════════════════════════════════════════════════════ */
+        @media screen and (max-width: 960px) and (orientation: landscape) {
+            :root { --ctl-w: min(calc((100vw - 146px) / 2 - 6px), 348px); --ctl-b: calc(5px + env(safe-area-inset-bottom)); }
+            #game-container { justify-content: center !important; padding-left: 0 !important; padding-right: 0 !important; }
+            .poker-table { width: min(86vw, 800px) !important; max-width: none !important; margin-left: auto !important; margin-right: auto !important; }
+            #center-message { left: 50% !important; width: 56% !important; }
+
+            /* 패널 껍데기는 없애고, 안의 조각들을 화면 아래 모서리에 따로 고정한다 */
+            .controls { display: contents !important; }
+            #action-controls {
+                position: fixed; left: 0; right: 0; bottom: 0; z-index: 120; pointer-events: none;
+                flex-direction: row !important; align-items: flex-end; justify-content: space-between;
+                gap: 0; padding: 0 calc(6px + env(safe-area-inset-right)) var(--ctl-b) calc(6px + env(safe-area-inset-left)); box-sizing: border-box;
+            }
+            #action-controls > * { pointer-events: auto; }
+            /* 왼쪽 아래: 레이즈 금액 */
+            #action-controls .action-top-row {
+                order: 1; flex: 0 0 var(--ctl-w); width: var(--ctl-w); box-sizing: border-box; margin: 0;
+                flex-direction: row !important; align-items: flex-end; gap: 5px;
+                padding: 4px 6px !important; border-radius: 12px;
+                background: rgba(10,14,26,0.86) !important; border: 1px solid rgba(255,255,255,0.14) !important;
+            }
+            #action-controls .quick-bets { width: auto !important; flex: 0 0 auto; gap: 3px; }
+            #action-controls .quick-bets button { flex: 0 0 auto; padding: 0 7px; height: 30px; font-size: 10.5px; white-space: nowrap; }
+            #action-controls .slider-container { flex: 1 1 auto; min-width: 0; width: auto !important; margin: 0; }
+            #action-controls .slider-val { font-size: 10px; line-height: 13px; margin: 0 0 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+            #action-controls .slider-val span { font-size: 10.5px !important; }
+            #action-controls .slider-row { gap: 3px; }
+            #action-controls input[type=range] { height: 26px; min-width: 0; }
+            #action-controls .step-btn { width: 26px; height: 26px; font-size: 15px; flex: 0 0 26px; }
+            /* 오른쪽 아래: 폴드 · 체크/콜 · 레이즈 · 올인 */
+            #action-controls .action-bottom-row {
+                order: 2; flex: 0 0 var(--ctl-w); width: var(--ctl-w) !important; box-sizing: border-box; margin: 0;
+                display: flex; flex-wrap: nowrap !important; gap: 4px;
+            }
+            #action-controls .action-bottom-row button {
+                flex: 1 1 0 !important; min-width: 0; height: 46px; padding: 0 2px !important; font-size: 13.5px !important; border-radius: 11px;
+                white-space: nowrap; overflow: hidden; line-height: 1.15;
+            }
+            #timebank-row.on { position: fixed !important; right: calc(6px + env(safe-area-inset-right)) !important; bottom: calc(var(--ctl-b) + 50px) !important; margin: 0; z-index: 121; }
+            #timebank-row.on button { padding: 4px 10px; font-size: 11px; }
+            .key-hint { display: none !important; }
+
+            /* 내 차례가 아닐 때: 오른쪽 아래 = 미리 정해두기, 왼쪽 아래 = 진행 안내 한 줄 */
+            #preaction-bar { position: fixed; right: calc(6px + env(safe-area-inset-right)); bottom: var(--ctl-b); width: var(--ctl-w); box-sizing: border-box; margin: 0; z-index: 119; }
+            #preaction-bar .pa-t { display: none; }
+            #preaction-bar .pa-row { gap: 4px; }
+            #preaction-bar button { flex: 1 1 0; min-width: 0; height: 40px; padding: 0 2px; font-size: 12.5px; white-space: nowrap; }
+            #turn-indicator {
+                position: fixed; left: calc(6px + env(safe-area-inset-left)); bottom: var(--ctl-b); max-width: var(--ctl-w); box-sizing: border-box; margin: 0 !important; z-index: 118;
+                padding: 6px 10px; border-radius: 10px; font-size: 11px !important; line-height: 1.35; text-align: left;
+                background: rgba(10,14,26,0.80); border: 1px solid rgba(255,255,255,0.10); word-break: keep-all;
+            }
+            #action-controls:not([style*="none"]) ~ #turn-indicator { display: none !important; }
+
+            /* 게임 시작 전(봇 추가 · 시작 버튼): 오른쪽 아래 작은 패널 */
+            #ready-controls {
+                position: fixed; right: calc(8px + env(safe-area-inset-right)); bottom: var(--ctl-b); z-index: 122; width: min(264px, 34vw) !important; max-width: none !important; box-sizing: border-box;
+                max-height: 64vh; overflow-y: auto; padding: 8px; border-radius: 14px;
+                background: rgba(12,16,30,0.94); border: 1px solid rgba(245,201,71,0.3); box-shadow: 0 10px 28px rgba(0,0,0,0.7);
+            }
+            /* 아래 오른쪽에 뜨던 안내창·협동 패널은 버튼 줄 위로 올린다 */
+            #foldshow-prompt, #muck-prompt, #rebuy-prompt, #spectate-bar { bottom: calc(var(--ctl-b) + 52px) !important; }
+            #coop-panel { bottom: calc(var(--ctl-b) + 52px) !important; }
+            #throw-hint { bottom: calc(var(--ctl-b) + 52px) !important; }
+            /* 학습 코칭 패널은 아래 버튼 줄을 덮지 않게 그 위에서 끝낸다(넘치면 패널 안에서 스크롤) */
+            #gto-advice, #learn-range-panel { max-height: calc(100vh - 54px - var(--ctl-b) - 62px) !important; overflow-y: auto; }
+            /* 채팅: 테이블 위에 겹쳐 열린다. 살짝 비치게 하고, 아래 버튼 줄은 가리지 않는다(채팅을 연 채로도 콜·폴드 가능) */
+            #chat-panel { top: calc(38px + env(safe-area-inset-top)) !important; bottom: calc(var(--ctl-b) + 52px) !important; height: auto !important; width: min(46vw, 320px) !important; max-width: none !important; border-radius: 14px 0 0 14px; background: rgba(10,14,26,0.90) !important; }
+        }
+        /* 키 낮은 폰: 버튼이 옆으로 빠져 생긴 세로 여유만큼 테이블을 키운다 (내 좌석이 화면 바닥에 닿기 직전까지) */
+        @media screen and (max-width: 960px) and (orientation: landscape) and (max-height: 380px) {
+            .poker-table { height: calc(100vh - 131px) !important; padding-top: 86px !important; }
+        }
+        @media screen and (max-width: 700px) and (orientation: landscape) {
+            :root { --ctl-w: calc((100vw - 126px) / 2 - 5px); }
+            #action-controls .quick-bets button { padding: 0 5px; font-size: 10px; }
+            #action-controls .step-btn { display: none; }
+            #action-controls .action-bottom-row button { font-size: 12.5px !important; }
+        }
     </style>
 </head>
 <body>
@@ -3823,12 +3911,12 @@
             <div class="shop-title">🤖 컴까기 — AI 도장깨기</div>
             <div class="shop-bank" id="ch-progress">0 / 10</div>
         </div>
-        <div class="ch-intro"><b>원하는 단계를 바로 골라</b> 봇들과 토너먼트를 칩니데이. 참가비는 없고, 깨면 뱅크롤과 <b>🔷 코어</b>(컴까기 전용 재화)를 받습니데이.</div>
+        <div class="ch-intro"><b>원하는 단계를 바로 골라</b> 봇들과 토너먼트를 칩니다. 참가비는 없고, 깨면 뱅크롤과 <b>🔷 코어</b>(컴까기 전용 재화)를 받습니다.</div>
         <button class="ch-run-btn" onclick="startRun()">
             <span class="cr-ico">🍀</span>
             <span class="cr-txt"><b>증강 컴까기 <i>NEW</i></b><small>10층 탑 · 층마다 기한 안에 목표 칩 달성 → 증강 3개 중 1개 선택</small><small id="cr-best"></small></span>
         </button>
-        <button class="ch-coop-btn" onclick="createCoop()">👥 친구랑 같이 깨기 <small>(최대 4명 · 방을 만들고 친구를 기다립니데이)</small></button>
+        <button class="ch-coop-btn" onclick="createCoop()">👥 친구랑 같이 깨기 <small>(최대 4명 · 방을 만들고 친구를 기다립니다)</small></button>
         <div id="ch-ladder"></div>
         <div class="ch-top-title">🏅 컴까기 순위</div>
         <div id="ch-top"></div>
@@ -3891,8 +3979,8 @@
         <div class="shop-head">
             <div class="shop-title">🎨 꾸미기 상점</div>
             <div class="shop-wallets">
-                <div class="shop-bank" title="사람 3명 이상 참가한 토너먼트에서 우승하면 1개씩 받습니데이">🏆 토큰 <span id="shop-tokens">0</span></div>
-                <div class="shop-bank core" title="컴까기 단계를 깨면 받습니데이">🔷 코어 <span id="shop-cores">0</span></div>
+                <div class="shop-bank" title="사람 3명 이상 참가한 토너먼트에서 우승하면 1개씩 받습니다">🏆 토큰 <span id="shop-tokens">0</span></div>
+                <div class="shop-bank core" title="컴까기 단계를 깨면 받습니다">🔷 코어 <span id="shop-cores">0</span></div>
             </div>
         </div>
         <div class="shop-tabs">
@@ -3923,7 +4011,7 @@
 </div>
 
 <div id="spectate-bar">
-    <div class="sp-t">👀 관전 중입니데이</div>
+    <div class="sp-t">👀 관전 중입니다</div>
     <div class="sp-s"></div>
     <button onclick="takeSeat()">▶ 자리에 앉기</button>
 </div>
@@ -3941,14 +4029,14 @@
 </div>
 
 <div id="rotate-hint">
-    <div class="rh-t">📱 가로로 돌려보이소</div>
-    <div class="rh-s">가로 화면이 카드도 크고 버튼도 편합니데이</div>
-    <button class="rh-x" onclick="dismissRotateHint()">알겠심더</button>
+    <div class="rh-t">📱 가로로 돌려보세요</div>
+    <div class="rh-s">가로 화면이 카드도 크고 버튼도 편합니다</div>
+    <button class="rh-x" onclick="dismissRotateHint()">알겠습니다</button>
 </div>
 
 <div id="foldshow-prompt">
-    <div class="fs-title">🃏 죽은 패, 보여줄까예?</div>
-    <div class="fs-sub">핸드가 끝나면 공개됩니데이</div>
+    <div class="fs-title">🃏 죽은 패, 보여줄까요?</div>
+    <div class="fs-sub">핸드가 끝나면 공개됩니다</div>
     <div class="fs-row">
         <button data-fs="0" onclick="setFoldShow(0)">첫 장</button>
         <button data-fs="1" onclick="setFoldShow(1)">둘째 장</button>
@@ -3958,8 +4046,8 @@
 </div>
 
 <div id="muck-prompt">
-    <div class="mk-title">🃏 패를 공개할까예?</div>
-    <div class="mk-sub">안 보여줘도 됩니데이 (<span id="mk-left">6</span>초 뒤 자동으로 덮습니더)</div>
+    <div class="mk-title">🃏 패를 공개할까요?</div>
+    <div class="mk-sub">안 보여줘도 됩니다 (<span id="mk-left">6</span>초 뒤 자동으로 덮습니다)</div>
     <div class="mk-btns">
         <button class="mk-show" onclick="revealMyHand()">패 공개</button>
         <button class="mk-muck" onclick="muckMyHand()">덮기</button>
@@ -3967,8 +4055,8 @@
 </div>
 
 <div id="rebuy-prompt">
-    <div class="rb-title">💸 파산했습니데이!</div>
-    <div class="rb-sub">리바이로 다시 일어서보입시더 (잔여 <span>1</span>회)</div>
+    <div class="rb-title">💸 파산했습니다!</div>
+    <div class="rb-sub">리바이로 다시 일어서 봅시다 (잔여 <span>1</span>회)</div>
     <div class="rb-btns">
         <button class="rb-yes" onclick="doRebuy()">🔄 리바이 (<span id="rb-stack">10,000</span> 칩)</button>
         <button class="rb-no" onclick="document.getElementById('rebuy-prompt').style.display='none'">관전 유지</button>
@@ -3990,7 +4078,7 @@
         <div class="logo-sub"><span class="s-wht">♠</span> TEXAS HOLD'EM <span class="s-red">♥</span> PREMIUM <span class="s-red">♦</span> EDITION <span class="s-wht">♣</span></div>
         <input type="text" id="nick-input" class="login-input" placeholder="닉네임 입력" maxlength="12" autocomplete="off"><br>
         <input type="password" id="pin-input" class="login-input" placeholder="비밀번호 4자리 (숫자)" maxlength="4" inputmode="numeric" pattern="\d{4}" autocomplete="off" style="letter-spacing: 8px; text-align: center;"><br>
-        <div class="login-hint">닉네임 한글/영문/숫자/_ 2~12자 · 비밀번호 숫자 4자리<br><span style="color:#7bedaa;">처음 입력한 비밀번호로 계정이 만들어집니데이</span></div>
+        <div class="login-hint">닉네임 한글/영문/숫자/_ 2~12자 · 비밀번호 숫자 4자리<br><span style="color:#7bedaa;">처음 입력한 비밀번호로 계정이 만들어집니다</span></div>
         <div id="login-error" style="display:none; color:#ff8a78; font-size:13px; font-weight:700; margin-bottom:12px;"></div>
         <button class="btn-join" onclick="login()">카지노 입장</button>
         <button id="install-app" onclick="installApp()">📱 홈 화면에 추가 (앱처럼 쓰기)</button>
@@ -4016,7 +4104,7 @@
                     <button type="button" onclick="pickPhoto()">📷 내 사진 올리기</button>
                     <button type="button" id="lp-remove" onclick="removePhoto()" style="display:none;">내리기</button>
                 </div>
-                <div id="lp-msg">이미지 파일(JPG·PNG·WEBP)을 고르면 프로필 사진이 됩니데이</div>
+                <div id="lp-msg">이미지 파일(JPG·PNG·WEBP)을 고르면 프로필 사진이 됩니다</div>
             </div>
         </div>
       </div>
@@ -4198,7 +4286,7 @@
             <div class="key-hint">단축키 — F 폴드 · C 체크/콜 · R 레이즈 · A 올인 · ← → 금액 조절</div>
         </div>
         <div id="preaction-bar">
-            <div class="pa-t">⚡ 미리 정해두기 — 내 차례가 오면 바로 실행됩니데이</div>
+            <div class="pa-t">⚡ 미리 정해두기 — 내 차례가 오면 바로 실행됩니다</div>
             <div class="pa-row">
                 <button data-pa="checkfold" onclick="togglePreAction('checkfold')">체크/폴드</button>
                 <button data-pa="check" onclick="togglePreAction('check')">체크</button>
@@ -4468,7 +4556,7 @@
     function armThrow(item) {
         throwArmed = item;
         const h = document.getElementById('throw-hint');
-        if (h) { h.querySelector('.th-t').innerText = `${item} 던질 사람을 누르이소`; h.classList.add('on'); }
+        if (h) { h.querySelector('.th-t').innerText = `${item} 던질 사람을 누르세요`; h.classList.add('on'); }
         const panel = document.getElementById('emote-panel');
         if (panel) panel.classList.remove('open');
         document.querySelectorAll('.player-spot').forEach(el => {
@@ -4547,7 +4635,7 @@
         }).join('');
         document.getElementById('ch-top').innerHTML = (d.top && d.top.length)
             ? d.top.map((t, i) => `<div class="ch-toprow"><span>${i + 1}. ${esc(t.nickname)}</span><span>${t.count}개 클리어 · 최고 ${t.best}단계</span></div>`).join('')
-            : '<div class="ch-toprow"><span>아직 아무도 못 깼습니데이 — 첫 번째가 되보이소</span></div>';
+            : '<div class="ch-toprow"><span>아직 아무도 못 깼습니다 — 첫 번째가 되어 보세요</span></div>';
     });
     socket.on('challengeError', msg => alert(msg));
     function createCoop() {
@@ -4604,7 +4692,7 @@
         // 대기·인트로 중엔 일반 방 안내("토너먼트 시작 버튼을…")가 뜨면 헷갈린다 — 이 핸들러가 끝난 뒤 덮어쓴다
         if (data.gameStage === 0) setTimeout(() => {
             const ind = document.getElementById('turn-indicator');
-            if (ind && document.body.classList.contains('challenge-mode')) ind.innerText = ch.waiting ? '👥 친구를 기다리는 중입니데이' : '🤖 곧 시작합니데이...';
+            if (ind && document.body.classList.contains('challenge-mode')) ind.innerText = ch.waiting ? '👥 친구를 기다리는 중입니다' : '🤖 곧 시작합니다...';
         }, 0);
     }
     function botKO(nick) {
@@ -4637,9 +4725,9 @@
         for (let i = 1; i <= ch.maxStage; i++) stages += '<button class="cp-stage' + (i === ch.total ? ' boss' : '') + '" ' + (isHost ? 'onclick="startCoop(' + i + ')"' : 'disabled') + '>' + (i === ch.total ? '👹 보스' : i + '단계') + '</button>';
         panel.innerHTML = '<div class="cp-title">👥 컴까기 협동 — ' + humans.length + ' / 4명</div>' +
             '<div class="cp-members">' + humans.map(n => '<span>' + esc(n) + (n === ch.host ? ' 👑' : '') + '</span>').join('') + '</div>' +
-            '<div class="cp-sub">' + (isHost ? '도전할 단계를 누르면 바로 시작합니데이' : '방장이 단계를 고르는 중입니데이...') + '</div>' +
+            '<div class="cp-sub">' + (isHost ? '도전할 단계를 누르면 바로 시작합니다' : '방장이 단계를 고르는 중입니다...') + '</div>' +
             '<div class="cp-stages">' + stages + '</div>' +
-            '<div class="cp-sub">친구는 대기실의 방 목록이나 위쪽 🔗 초대 링크로 들어옵니데이 · 사람이 많을수록 봇도 강해집니데이</div>';
+            '<div class="cp-sub">친구는 대기실의 방 목록이나 위쪽 🔗 초대 링크로 들어옵니다 · 사람이 많을수록 봇도 강해집니다</div>';
     }
     socket.on('challengeResult', r => {
         if (!r) return;
@@ -4656,7 +4744,7 @@
                 <div class="rw-trophy">${r.allClear ? '👑' : '🏆'}</div>
                 <div class="rw-name">${r.stage}단계 클리어!</div>
                 <div class="rw-sub">${esc(r.name)} 격파${r.allClear ? ' — 컴까기 정복!' : ''}</div>
-                <div class="rw-chips">💰 뱅크롤 +${r.reward.toLocaleString()} · 🔷 코어 +${r.cores || 0}${r.first ? '' : ' (재도전 보상)'}${r.allClear ? '<br>🤖 칭호 「컴까기 정복자」가 열렸습니데이 (꾸미기 상점 → 칭호)' : ''}</div>
+                <div class="rw-chips">💰 뱅크롤 +${r.reward.toLocaleString()} · 🔷 코어 +${r.cores || 0}${r.first ? '' : ' (재도전 보상)'}${r.allClear ? '<br>🤖 칭호 「컴까기 정복자」가 열렸습니다 (꾸미기 상점 → 칭호)' : ''}</div>
                 <div style="margin-top:20px;">${nextBtn}
                     <button class="btn-close-modal" style="width:100%;" onclick="leaveChallenge()">대기실로</button></div>
             </div>`;
@@ -4664,8 +4752,8 @@
             inner.innerHTML = `<div class="result-pot-card rw-card">
                 <div class="rw-trophy">💀</div>
                 <div class="rw-name">${r.stage}단계 실패</div>
-                <div class="rw-sub" style="color:#ff8a78 !important;">${esc(r.name)}에게 졌습니데이</div>
-                <div class="rw-chips">몇 번이든 다시 도전할 수 있습니데이</div>
+                <div class="rw-sub" style="color:#ff8a78 !important;">${esc(r.name)}에게 졌습니다</div>
+                <div class="rw-chips">몇 번이든 다시 도전할 수 있습니다</div>
                 <div style="margin-top:20px;">
                     ${r.coop
                         ? '<button class="btn-join" style="width:100%; margin-bottom:8px;" onclick="document.getElementById(\'result-modal\').classList.remove(\'show\')">👥 다시 같이 도전</button>'
@@ -5015,14 +5103,14 @@
         if (d.clearedFloor && !d.rerolled) confetti({ particleCount: 140, spread: 90, origin: { y: 0.45 }, zIndex: 4600 });
         const nx = d.next;
         // 다시 뽑기·상점 구매로 다시 그릴 때는 서버가 "몇 층을 깼는지"를 다시 안 보낸다 — 직전 제목을 기억해 둔다
-        if (d.clearedFloor) _runTitle = `🎉 ${d.clearedFloor}층 돌파! <small>증강을 고르이소</small>`;
-        else if (d.start) _runTitle = '🍀 증강 컴까기 <small>첫 증강을 고르이소</small>';
-        else if (d.more) _runTitle = '➕ 증강 하나 더 <small>한 번 더 고르이소</small>';
-        else if (!d.rerolled || !_runTitle) _runTitle = `🍀 ${d.floor}층 준비 <small>증강을 고르이소</small>`;
+        if (d.clearedFloor) _runTitle = `🎉 ${d.clearedFloor}층 돌파! <small>증강을 고르세요</small>`;
+        else if (d.start) _runTitle = '🍀 증강 컴까기 <small>첫 증강을 고르세요</small>';
+        else if (d.more) _runTitle = '➕ 증강 하나 더 <small>한 번 더 고르세요</small>';
+        else if (!d.rerolled || !_runTitle) _runTitle = `🍀 ${d.floor}층 준비 <small>증강을 고르세요</small>`;
         document.getElementById('run-title').innerHTML = _runTitle;
         if (d.earned) _runEarned = d.earned; else if (!d.rerolled) _runEarned = 0;
         document.getElementById('run-sub').innerText = d.start
-            ? '층마다 기한(핸드 수) 안에 목표 칩을 채우면 올라갑니데이. 못 채우면 런이 끝나고, 올라간 층만큼 보상을 받습니데이.'
+            ? '층마다 기한(핸드 수) 안에 목표 칩을 채우면 올라갑니다. 못 채우면 런이 끝나고, 올라간 층만큼 보상을 받습니다.'
             : '';
         document.getElementById('run-offers').innerHTML = d.offers.map((a, i) => `
             <button class="aug-card t-${a.tier}" onclick="pickAug(${i})">
@@ -5033,13 +5121,13 @@
             </button>`).join('');
         document.getElementById('run-next').innerHTML =
             `<b>${nx.boss ? '👹 ' : ''}다음: ${nx.floor}층 「${esc(nx.name)}」</b> 상대 ${nx.bots.length}명 · 시작 ${nx.startChips.toLocaleString()} → 목표 <em>${nx.quota.toLocaleString()}</em> · 기한 ${nx.hands}핸드` +
-            `<br><small>(목표·기한은 지금 가진 증강 기준 — 고른 증강에 따라 더 좋아질 수 있습니데이)</small>`;
+            `<br><small>(목표·기한은 지금 가진 증강 기준 — 고른 증강에 따라 더 좋아질 수 있습니다)</small>`;
         document.getElementById('run-owned').innerHTML = d.augments.length ? '가진 증강 ' + d.augments.map(augChip).join('') : '';
         // 🪙 상점 — 층을 깨고 받은 코인으로 산다 (물건 id 는 서버가 정한 영문 소문자뿐이지만 한 번 더 거른다)
         const items = (d.shop || []).filter(it => /^[a-z]+$/.test(it.id || ''));
         document.getElementById('run-shop').innerHTML = items.length ? `
             <div class="rs-head">🪙 상점 <b>${d.coins || 0} 코인</b>${_runEarned ? `<span class="rs-earn">이번 층 +${_runEarned}</span>` : ''}
-                <small>${(d.coins || 0) > 0 || !d.start ? '빨리·크게 깰수록 코인을 더 받습니데이' : '층을 깨면 코인을 받습니데이 (빨리·크게 깰수록 더)'}</small></div>
+                <small>${(d.coins || 0) > 0 || !d.start ? '빨리·크게 깰수록 코인을 더 받습니다' : '층을 깨면 코인을 받습니다 (빨리·크게 깰수록 더)'}</small></div>
             <div class="rs-items">` + items.map(it => `
                 <button class="rs-item${it.bought ? ' bought' : ''}" ${it.can ? '' : 'disabled'} onclick="socket.emit('runBuy', { id: '${it.id}' })">
                     <span class="rs-ico">${it.icon}</span>
@@ -5089,7 +5177,7 @@
         if (el.style.display !== 'none') { el.style.display = 'none'; return; }
         el.innerHTML = '<div class="ri-title">🍀 가진 증강 <small>(눌러서 닫기)</small></div>' + (_runInfo.length
             ? _runInfo.map(a => `<div class="ri-row t-${a.tier}"><span class="ri-ico" style="${augPic(a)}"></span><span><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span></div>`).join('')
-            : '<div class="ri-row"><span>아직 없습니데이</span></div>');
+            : '<div class="ri-row"><span>아직 없습니다</span></div>');
         el.style.display = 'block';
     }
     const RUN_NOTE = { blind: '🎟️ 블라인드 환급', pair: '👯 포켓 보너스', bonus: '💰 승리 수당', seven: '7️⃣ 럭키 세븐', combo: '🃏 족보 수당', jackpot: '🎰 JACKPOT', insure: '🛡️ 올인 보험', interest: '🏦 이자', mull: '🔄 멀리건 — 새 패' };
@@ -5108,7 +5196,7 @@
     socket.on('runRevive', d => {
         const t = document.createElement('div');
         t.className = 'token-toast';
-        t.innerHTML = '🍀 네잎클로버! <small>' + d.floor + '층을 한 번 더 합니데이</small>';
+        t.innerHTML = '🍀 네잎클로버! <small>' + d.floor + '층을 한 번 더 합니다</small>';
         document.body.appendChild(t);
         setTimeout(() => t.remove(), 2600);
     });
@@ -5121,7 +5209,7 @@
         inner.innerHTML = `<div class="result-pot-card rw-card ${r.win ? 'ch-clear boss' : ''}">
             ${r.win ? '<div class="ch-clear-stamp">PIT CLEAR</div>' : ''}
             <div class="rw-trophy">${r.win ? '👑' : (r.cleared > 0 ? '🍀' : '💀')}</div>
-            <div class="rw-name">${r.win ? '더 핏 정복!' : (r.cleared > 0 ? r.cleared + '층까지 올랐습니데이' : '1층에서 끝났습니데이')}</div>
+            <div class="rw-name">${r.win ? '더 핏 정복!' : (r.cleared > 0 ? r.cleared + '층까지 올랐습니다' : '1층에서 끝났습니다')}</div>
             <div class="rw-sub">${r.newBest ? '🏅 내 최고 기록 갱신!' : '내 최고 ' + r.best + '층'}</div>
             <div class="rw-chips">💰 뱅크롤 +${r.reward.toLocaleString()} · 🔷 코어 +${r.cores}</div>
             ${r.augments.length ? '<div class="run-owned" style="justify-content:center; margin-top:12px;">' + r.augments.map(augChip).join('') + '</div>' : ''}
@@ -5200,24 +5288,24 @@
         const f = input.files && input.files[0];
         input.value = '';
         if (!f) return;
-        if (!/^image\/(png|jpeg|webp)$/.test(f.type)) { shopMsg('이미지 파일만 됩니데이.', false); return; }
-        if (f.size > 12 * 1024 * 1024) { shopMsg('파일이 너무 큽니데이 (12MB 이하).', false); return; }
+        if (!/^image\/(png|jpeg|webp)$/.test(f.type)) { shopMsg('이미지 파일만 됩니다.', false); return; }
+        if (f.size > 12 * 1024 * 1024) { shopMsg('파일이 너무 큽니다 (12MB 이하).', false); return; }
         const url = URL.createObjectURL(f);
         const img = new Image();
         img.onload = () => {
             URL.revokeObjectURL(url);
             const side = Math.min(img.naturalWidth, img.naturalHeight);
-            if (!side) { shopMsg('사진을 못 읽겠습니데이.', false); return; }
+            if (!side) { shopMsg('사진을 못 읽겠습니다.', false); return; }
             const cv = document.createElement('canvas');
             cv.width = cv.height = 128;
             const ctx = cv.getContext('2d');
             ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 128, 128);
             let data = cv.toDataURL('image/jpeg', 0.72);
             if (data.length > 36000) data = cv.toDataURL('image/jpeg', 0.5);
-            shopMsg('올리는 중입니데이...', true);
+            shopMsg('올리는 중입니다...', true);
             socket.emit('uploadAvatar', { data });
         };
-        img.onerror = () => { URL.revokeObjectURL(url); shopMsg('사진을 못 읽겠습니데이.', false); };
+        img.onerror = () => { URL.revokeObjectURL(url); shopMsg('사진을 못 읽겠습니다.', false); };
         img.src = url;
     }
     function removePhoto() { socket.emit('removeAvatarPhoto'); }
@@ -5238,7 +5326,7 @@
                 rankBar.style.display = 'flex';
                 const nx = rk.next
                     ? `다음 <b>${esc(rk.next.name)}</b> — 우승 ${rk.next.wins}회 또는 최고 뱅크롤 ${rk.next.peak.toLocaleString()}<br>지금 우승 ${rk.wins}회 · 최고 ${(rk.peak || 0).toLocaleString()}`
-                    : `최고 등급입니데이 — 우승 ${rk.wins}회 · 최고 ${(rk.peak || 0).toLocaleString()}`;
+                    : `최고 등급입니다 — 우승 ${rk.wins}회 · 최고 ${(rk.peak || 0).toLocaleString()}`;
                 rankBar.innerHTML = `<div class="sr-badge">🏅 ${esc(rk.name)}</div><div class="sr-next">${nx}</div>`;
             }
         }
@@ -5256,7 +5344,7 @@
                       + (isOn ? '' : `<button class="sh-btn" style="margin-top:5px" onclick="socket.emit('equipCosmetic',{id:'av_photo'})">장착</button>`)
                     : '<button class="sh-btn buy" onclick="pickPhoto()">📷 사진 올리기</button>';
             } else if (it.locked) {
-                btn = `<div class="sh-need">🔒 ${esc(it.need || '아직 잠겨 있습니데이')}</div>`;
+                btn = `<div class="sh-need">🔒 ${esc(it.need || '아직 잠겨 있습니다')}</div>`;
             } else if (isOn) {
                 btn = '<button class="sh-btn on" disabled>장착 중</button>';
             } else if (it.noBuy || owned.includes(it.id)) {
@@ -5335,12 +5423,12 @@
         const errEl = document.getElementById('login-error');
         errEl.style.display = 'none';
         if (!NICK_REGEX.test(nick)) {
-            errEl.innerText = '닉네임은 한글/영문/숫자/_(언더바)만, 2~12자로 입력해주이소!';
+            errEl.innerText = '닉네임은 한글/영문/숫자/_(언더바)만, 2~12자로 입력해주세요!';
             errEl.style.display = 'block';
             return;
         }
         if (!/^\d{4}$/.test(pin)) {
-            errEl.innerText = '비밀번호는 숫자 4자리로 입력해주이소!';
+            errEl.innerText = '비밀번호는 숫자 4자리로 입력해주세요!';
             errEl.style.display = 'block';
             return;
         }
@@ -5503,11 +5591,11 @@
         if (sig !== _endVoteSig) {
             _endVoteSig = sig;
             const iVote = v.voters.includes(myNickname), agreed = v.yes.includes(myNickname);
-            bar.innerHTML = `<div class="ev-title">🗳️ ${esc(v.proposer)} 님이 토너먼트를 지금 끝내자고 합니데이</div>`
+            bar.innerHTML = `<div class="ev-title">🗳️ ${esc(v.proposer)} 님이 토너먼트를 지금 끝내자고 합니다</div>`
                 + `<div class="ev-sub">칩 비율대로 상금 분배 · 동의 ${v.yes.length}/${v.voters.length} · <span class="ev-sec"></span>초</div>`
                 + (iVote && !agreed
                     ? `<div class="ev-actions"><button class="ev-yes" onclick="voteEnd(true)">찬성</button><button class="ev-no" onclick="voteEnd(false)">반대</button></div>`
-                    : `<div class="ev-sub">${agreed ? '✅ 찬성했습니데이 — 다른 참가자를 기다리는 중' : '투표권 없음 (관전·탈락)'}</div>`);
+                    : `<div class="ev-sub">${agreed ? '✅ 찬성했습니다 — 다른 참가자를 기다리는 중' : '투표권 없음 (관전·탈락)'}</div>`);
             bar.hidden = false;
         }
         const paintSec = () => {
@@ -5525,9 +5613,9 @@
     function openLeaveChoice() {
         document.getElementById('result-inner').innerHTML = `
             <div class="result-pot-card leave-card">
-                <div class="rw-sub">토너먼트 진행 중입니데이</div>
+                <div class="rw-sub">토너먼트 진행 중입니다</div>
                 <div class="leave-choice">
-                    <button class="lc-vote" onclick="proposeEndVote()">🗳️ 모두 동의로 끝내기<small>전원 찬성하면 지금 칩 비율대로 상금을 나눕니데이</small></button>
+                    <button class="lc-vote" onclick="proposeEndVote()">🗳️ 모두 동의로 끝내기<small>전원 찬성하면 지금 칩 비율대로 상금을 나눕니다</small></button>
                     <button onclick="hideResultModal()">계속하기</button>
                     <button class="lc-quit" onclick="hideResultModal(); socket.emit('leaveRoom');">나가기 (기권)</button>
                 </div>
@@ -5545,7 +5633,7 @@
             <div class="result-pot-card leave-card">
                 <div class="rw-trophy">🤝</div>
                 <div class="rw-sub">합의 종료</div>
-                <div class="chop-note">상금풀 ${Number(d.pool || 0).toLocaleString()} 칩을 칩 비율대로 나눴습니데이</div>
+                <div class="chop-note">상금풀 ${Number(d.pool || 0).toLocaleString()} 칩을 칩 비율대로 나눴습니다</div>
                 <div class="chop-list">${list}</div>
                 <div class="result-close-bar" style="margin-top:18px;">
                     <button class="btn-close-modal" onclick="hideResultModal()">테이블에 남아 새 토너먼트 준비하기</button>
@@ -5582,7 +5670,7 @@
         // 둘 다 비었으면 방 목록에 안내문 (mtt-list는 위, room-list는 아래)
         const rl = document.getElementById('room-list');
         if (rl && _roomCount === 0 && _mttCount === 0) {
-            rl.innerHTML = '<div class="room-list-empty">아직 열린 방이 없습니데이.<br>위에서 새 방이나 MTT를 만들어보이소! 🎲</div>';
+            rl.innerHTML = '<div class="room-list-empty">아직 열린 방이 없습니다.<br>위에서 새 방이나 MTT를 만들어보세요! 🎲</div>';
         } else if (rl && _roomCount === 0) {
             rl.innerHTML = ''; // MTT만 있는 경우
         }
@@ -5619,7 +5707,7 @@
         const cnt = document.getElementById('lobby-count');
         if (cnt) cnt.innerText = users.length;
         if (!el) return;
-        if (!users.length) { el.innerHTML = '<div class="lobby-empty">대기 중인 사람이 없습니데이</div>'; return; }
+        if (!users.length) { el.innerHTML = '<div class="lobby-empty">대기 중인 사람이 없습니다</div>'; return; }
         el.innerHTML = users.map(n => `
             <div class="lobby-user ${n === myNickname ? 'is-me' : ''}">
                 <span class="lu-avatar" style="--av:${avatarHue(n)}">${avatarInitial(n)}</span>
@@ -6422,25 +6510,25 @@
                 const bar = document.getElementById('spectate-bar');
                 const sub = bar.querySelector('.sp-s');
                 const btn = bar.querySelector('button');
-                if (full) { sub.innerText = `자리가 가득 찼습니데이 (${data.seatsUsed}/${data.seatsMax})`; btn.disabled = true; btn.style.opacity = 0.45; }
-                else if (tourneyRunning) { sub.innerText = '토너먼트가 끝나면 참여할 수 있습니데이'; btn.disabled = true; btn.style.opacity = 0.45; }
-                else { sub.innerText = `빈자리 ${(data.seatsMax || 6) - (data.seatsUsed || 0)}개 — 지금 앉을 수 있습니데이`; btn.disabled = false; btn.style.opacity = 1; }
+                if (full) { sub.innerText = `자리가 가득 찼습니다 (${data.seatsUsed}/${data.seatsMax})`; btn.disabled = true; btn.style.opacity = 0.45; }
+                else if (tourneyRunning) { sub.innerText = '토너먼트가 끝나면 참여할 수 있습니다'; btn.disabled = true; btn.style.opacity = 0.45; }
+                else { sub.innerText = `빈자리 ${(data.seatsMax || 6) - (data.seatsUsed || 0)}개 — 지금 앉을 수 있습니다`; btn.disabled = false; btn.style.opacity = 1; }
                 bar.style.display = 'block';
-                ind.innerHTML = `👀 관전 중입니데이 — 아래 [자리에 앉기]로 참여하이소`;
+                ind.innerHTML = `👀 관전 중입니다 — 아래 [자리에 앉기]로 참여하세요`;
             } else {
                 document.getElementById('spectate-bar').style.display = 'none';
                 ind.innerHTML = data.gameMode === 'cash'
-                    ? `👀 관전 중입니데이 — 자리가 나면 다음 핸드부터 참여합니데이`
-                    : `👀 현재 진행 중인 토너먼트를 관전 중입니데이... (종료 후 자동 참여)`;
+                    ? `👀 관전 중입니다 — 자리가 나면 다음 핸드부터 참여합니다`
+                    : `👀 현재 진행 중인 토너먼트를 관전 중입니다... (종료 후 자동 참여)`;
             }
         }
         else if (myPlayer && myPlayer.chips <= 0 && data.gameStage > 0) {
             document.getElementById('ready-controls').style.display = 'none';
             document.getElementById('action-controls').style.display = 'none';
             if (data.gameStage === 0 || isSpectator) {
-                ind.innerHTML = `💸 파산! 이번 토너먼트가 끝날 때까지 관전 모드로 전환됩니데이.`;
+                ind.innerHTML = `💸 파산! 이번 토너먼트가 끝날 때까지 관전 모드로 전환됩니다.`;
             } else {
-                ind.innerHTML = `🔥 올인 승부 진행 중! 카드가 다 까지고 판이 끝날 때까지 기다려주이소...`;
+                ind.innerHTML = `🔥 올인 승부 진행 중! 카드가 다 까지고 판이 끝날 때까지 기다려주세요...`;
             }
         } 
         else if (data.gameStage === 0) {
@@ -6451,32 +6539,32 @@
             if (isIAmHost) {
                 document.getElementById('ready-controls').style.display = 'block';
                 ind.innerText = isCash
-                    ? '봇을 추가하고 [캐시게임 시작]을 눌러주이소! (시작 후엔 자동 진행)'
-                    : '플레이어들이 모두 모였다면 [토너먼트 시작] 버튼을 눌러주이소!';
+                    ? '봇을 추가하고 [캐시게임 시작]을 눌러주세요! (시작 후엔 자동 진행)'
+                    : '플레이어들이 모두 모였다면 [토너먼트 시작] 버튼을 눌러주세요!';
                 renderBotManager(data);
             } else {
                 document.getElementById('ready-controls').style.display = 'none';
-                ind.innerText = `방장[${data.hostNickname}]님이 게임을 개시하길 대기 중입니데이...`;
+                ind.innerText = `방장[${data.hostNickname}]님이 게임을 개시하길 대기 중입니다...`;
             }
         } else if (data.gameStage === 5) {
             document.getElementById('ready-controls').style.display = 'none';
             document.getElementById('action-controls').style.display = 'none';
             hideGtoAdvice();
-            ind.innerText = '결과 정산 중입니데이... 다음 판이 자동 진행됩니다.';
+            ind.innerText = '결과 정산 중입니다... 다음 판이 자동 진행됩니다.';
         } else if (data.turnPlayerId === myNickname) {
             document.getElementById('ready-controls').style.display = 'none';
             document.getElementById('action-controls').style.display = 'flex';
-            ind.innerHTML = `⭐ 내 턴입니데이! 액션을 선택하이소. ${timerHtml}`;
+            ind.innerHTML = `⭐ 내 턴입니다! 액션을 선택하세요. ${timerHtml}`;
         } else if (data.turnPlayerId === null) {
             document.getElementById('ready-controls').style.display = 'none';
             document.getElementById('action-controls').style.display = 'none';
             hideGtoAdvice();
-            ind.innerText = '🔥 올인 승부! 카드가 자동으로 오픈되는 중입니데이...';
+            ind.innerText = '🔥 올인 승부! 카드가 자동으로 오픈되는 중입니다...';
         } else {
             document.getElementById('ready-controls').style.display = 'none';
             document.getElementById('action-controls').style.display = 'none';
             hideGtoAdvice();
-            ind.innerHTML = `[${esc(data.turnPlayerId)}] 님의 턴입니데이. 기다려주이소. ${timerHtml}`;
+            ind.innerHTML = `[${esc(data.turnPlayerId)}] 님의 턴입니다. 기다려주세요. ${timerHtml}`;
         }
 
         // 🌟 쇼다운 중 재렌더 시 승리 카드 하이라이트 유지
@@ -6721,7 +6809,7 @@
     socket.on('handHistoryData', (hist) => {
         const list = document.getElementById('history-list');
         if (!hist || hist.length === 0) {
-            list.innerHTML = '<div class="hist-empty">아직 진행된 핸드가 없습니데이!</div>';
+            list.innerHTML = '<div class="hist-empty">아직 진행된 핸드가 없습니다!</div>';
         } else {
             list.innerHTML = hist.map(h => {
                 // 🐛 [버그픽스] 한 명이 메인팟+사이드팟을 동시 우승하면 winners 배열에 같은 닉이
@@ -6803,7 +6891,7 @@
         const list = document.getElementById('hof-list');
         list.innerHTML = '';
         if (data.length === 0) {
-            list.innerHTML = '<div class="hist-empty" style="text-align:center;">아직 우승자가 없습니데이!</div>';
+            list.innerHTML = '<div class="hist-empty" style="text-align:center;">아직 우승자가 없습니다!</div>';
         } else {
             data.forEach((u, i) => {
                 const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '🏅';
@@ -6886,8 +6974,8 @@
         // 아이폰은 beforeinstallprompt 가 없다 — 수동 방법을 안내한다
         const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
         alert(ios
-            ? '사파리 아래쪽 공유 버튼(⬆️) → "홈 화면에 추가"를 누르면 앱처럼 쓸 수 있습니데이.'
-            : '브라우저 메뉴(⋮) → "홈 화면에 추가" 또는 "앱 설치"를 누르면 됩니데이.');
+            ? '사파리 아래쪽 공유 버튼(⬆️) → "홈 화면에 추가"를 누르면 앱처럼 쓸 수 있습니다.'
+            : '브라우저 메뉴(⋮) → "홈 화면에 추가" 또는 "앱 설치"를 누르면 됩니다.');
     }
 
     // 아이폰은 설치 이벤트가 없으니, 모바일이고 아직 앱이 아니면 버튼을 그냥 보여준다
@@ -6943,8 +7031,8 @@
             b.classList.toggle('on', !!on);
         });
         el.querySelector('.fs-sub').innerText = rc
-            ? (data.gameStage === 5 ? '공개했습니데이' : '핸드가 끝나면 공개됩니데이')
-            : '핸드가 끝나면 공개됩니데이';
+            ? (data.gameStage === 5 ? '공개했습니다' : '핸드가 끝나면 공개됩니다')
+            : '핸드가 끝나면 공개됩니다';
         el.style.display = 'block';
     }
 
@@ -6978,8 +7066,8 @@
     let rebuyKind = 'rebuy'; // 'rebuy' | 'cash'
     socket.on('rebuyOffer', d => {
         rebuyKind = 'rebuy';
-        document.querySelector('#rebuy-prompt .rb-title').innerText = '💸 파산했습니데이!';
-        document.querySelector('#rebuy-prompt .rb-sub').innerHTML = `리바이로 다시 일어서보입시더 (잔여 <span id="rb-remaining">${d.remaining}</span>회)`;
+        document.querySelector('#rebuy-prompt .rb-title').innerText = '💸 파산했습니다!';
+        document.querySelector('#rebuy-prompt .rb-sub').innerHTML = `리바이로 다시 일어서 봅시다 (잔여 <span id="rb-remaining">${d.remaining}</span>회)`;
         document.querySelector('#rebuy-prompt .rb-yes').innerHTML = `🔄 리바이 (${Number(d.stack).toLocaleString()} 칩)`;
         document.getElementById('rebuy-prompt').style.display = 'block';
         SFX.myturn();
@@ -6987,8 +7075,8 @@
     // 💵 캐시 바이인 오퍼 (무제한)
     socket.on('cashBuyinOffer', d => {
         rebuyKind = 'cash';
-        document.querySelector('#rebuy-prompt .rb-title').innerText = '💵 칩이 떨어졌습니데이!';
-        document.querySelector('#rebuy-prompt .rb-sub').innerText = '캐시 테이블 — 언제든 다시 바이인할 수 있습니더';
+        document.querySelector('#rebuy-prompt .rb-title').innerText = '💵 칩이 떨어졌습니다!';
+        document.querySelector('#rebuy-prompt .rb-sub').innerText = '캐시 테이블 — 언제든 다시 바이인할 수 있습니다';
         document.querySelector('#rebuy-prompt .rb-yes').innerHTML = `💵 바이인 (${Number(d.stack).toLocaleString()} 칩)`;
         document.getElementById('rebuy-prompt').style.display = 'block';
         SFX.myturn();
@@ -7004,7 +7092,7 @@
         document.getElementById('season-label').innerText = `${d.season} 시즌 · 우승 100점 / 핸드승 5점`;
         const list = document.getElementById('season-list');
         if (!d.leaders || d.leaders.length === 0) {
-            list.innerHTML = '<div class="hist-empty" style="text-align:center;">아직 이번 시즌 기록이 없습니데이!</div>';
+            list.innerHTML = '<div class="hist-empty" style="text-align:center;">아직 이번 시즌 기록이 없습니다!</div>';
         } else {
             list.innerHTML = d.leaders.map((u, i) => {
                 const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
@@ -7026,7 +7114,7 @@
     socket.on('bankrollBoardData', d => {
         const list = document.getElementById('bankroll-list');
         if (!d.leaders || d.leaders.length === 0) {
-            list.innerHTML = '<div class="hist-empty" style="text-align:center;">아직 기록이 없습니데이!</div>';
+            list.innerHTML = '<div class="hist-empty" style="text-align:center;">아직 기록이 없습니다!</div>';
         } else {
             list.innerHTML = d.leaders.map((u, i) => {
                 const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
@@ -7049,7 +7137,7 @@
     socket.on('mttChampionsData', d => {
         const list = document.getElementById('mttchamp-list');
         if (!d.champions || d.champions.length === 0) {
-            list.innerHTML = '<div class="hist-empty" style="text-align:center;">아직 MTT 우승자가 없습니데이!</div>';
+            list.innerHTML = '<div class="hist-empty" style="text-align:center;">아직 MTT 우승자가 없습니다!</div>';
         } else {
             list.innerHTML = d.champions.map((u, i) => {
                 const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
@@ -7094,7 +7182,7 @@
     });
     socket.on('mttStarted', d => {
         document.getElementById('mttwait-modal').style.display = 'none';
-        showCenterMessage(`🏆 ${d.name} 시작!\n행운을 빕니데이!`);
+        showCenterMessage(`🏆 ${d.name} 시작!\n행운을 빕니다!`);
     });
     socket.on('mttSeated', d => {
         // 테이블 착석 — 게임 화면으로 전환
@@ -7105,9 +7193,9 @@
         document.getElementById('chat-panel').style.display = 'flex';
         document.getElementById('emote-panel').style.display = 'flex';
         if (d.roomId) currentRoomId = d.roomId;
-        if (d.finalTable && d.moved) showCenterMessage('🏆 파이널 테이블 진출!\n마지막 승부입니데이!');
-        else if (d.finalTable) showCenterMessage('🏆 파이널 테이블!\n마지막 승부입니데이!');
-        else if (d.moved) showCenterMessage('🔄 테이블 밸런싱\n자리를 옮겼습니데이!');
+        if (d.finalTable && d.moved) showCenterMessage('🏆 파이널 테이블 진출!\n마지막 승부입니다!');
+        else if (d.finalTable) showCenterMessage('🏆 파이널 테이블!\n마지막 승부입니다!');
+        else if (d.moved) showCenterMessage('🔄 테이블 밸런싱\n자리를 옮겼습니다!');
     });
     socket.on('mttStatus', d => {
         const bar = document.getElementById('mtt-status-bar');
@@ -7127,7 +7215,7 @@
                 <div class="result-pot-card rw-card">
                     <div class="rw-trophy">${medal}</div>
                     <div class="rw-name">${d.place}위</div>
-                    <div class="rw-chips">총 ${d.total}명 참가 멀티테이블 토너먼트에서<br>${d.place}위로 마감했습니데이!</div>
+                    <div class="rw-chips">총 ${d.total}명 참가 멀티테이블 토너먼트에서<br>${d.place}위로 마감했습니다!</div>
                     <button class="btn-close-modal" onclick="mttBackToLobby()" style="width:100%;">🏛️ 로비로 돌아가기</button>
                 </div>`;
             modal.classList.add('show');
@@ -7172,7 +7260,7 @@
     socket.on('mttCancelled', () => {
         document.getElementById('mttwait-modal').style.display = 'none';
         myMtt = null;
-        showCenterMessage('🚫 토너먼트가 취소되었습니데이.');
+        showCenterMessage('🚫 토너먼트가 취소되었습니다.');
     });
     socket.on('mttList', list => {
         const el = document.getElementById('mtt-list');
@@ -7202,7 +7290,7 @@
     let replayData = null, replayIdx = 0;
     function requestReplay(handNo) { socket.emit('getReplay', handNo); }
     socket.on('replayData', d => {
-        if (!d) { showCenterMessage('리플레이 데이터가 없습니데이.'); return; }
+        if (!d) { showCenterMessage('리플레이 데이터가 없습니다.'); return; }
         replayData = d; replayIdx = 0;
         document.getElementById('replay-modal').style.display = 'flex';
         renderReplay();
@@ -7251,7 +7339,7 @@
         const el = document.getElementById('replay-fairness');
         if (!el) return;
         const f = replayData && replayData.fairness;
-        if (!f || !f.seed) { el.innerHTML = '🔐 이 핸드의 셔플 검증 정보가 없습니데이.'; return; }
+        if (!f || !f.seed) { el.innerHTML = '🔐 이 핸드의 셔플 검증 정보가 없습니다.'; return; }
         el.innerHTML = `🔐 <b>검증 가능 셔플</b><br>커밋: ${f.commit.slice(0,24)}...<br>시드: ${f.seed.slice(0,24)}...<br><span id="fair-status" style="color:var(--gold-hi);">검증 중...</span>`;
         try {
             // 1) 공개 시드의 SHA256이 커밋과 일치하는지
@@ -7264,7 +7352,7 @@
             const deckOk = deck.length === 52 && new Set(deck).size === 52;
             const status = document.getElementById('fair-status');
             if (commitOk && deckOk) {
-                status.innerHTML = '✅ 검증 완료 — 셔플이 조작되지 않았습니데이!';
+                status.innerHTML = '✅ 검증 완료 — 셔플이 조작되지 않았습니다!';
                 status.style.color = '#7bedaa';
             } else {
                 status.innerHTML = commitOk ? '⚠️ 덱 재현 실패' : '❌ 커밋 불일치!';
@@ -7775,8 +7863,8 @@
                 ${checkInBtn}
             </div>
             <div class="sr-section-title" style="color:var(--gold-hi);">🎯 오늘의 미션</div>
-            ${missionsHtml || '<div class="pf-empty">미션을 불러오지 못했습니데이.</div>'}
-            <div style="font-size:10.5px; color:var(--txt-dim); text-align:center; margin-top:10px;">미션은 매일 0시에 초기화됩니데이.</div>
+            ${missionsHtml || '<div class="pf-empty">미션을 불러오지 못했습니다.</div>'}
+            <div style="font-size:10.5px; color:var(--txt-dim); text-align:center; margin-top:10px;">미션은 매일 0시에 초기화됩니다.</div>
         `;
     }
     function claimCheckIn() { socket.emit('claimCheckIn'); }
@@ -7900,7 +7988,7 @@
                 ['9', '원페어', '<span class="hr-red">10♥ 10♦</span> K Q 4', '같은 숫자 2장'],
                 ['10', '하이카드', '<span>A♠ J♣ 8♥ 5♦ 2♣</span>', '아무것도 없음 — 최약']
             ];
-            body.innerHTML = `<div style="font-size:11.5px; color:var(--txt-dim); margin-bottom:10px;">위가 강하고 아래로 갈수록 약합니데이. 7장(내 패 2 + 공유 5) 중 가장 좋은 5장으로 만듭니다.</div>` +
+            body.innerHTML = `<div style="font-size:11.5px; color:var(--txt-dim); margin-bottom:10px;">위가 강하고 아래로 갈수록 약합니다. 7장(내 패 2 + 공유 5) 중 가장 좋은 5장으로 만듭니다.</div>` +
                 ranks.map(r => `<div class="hr-row"><span class="hr-rank">${r[0]}</span><span class="hr-name">${r[1]}</span><span class="hr-cards">${r[2]}</span><span class="hr-desc">${r[3]}</span></div>`).join('');
         } else if (tab === 'range') {
             body.innerHTML = renderRangeChart();
@@ -8189,7 +8277,7 @@
         document.getElementById('pf-style-wrap').innerHTML = styleHtml;
 
         document.getElementById('pf-grid').innerHTML = hp === 0
-            ? '<div class="pf-empty" style="grid-column:1/-1;">아직 기록이 없습니데이</div>'
+            ? '<div class="pf-empty" style="grid-column:1/-1;">아직 기록이 없습니다</div>'
             : `<div class="pf-stat"><div class="v">${u.wins}</div><div class="k">우승</div></div>
                <div class="pf-stat"><div class="v">${compact(hp)}</div><div class="k">핸드</div></div>
                <div class="pf-stat"><div class="v">${winRate}%</div><div class="k">승률</div></div>
@@ -8224,7 +8312,7 @@
                    <div><b>${fmtPct(s.pfr)}</b><span>PFR · 레이즈</span></div>
                    <div><b>${has(s.af) ? s.af : '–'}</b><span>AF · 공격성</span></div>
                </div>`
-            : '<div class="pf-ach-empty" style="margin-top:10px;">📊 지표 분석에는 몇 핸드가 더 필요합니데이</div>';
+            : '<div class="pf-ach-empty" style="margin-top:10px;">📊 지표 분석에는 몇 핸드가 더 필요합니다</div>';
         const cashStr = (u.cashNet || 0) !== 0 ? `${u.cashNet > 0 ? '+' : ''}${(u.cashNet || 0).toLocaleString()}` : '0';
         const more = `<div class="pf-more" id="pf-more" style="display:none;">
                 ${(s.sampleActions || 0) > 0 ? row('3-Bet', fmtPct(s.threeBet), '리레이즈 빈도') + row('Fold→Bet', fmtPct(s.foldToBet), '벳에 폴드') + row('WTSD', fmtPct(s.wtsd), '쇼다운 도달') + row('W$SD', fmtPct(s.wsd), '쇼다운 승률') : ''}
@@ -8233,7 +8321,7 @@
                 ${row('최대 획득 팟', (u.biggestPot || 0).toLocaleString(), '')}
                 ${(s.sampleActions || 0) > 0 ? row('분석한 액션', (s.sampleActions || 0).toLocaleString() + '개', '') : ''}
                 ${ach.length ? '<div class="pf-ach-wrap" style="margin-top:10px;">' + ach.map(a => `<span class="pf-ach"><span class="a-ico">${a.icon}</span>${esc(a.name)}</span>`).join('') + '</div>' : ''}
-                <div class="pf-adv-legend">💡 VPIP·PFR이 높으면 루즈, 낮으면 타이트. AF는 벳·레이즈를 콜보다 얼마나 자주 하는지. GTO 근접도는 매 액션이 이론상 최적 선택에 얼마나 가까운지를 0~100점으로 본 값입니데이.</div>
+                <div class="pf-adv-legend">💡 VPIP·PFR이 높으면 루즈, 낮으면 타이트. AF는 벳·레이즈를 콜보다 얼마나 자주 하는지. GTO 근접도는 매 액션이 이론상 최적 선택에 얼마나 가까운지를 0~100점으로 본 값입니다.</div>
             </div>`;
         advWrap.innerHTML = gtoBlock + key3 +
             (ach.length ? `<div class="pf-achline" title="${esc(ach.map(a => a.name).join(' · '))}">🏅 업적 ${ach.length}개 <span>${ach.map(a => a.icon).join('')}</span></div>` : '') +
@@ -8440,7 +8528,7 @@
                 if (alive >= 2) {
                     const t = document.createElement('div');
                     t.className = 'token-toast';
-                    t.innerHTML = alive === 2 ? '⚔️ HEADS-UP! <small>둘만 남았습니데이</small>' : '💥 탈락자 발생 <small>남은 인원 ' + alive + '명</small>';
+                    t.innerHTML = alive === 2 ? '⚔️ HEADS-UP! <small>둘만 남았습니다</small>' : '💥 탈락자 발생 <small>남은 인원 ' + alive + '명</small>';
                     document.body.appendChild(t);
                     setTimeout(() => t.remove(), 3200);
                 }

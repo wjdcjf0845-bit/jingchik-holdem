@@ -76,11 +76,11 @@ const COSMETICS = {
     fr_bronze: { kind: 'frame', price: 0, noBuy: true, rank: 1, name: '구릿빛',    desc: '동네 고수의 증표' },
     fr_silver: { kind: 'frame', price: 0, noBuy: true, rank: 2, name: '은빛',      desc: '선수 소리 듣는 사람' },
     fr_gold:   { kind: 'frame', price: 0, noBuy: true, rank: 3, name: '금빛',      desc: '타짜의 자리' },
-    fr_legend: { kind: 'frame', price: 0, noBuy: true, rank: 4, name: '무지개',    desc: '전설 — 아무나 못 답니데이' },
+    fr_legend: { kind: 'frame', price: 0, noBuy: true, rank: 4, name: '무지개',    desc: '전설 — 아무나 못 답니다' },
     // ── 📷 직접 올린 프로필 사진 (사진이 있을 때만 장착 가능)
     av_photo:  { kind: 'avatar', price: 0, noBuy: true, photo: true, name: '내 사진', desc: '직접 올린 프로필 사진' },
     // ── 칭호 (이미지 없음 — 닉네임 옆에 붙는다)
-    ti_none:  { kind: 'title', name: '없음',        price: 0,      text: '', desc: '칭호를 떼어 둡니데이' },
+    ti_none:  { kind: 'title', name: '없음',        price: 0,      text: '', desc: '칭호를 떼어 둡니다' },
     // 🔷 코어(컴까기에서만 나오는 재화)로 사는 것들 — cur: 'core'
     back_circuit: { kind: 'back',   cur: 'core', price: 6,  name: '회로 기판',   desc: '푸른 회로가 흐르는 뒷면' },
     back_neon:    { kind: 'back',   cur: 'core', price: 12, name: '네온 그리드', desc: '신스웨이브 네온 뒷면' },
@@ -91,10 +91,10 @@ const COSMETICS = {
     ti_breaker:   { kind: 'title',  cur: 'core', price: 15, name: '기계 파괴자', text: '⚡ 기계 파괴자', desc: '고수 봇도 부순다' },
     // 🤖 컴까기 10단계를 전부 깨면 열린다 (살 수 없다)
     ti_bot:   { kind: 'title', name: '컴까기 정복자', price: 0, noBuy: true, challenge: true, text: '🤖 컴까기 정복자', desc: '컴까기 보스전을 깬 사람' },
-    ti_rookie:{ kind: 'title', name: '입문자',    price: 1,  text: '🌱 입문자', desc: '이제 막 판에 앉았습니데이' },
+    ti_rookie:{ kind: 'title', name: '입문자',    price: 1,  text: '🌱 입문자', desc: '이제 막 판에 앉았습니다' },
     ti_bluff: { kind: 'title', name: '블러프 장인', price: 2,  text: '🎭 블러프 장인', desc: '없는 패로 이기는 사람' },
     ti_allin: { kind: 'title', name: '올인 러버',  price: 2,  text: '🔥 올인 러버', desc: '고민은 짧게, 베팅은 크게' },
-    ti_rock:  { kind: 'title', name: '바위',      price: 2,  text: '🪨 바위', desc: '좋은 패만 골라 칩니데이' },
+    ti_rock:  { kind: 'title', name: '바위',      price: 2,  text: '🪨 바위', desc: '좋은 패만 골라 칩니다' },
     ti_shark: { kind: 'title', name: '테이블 상어', price: 3, text: '🦈 테이블 상어', desc: '앉은 자리가 곧 사냥터' },
     ti_king:  { kind: 'title', name: '판의 지배자', price: 6, text: '👑 판의 지배자', desc: '뱅크롤로 증명하는 자리' }
 };
@@ -846,18 +846,18 @@ const BOT_LINES = {
     '광폭': {
         join: ['오늘 다 쓸어담는다 🔥', '판돈 작네? 몸 좀 풀어볼까', '겁먹지 말고 덤벼라'],
         bigbet: ['올인 가자!!', '쫄리면 접든가 ㅋㅋ', '이 판 내가 먹는다', '다 걸어'],
-        bluff: ['내 패 궁금하나? ㅋㅋ', '믿거나 말거나~', '느낌이 쎄하지?'],
+        bluff: ['내 패 궁금해? ㅋㅋ', '믿거나 말거나~', '느낌이 쎄하지?'],
         win: ['거봐 내가 먹는댔지 😎', '칩 잘 받았다 🤑', '이게 실력이다', '또 줍줍'],
         lose: ['에이 한 끗 차이네', '운 좋았다 인정', '다음 판 두고보자'],
         fold: ['이번엔 양보한다', '쓰레기패라 접는다 ㅋ', '오냐 가져가라'],
         tank: ['어허... 이거 애매한데', '너 뭐 들었냐', '재밌네 진짜 ㅋㅋ', '가? 말어?'],
         call: ['안 믿는다 콜', '그래 까봐', '뻥이지? 콜'],
-        taunt: ['{nick} 뭐하노 빨리 좀', '고민 길다 ㅋㅋ 티 난다', '타이머 다 간다', '그거 접을 패다 그냥 접어라']
+        taunt: ['{nick} 뭐 해 빨리 좀', '고민 길다 ㅋㅋ 티 난다', '타이머 다 간다', '그거 접을 패다 그냥 접어라']
     },
     '루즈-어그레시브': {
-        join: ['반갑다 잘 부탁한데이~', '오늘 운 좀 따라줘봐라', '재밌게 쳐보자'],
-        bigbet: ['압박 좀 넣어볼까', '이 정도는 받아주제?', '슬슬 가속한다'],
-        bluff: ['진짜일까 뻥일까~ 😏', '한번 따라와봐라', '감으로 가는기다'],
+        join: ['반갑다 잘 부탁해~', '오늘 운 좀 따라줘봐라', '재밌게 쳐보자'],
+        bigbet: ['압박 좀 넣어볼까', '이 정도는 받아주지?', '슬슬 가속한다'],
+        bluff: ['진짜일까 뻥일까~ 😏', '한번 따라와봐라', '감으로 가는 거다'],
         win: ['굿굿 잘 들어왔다 😁', '읽기 성공이네', '이 맛에 친다'],
         lose: ['아쉽다 잘 쳤다', '그 패를 콜하네 ㄷㄷ', '복수하러 온다'],
         fold: ['음 이건 접자', '다음 기회에', '여기까지 하자'],
@@ -877,15 +877,15 @@ const BOT_LINES = {
         taunt: ['{nick} 님 시간 많이 쓰시네요', '어려운 스팟인가 보네요', '타이밍 텔 나옵니다', '천천히 하셔도 됩니다']
     },
     '콜링스테이션': {
-        join: ['콜이 제맛이지~', '난 잘 안 접는다 ㅋㅋ', '끝까지 봐야제'],
+        join: ['콜이 제맛이지~', '난 잘 안 접는다 ㅋㅋ', '끝까지 봐야지'],
         bigbet: ['그래도 콜!', '궁금하니까 본다', '에라 모르겠다'],
         bluff: ['음... 콜할까말까', '난 못 접어~'],
         win: ['콜이 답이었네 ㅋㅋ', '거봐 봐야된다니까', '럭키~'],
         lose: ['아 그래도 봤어야지', '미련 없다', '한번 더!'],
         fold: ['이건 진짜 못 가겠다', '오늘 처음 접는다 ㅋ'],
         tank: ['어... 이거 콜인가', '접을까... 아니 못 접겠다', '아 모르겠다 진짜', '심장 떨리네 ㅋㅋ'],
-        call: ['콜! 봐야제', '못 참는다 콜', '어차피 볼 거 콜'],
-        taunt: ['{nick} 빨리 치라~ 궁금해 죽겠다', '뭘 그리 고민하노 ㅋㅋ', '나 같으면 벌써 콜했다']
+        call: ['콜! 봐야지', '못 참는다 콜', '어차피 볼 거 콜'],
+        taunt: ['{nick} 빨리 쳐라~ 궁금해 죽겠다', '뭘 그리 고민하냐 ㅋㅋ', '나 같으면 벌써 콜했다']
     },
     '초타이트': {
         join: ['신중하게 가겠습니다', '...', '조용히 칩니다'],
@@ -1320,7 +1320,7 @@ class GameRoom {
         this.turnTimeout = setTimeout(() => this._autoAct(nick), remain);
         io.to(this.roomId).emit('serverClock', Date.now()); // ⏱ 타임바 시계 보정
         io.to(this.roomId).emit('updateTurnTimer', this.turnEndTime);
-        io.to(this.roomId).emit('gameMessage', `⏳ ${nick} 님이 시간을 ${Math.round(addMs / 1000)}초 더 씁니데이`);
+        io.to(this.roomId).emit('gameMessage', `⏳ ${nick} 님이 시간을 ${Math.round(addMs / 1000)}초 더 씁니다`);
         return true;
     }
 
@@ -2333,7 +2333,7 @@ class GameRoom {
         const persona = this.assignPersona(name, diff);
         this.players[name]._persona = persona;
         const diffLabel = { easy: '🟢초보', normal: '🟡중수', hard: '🔴고수' }[diff];
-        io.to(this.roomId).emit('gameMessage', `🤖 ${name} 님이 참가했습니데이! (${diffLabel} · ${persona.label})`);
+        io.to(this.roomId).emit('gameMessage', `🤖 ${name} 님이 참가했습니다! (${diffLabel} · ${persona.label})`);
         // 입장 도발 멘트
         this.botSay(name, 'join');
         this.sendState();
@@ -2345,7 +2345,7 @@ class GameRoom {
         if (p._botTimer) clearTimeout(p._botTimer);
         delete this.players[botNick];
         this.playerOrder = this.playerOrder.filter(n => n !== botNick);
-        io.to(this.roomId).emit('gameMessage', `🤖 ${botNick} 님이 퇴장했습니데이.`);
+        io.to(this.roomId).emit('gameMessage', `🤖 ${botNick} 님이 퇴장했습니다.`);
         this.sendState();
     }
 
@@ -2601,7 +2601,7 @@ class GameRoom {
                         });
                     }
                     if (!this.playerOrder.includes(nick)) this.playerOrder.push(nick);
-                    if (p.socketId) io.to(p.socketId).emit('gameMessage', '🪑 자리가 나서 합류했습니데이! 이번 핸드부터 플레이합니데이.');
+                    if (p.socketId) io.to(p.socketId).emit('gameMessage', '🪑 자리가 나서 합류했습니다! 이번 핸드부터 플레이합니다.');
                     io.to(this.roomId).emit('gameMessage', `🪑 ${nick} 님이 관전석에서 테이블로 합류했습니다.`);
                     openSeats--;
                 }
@@ -2643,7 +2643,7 @@ class GameRoom {
                 });
                 if (rebuyables.length > 0 && !this._rebuyGraceActive) {
                     this._rebuyGraceActive = true;
-                    io.to(this.roomId).emit('gameMessage', '⏳ 리바이 대기 8초! 재구매하면 토너먼트가 계속됩니데이!');
+                    io.to(this.roomId).emit('gameMessage', '⏳ 리바이 대기 8초! 재구매하면 토너먼트가 계속됩니다!');
                     rebuyables.forEach(n => this.offerRebuy(n));
                     if (this.pendingStageTimeout) clearTimeout(this.pendingStageTimeout);
                     this.pendingStageTimeout = setTimeout(() => { this._rebuyGraceActive = false; this.startNextHand(); }, 8000);
@@ -2664,7 +2664,7 @@ class GameRoom {
                     const wu = MockDB.users.get(winner);
                     if (!wp || wp.isBot || !wp.socketId || !wu) return;
                     if (_tokenOk) io.to(wp.socketId).emit('tokenEarned', { tokens: wu.tokens || 0 });
-                    else io.to(wp.socketId).emit('gameMessage', `🏆 우승! 다만 토큰은 사람이 ${TOKEN_MIN_HUMANS}명 이상 참가한 토너먼트에서만 나옵니데이.`);
+                    else io.to(wp.socketId).emit('gameMessage', `🏆 우승! 다만 토큰은 사람이 ${TOKEN_MIN_HUMANS}명 이상 참가한 토너먼트에서만 나옵니다.`);
                 });
                 // 💰 상금풀을 우승자 뱅크롤로 지급 (봇 우승이면 소멸)
                 const prize = this.prizePool || (this.startingChips * Object.keys(this.players).length);
@@ -2948,7 +2948,7 @@ class GameRoom {
         this.ritSharedCount = shared.length;
         this.gameStage = 4; // 보드 완성 — 더 이상 스트리트 진행 없음
 
-        io.to(this.roomId).emit('gameMessage', '🎲 런잇트와이스! 보드를 두 번 깝니데이.');
+        io.to(this.roomId).emit('gameMessage', '🎲 런잇트와이스! 보드를 두 번 깝니다.');
 
         // 남은 카드를 한 장씩 순차 공개 (양쪽 런 동시) — 긴장감 연출
         const total = boards[0].length;
@@ -3390,16 +3390,16 @@ class GameRoom {
     proposeEndVote(nick) {
         const me = this.players[nick];
         const tell = msg => { if (me && me.socketId) io.to(me.socketId).emit('gameMessage', msg); };
-        if (!this.endVoteEligible()) return tell('🗳️ 진행 중인 토너먼트에서만 종료 투표를 할 수 있습니데이.');
-        if (this._endAgreed) return tell('🗳️ 이미 종료가 합의됐습니데이. 곧 정산합니데이.');
-        if (this._endVote) return tell('🗳️ 이미 종료 투표가 진행 중입니데이.');
+        if (!this.endVoteEligible()) return tell('🗳️ 진행 중인 토너먼트에서만 종료 투표를 할 수 있습니다.');
+        if (this._endAgreed) return tell('🗳️ 이미 종료가 합의됐습니다. 곧 정산합니다.');
+        if (this._endVote) return tell('🗳️ 이미 종료 투표가 진행 중입니다.');
         const voters = this.endVoteVoters();
-        if (!voters.includes(nick)) return tell('🗳️ 칩이 남아 있는 참가자만 제안할 수 있습니데이.');
-        if (Date.now() < (this._endVoteCooldownUntil || 0)) return tell('🗳️ 방금 부결됐습니데이. 잠시 후 다시 제안해 주이소.');
+        if (!voters.includes(nick)) return tell('🗳️ 칩이 남아 있는 참가자만 제안할 수 있습니다.');
+        if (Date.now() < (this._endVoteCooldownUntil || 0)) return tell('🗳️ 방금 부결됐습니다. 잠시 후 다시 제안해 주세요.');
 
         this._endVote = { proposer: nick, voters: new Set(voters), yes: new Set([nick]), deadline: Date.now() + END_VOTE_MS, timer: null };
         this._endVote.timer = setTimeout(() => this.finishEndVote(false, '시간 초과'), END_VOTE_MS);
-        io.to(this.roomId).emit('gameMessage', `🗳️ ${nick} 님이 토너먼트를 지금 끝내자고 제안했습니데이 (칩 비율대로 상금 분배).`);
+        io.to(this.roomId).emit('gameMessage', `🗳️ ${nick} 님이 토너먼트를 지금 끝내자고 제안했습니다 (칩 비율대로 상금 분배).`);
         this.checkEndVote();
     }
 
@@ -3424,14 +3424,14 @@ class GameRoom {
         io.to(this.roomId).emit('endVote', { active: false });
         if (!passed) {
             this._endVoteCooldownUntil = Date.now() + 15000;
-            io.to(this.roomId).emit('gameMessage', `🗳️ 종료 투표 부결 (${reason}) — 토너먼트를 계속합니데이.`);
+            io.to(this.roomId).emit('gameMessage', `🗳️ 종료 투표 부결 (${reason}) — 토너먼트를 계속합니다.`);
             return;
         }
         this._endAgreed = true;
         if (this.gameStage >= 1 && this.gameStage <= 4) {
-            io.to(this.roomId).emit('gameMessage', '🤝 전원 동의! 이번 핸드가 끝나면 칩 비율대로 정산하고 토너먼트를 마칩니데이.');
+            io.to(this.roomId).emit('gameMessage', '🤝 전원 동의! 이번 핸드가 끝나면 칩 비율대로 정산하고 토너먼트를 마칩니다.');
         } else {
-            io.to(this.roomId).emit('gameMessage', '🤝 전원 동의! 칩 비율대로 정산합니데이.');
+            io.to(this.roomId).emit('gameMessage', '🤝 전원 동의! 칩 비율대로 정산합니다.');
             // 결과창(5)이면 대기 중인 다음 핸드 타이머가 startNextHand에서 정산한다. 대기(0)면 지금.
             if (this.gameStage === 0) this.settleAgreedEnd();
         }
@@ -3505,7 +3505,7 @@ class GameRoom {
         if (!this.canRebuy(nick)) {
             // 리바이 불가 사유를 본인에게 안내 (조용히 실패하지 않도록)
             if (p.socketId && this.maxRebuys > 0 && (p.rebuysUsed || 0) >= this.maxRebuys) {
-                io.to(p.socketId).emit('gameMessage', `🔄 리바이 횟수를 모두 소진했습니데이 (최대 ${this.maxRebuys}회).`);
+                io.to(p.socketId).emit('gameMessage', `🔄 리바이 횟수를 모두 소진했습니다 (최대 ${this.maxRebuys}회).`);
             }
             return;
         }
@@ -3563,7 +3563,7 @@ class GameRoom {
         // 🪑 자리가 없으면 받지 않는다 — 뱅크롤만 빠지고 앉지 못하는 상황을 막는다
         const _withChips = Object.keys(this.players).filter(n => (this.players[n].chips || 0) > 0).length;
         if (_withChips >= TABLE_SEATS) {
-            if (p.socketId) io.to(p.socketId).emit('gameMessage', '🪑 자리가 가득 찼습니데이 — 자리가 나면 바이인할 수 있어예.');
+            if (p.socketId) io.to(p.socketId).emit('gameMessage', '🪑 자리가 가득 찼습니다 — 자리가 나면 바이인할 수 있어요.');
             return false;
         }
         p.chips = this.startingChips;
@@ -3578,7 +3578,7 @@ class GameRoom {
         // 좌석 배정은 대기 상태에서만. 핸드 진행 중이면 startNextHand가 다음 핸드에 앉힌다
         // (진행 중에 밀어넣으면 카드 없는 좌석이 턴을 받는다 — B1과 같은 결함).
         if (this.gameStage === 0 && !this.playerOrder.includes(nick)) this.playerOrder.push(nick);
-        else if (this.gameStage !== 0 && p.socketId) io.to(p.socketId).emit('gameMessage', '🪑 다음 핸드부터 합류합니데이.');
+        else if (this.gameStage !== 0 && p.socketId) io.to(p.socketId).emit('gameMessage', '🪑 다음 핸드부터 합류합니다.');
         this.sendState();
         this.tryAutoResume(); // 💵 조건 충족 시 자동 재개
         return true;
@@ -3623,7 +3623,7 @@ class GameRoom {
             }
             delete this.players[nick];
             this.playerOrder = this.playerOrder.filter(n => n !== nick);
-            io.to(this.roomId).emit('gameMessage', `🚪 ${nick} 님이 ${chipsOut.toLocaleString()} 칩을 정산하고 나갔습니데이.`);
+            io.to(this.roomId).emit('gameMessage', `🚪 ${nick} 님이 ${chipsOut.toLocaleString()} 칩을 정산하고 나갔습니다.`);
             if (sock) {
                 sock.leave(this.roomId);
                 sock.currentRoom = null;
@@ -4431,7 +4431,7 @@ class MTTManager {
         });
         room.hostNickname = group.find(s => !s.isBot)?.nick || null;
         room._cashStarted = false;
-        if (isFinal) io.to(roomId).emit('gameMessage', '🏆 파이널 테이블! 마지막 승부입니데이!');
+        if (isFinal) io.to(roomId).emit('gameMessage', '🏆 파이널 테이블! 마지막 승부입니다!');
         // 첫 핸드 시작
         if (group.length >= 2) room.scheduleNextHand(isFinal ? 2500 : 2000);
         return room;
@@ -4884,7 +4884,7 @@ io.on('connection', (socket) => {
                 await handler(...args);
             } catch (e) {
                 console.error(`🚨 [핸들러 오류:${event}] ${e && e.message}`);
-                try { socket.emit('gameMessage', '⚠️ 처리 중 오류가 발생했습니데이. 다시 시도해 주이소.'); } catch (_) {}
+                try { socket.emit('gameMessage', '⚠️ 처리 중 오류가 발생했습니다. 다시 시도해 주세요.'); } catch (_) {}
             }
         });
     };
@@ -4908,7 +4908,7 @@ io.on('connection', (socket) => {
                 const ip = socketIp(socket);
                 const lim = adminRouter && adminRouter.limiter;
                 if (lim && lim.blocked(ip)) {
-                    socket.emit('loginError', '시도가 너무 많습니데이. 15분 뒤에 다시 해보이소.');
+                    socket.emit('loginError', '시도가 너무 많습니다. 15분 뒤에 다시 해보세요.');
                     return;
                 }
                 if (!isValidPin(pin) || isReconnect) {
@@ -4921,7 +4921,7 @@ io.on('connection', (socket) => {
                 if (!verifyAdmin(pin)) {
                     const n = lim ? lim.fail(ip) : 0;
                     accessLog.push({ type: 'adminfail', nick: ADMIN_NICK, ip, detail: `게임 로그인 실패 ${n}` });
-                    socket.emit('loginError', '비밀번호가 일치하지 않습니데이. 다시 확인해주세요.');
+                    socket.emit('loginError', '비밀번호가 일치하지 않습니다. 다시 확인해주세요.');
                     return;
                 }
                 if (lim) lim.reset(ip);
@@ -4954,7 +4954,7 @@ io.on('connection', (socket) => {
                         ua: shortUA(socket.handshake && socket.handshake.headers && socket.handshake.headers['user-agent']),
                         detail: '비밀번호 불일치'
                     });
-                    socket.emit('loginError', '비밀번호가 일치하지 않습니데이. 다시 확인해주세요.');
+                    socket.emit('loginError', '비밀번호가 일치하지 않습니다. 다시 확인해주세요.');
                     return;
                 }
             }
@@ -5044,7 +5044,7 @@ io.on('connection', (socket) => {
         //    한쪽 방에는 자리만 차지한 유령이 남았다. 다른 방에 자리가 있으면 먼저 나가게 한다.
         for (const [rid, r] of rooms) {
             if (rid !== roomId && r.players[socket.nickname] && !r.players[socket.nickname].isBot) {
-                return socket.emit('joinError', `이미 [${rid}] 방에 있습니데이. 먼저 그 방에서 나가이소.`);
+                return socket.emit('joinError', `이미 [${rid}] 방에 있습니다. 먼저 그 방에서 나가세요.`);
             }
         }
 
@@ -5060,10 +5060,10 @@ io.on('connection', (socket) => {
         // 🤖 컴까기 방은 주인 혼자 치는 방이다 (재접속한 주인만 다시 들어올 수 있다)
         if (room._challenge && !room.players[nick]) {   // 이미 멤버(재접속)면 통과
             const ch = room._challenge;
-            if (!ch.coop) return socket.emit('joinError', '컴까기 방에는 들어갈 수 없습니데이.');
-            if (!ch.waiting) return socket.emit('joinError', '이미 도전이 시작됐습니데이. 끝나면 들어오이소.');
+            if (!ch.coop) return socket.emit('joinError', '컴까기 방에는 들어갈 수 없습니다.');
+            if (!ch.waiting) return socket.emit('joinError', '이미 도전이 시작됐습니다. 끝나면 들어오세요.');
             const humans = Object.values(room.players).filter(x => x && !x.isBot).length;
-            if (humans >= Challenge.COOP_MAX) return socket.emit('joinError', `협동은 ${Challenge.COOP_MAX}명까지입니데이.`);
+            if (humans >= Challenge.COOP_MAX) return socket.emit('joinError', `협동은 ${Challenge.COOP_MAX}명까지입니다.`);
         }
 
         // 🪑 플레이어 정원(6인) 초과 시 → 관전자로 입장 (거부하지 않음)
@@ -5095,12 +5095,12 @@ io.on('connection', (socket) => {
                 rebuysUsed: 0, totalBuyins: 1
             };
             if (wantSpectate) {
-                io.to(roomId).emit('gameMessage', `👀 ${nick} 님이 관전하러 왔습니데이.`);
-                socket.emit('gameMessage', '👀 관전 중입니데이 — 아래 [참여하기]를 누르면 자리에 앉습니더.');
+                io.to(roomId).emit('gameMessage', `👀 ${nick} 님이 관전하러 왔습니다.`);
+                socket.emit('gameMessage', '👀 관전 중입니다 — 아래 [참여하기]를 누르면 자리에 앉습니다.');
             } else if (asSpectator) {
                 const reason = joinAsSpectatorFull ? '(자리가 차서 관전석으로)' : '';
                 io.to(roomId).emit('gameMessage', `👀 ${nick} 님이 관전자로 입장하셨습니다. ${reason}`);
-                if (joinAsSpectatorFull) socket.emit('gameMessage', '👀 자리가 가득 차 관전자로 입장했습니데이. 자리가 나면 다음 핸드부터 참여할 수 있어예.');
+                if (joinAsSpectatorFull) socket.emit('gameMessage', '👀 자리가 가득 차 관전자로 입장했습니다. 자리가 나면 다음 핸드부터 참여할 수 있어요.');
             } else {
                 io.to(roomId).emit('gameMessage', `👋 ${nick} 님이 방에 입장하셨습니다.`);
                 if (room.mode === 'cash') {
@@ -5112,7 +5112,7 @@ io.on('connection', (socket) => {
                 //    카드를 받지 않은 좌석이 진행 중인 핸드의 턴을 받아 베팅까지 하고, 쇼다운에선 보드만으로
                 //    족보가 평가돼 팟을 가져갈 수도 있었다. 좌석 배정은 startNextHand가 핸드 경계에서 처리한다.
                 if (room.mode === 'cash' && room.gameStage !== 0) {
-                    socket.emit('gameMessage', '🪑 지금 핸드가 진행 중입니데이 — 다음 핸드부터 합류합니더.');
+                    socket.emit('gameMessage', '🪑 지금 핸드가 진행 중입니다 — 다음 핸드부터 합류합니다.');
                 }
             }
         } else {
@@ -5153,13 +5153,13 @@ io.on('connection', (socket) => {
         //    쇼다운 참가 자격도 함께 사라져 올인한 칩을 그냥 몰수당했다.
         //    캐시는 아래 "나가기 예약" 경로가 핸드 종료 후 정산해 주므로 예외.
         if (room.mode !== 'cash' && room.gameStage >= 1 && room.gameStage <= 4 && !p.isSpectator && !p.isFolded && (p.isAllIn || (p.totalInvested || 0) > 0)) {
-            socket.emit('gameMessage', '🚨 이번 핸드에 칩이 걸려 있습니데이! 핸드가 끝난 뒤에 나갈 수 있어예.');
+            socket.emit('gameMessage', '🚨 이번 핸드에 칩이 걸려 있습니다! 핸드가 끝난 뒤에 나갈 수 있어요.');
             return;
         }
 
         // 토너먼트 생존자(칩 보유)는 게임 붕괴 방지를 위해 이탈 차단 (캐시는 상시 이탈 허용)
         if (room.mode === 'tournament' && room.tournamentStarted && p.chips > 0 && !p.isSpectator) {
-            socket.emit('gameMessage', '🚨 토너먼트 진행 중에는 나갈 수 없습니데이! (파산/관전 시에만 가능)');
+            socket.emit('gameMessage', '🚨 토너먼트 진행 중에는 나갈 수 없습니다! (파산/관전 시에만 가능)');
             return;
         }
 
@@ -5171,7 +5171,7 @@ io.on('connection', (socket) => {
             //    핸드가 끝난 뒤 딴 칩까지 합쳐 정산한다.
             if (!p.isAllIn) { p.isFolded = true; p.hasActed = true; }
             p._pendingLeave = true; // 핸드 종료 시 자동 캐시아웃 이탈
-            socket.emit('gameMessage', '🚪 이번 핸드가 끝나면 보유 칩을 정산하고 나갑니데이...');
+            socket.emit('gameMessage', '🚪 이번 핸드가 끝나면 보유 칩을 정산하고 나갑니다...');
             if (wasMyTurn) { io.to(roomId).emit('actionSound', { nick, type: 'fold' }); room.nextTurn(); }
             else room.sendState();
             return; // 즉시 이탈하지 않고 예약만
@@ -5234,11 +5234,11 @@ io.on('connection', (socket) => {
         const nick = socket.nickname;
         const stage = Number(data && data.stage);
         const u = await MockDB.getUser(nick);
-        if (!Challenge.canPlay(u, stage)) { socket.emit('challengeError', '없는 단계입니데이.'); return; }
+        if (!Challenge.canPlay(u, stage)) { socket.emit('challengeError', '없는 단계입니다.'); return; }
         const roomId = `🤖컴까기_${nick}`;
         const cur = socket.currentRoom;
         if (cur && cur !== roomId && rooms.has(cur) && rooms.get(cur).players[nick]) {
-            socket.emit('challengeError', '먼저 지금 있는 방에서 나가이소.');
+            socket.emit('challengeError', '먼저 지금 있는 방에서 나가세요.');
             return;
         }
         if (rooms.has(roomId)) { try { destroyRoom(roomId); } catch (e) {} }
@@ -5329,7 +5329,7 @@ io.on('connection', (socket) => {
         const roomId = `🤖컴까기_${nick}`;
         const cur = socket.currentRoom;
         if (cur && cur !== roomId && rooms.has(cur) && rooms.get(cur).players[nick]) {
-            socket.emit('challengeError', '먼저 지금 있는 방에서 나가이소.');
+            socket.emit('challengeError', '먼저 지금 있는 방에서 나가세요.');
             return;
         }
         // 🔬 밸런스 측정 전용(DEV_RUN) — 원하는 층·증강으로 바로 시작한다. 운영 서버에는 이 환경변수가 없다.
@@ -5372,7 +5372,7 @@ io.on('connection', (socket) => {
         if (!run || run.phase !== 'pick') return;
         const cur = socket.currentRoom;
         if (cur && cur !== `🤖컴까기_${nick}` && rooms.has(cur) && rooms.get(cur).players[nick]) {
-            socket.emit('challengeError', '먼저 지금 있는 방에서 나가이소.');
+            socket.emit('challengeError', '먼저 지금 있는 방에서 나가세요.');
             return;
         }
         if (!Rogue.pick(run, data ? data.idx : undefined, Math.random)) return;   // 정수만 받는다 (Number(null) 이 0 이 되는 것 방지)
@@ -5426,7 +5426,7 @@ io.on('connection', (socket) => {
         if (!socket.nickname) return;
         const nick = socket.nickname;
         const cur = socket.currentRoom;
-        if (cur && rooms.has(cur) && rooms.get(cur).players[nick]) { socket.emit('challengeError', '먼저 지금 있는 방에서 나가이소.'); return; }
+        if (cur && rooms.has(cur) && rooms.get(cur).players[nick]) { socket.emit('challengeError', '먼저 지금 있는 방에서 나가세요.'); return; }
         const roomId = `🤖협동_${nick}`;
         if (rooms.has(roomId)) { try { destroyRoom(roomId); } catch (e) {} }
         const settings = { startingChips: Challenge.START_CHIPS, blindUpInterval: Challenge.BLIND_UP_MIN, turnTimeLimit: 30, mode: 'tournament', maxRebuys: 0 };
@@ -5460,7 +5460,7 @@ io.on('connection', (socket) => {
         if (humans.length < 1 || humans.length > Challenge.COOP_MAX) return;
         const users = humans.map(n => MockDB.users.get(n)).filter(Boolean);
         if (users.length !== humans.length || !users.every(u => Challenge.canPlay(u, stage))) {
-            socket.emit('challengeError', '없는 단계입니데이.');
+            socket.emit('challengeError', '없는 단계입니다.');
             return;
         }
         const setup = Challenge.coopSetup(stage, humans.length);
@@ -5541,7 +5541,7 @@ io.on('connection', (socket) => {
             if (room.hostNickname !== socket.nickname) return; // 💡 호스트 권한 검증
             const activeCount = room.playerOrder.filter(n => room.players[n] && !room.players[n].isDisconnected).length;
             if (activeCount < 2) {
-                socket.emit('gameMessage', '🚨 혼자서는 토너먼트를 시작할 수 없습니데이! (최소 2명 필요)');
+                socket.emit('gameMessage', '🚨 혼자서는 토너먼트를 시작할 수 없습니다! (최소 2명 필요)');
                 return;
             }
             // 💰 캐시가 아닌 토너먼트는 사람 참가자 전원의 뱅크롤이 바이인 이상이어야 시작
@@ -5551,7 +5551,7 @@ io.on('connection', (socket) => {
                     if (!p || p.isBot) continue;
                     const u = await MockDB.getUser(n);
                     if ((u.bankroll || 0) < room.startingChips) {
-                        io.to(room.roomId).emit('gameMessage', `🚨 ${n} 님의 보유 칩이 바이인(${room.startingChips.toLocaleString()})보다 적어 시작할 수 없습니데이!`);
+                        io.to(room.roomId).emit('gameMessage', `🚨 ${n} 님의 보유 칩이 바이인(${room.startingChips.toLocaleString()})보다 적어 시작할 수 없습니다!`);
                         return;
                     }
                 }
@@ -5568,11 +5568,11 @@ io.on('connection', (socket) => {
         if (!room || room.hostNickname !== socket.nickname) return;
         if (room._challenge) return; // 🤖 컴까기 방의 봇은 단계표가 정한다
         if (room.gameStage !== 0 || room.tournamentStarted) {
-            socket.emit('gameMessage', '🤖 봇은 게임 시작 전 대기실에서만 추가할 수 있습니데이!');
+            socket.emit('gameMessage', '🤖 봇은 게임 시작 전 대기실에서만 추가할 수 있습니다!');
             return;
         }
         if (room.playerOrder.length >= 6) {
-            socket.emit('gameMessage', '🚨 자리가 가득 찼습니데이! (최대 6명)');
+            socket.emit('gameMessage', '🚨 자리가 가득 찼습니다! (최대 6명)');
             return;
         }
         const difficulty = 'hard'; // AI는 고수 전용
@@ -5699,7 +5699,7 @@ io.on('connection', (socket) => {
                 noBuy: !!it.noBuy,
                 // 🏅 테두리는 등급으로 열린다 — 잠겨 있으면 무엇이 필요한지 같이 보낸다
                 locked: it.kind === 'frame' ? (it.rank > myRank) : (it.photo ? !hasPhoto(u) : (it.challenge ? !c.owned.includes(id) : false)),
-                need: it.kind === 'frame' ? rankNeedText(it.rank) : (it.photo ? '사진을 올리면 열립니데이' : (it.challenge ? '컴까기 보스전(10단계)을 깨면 열립니데이' : ''))
+                need: it.kind === 'frame' ? rankNeedText(it.rank) : (it.photo ? '사진을 올리면 열립니다' : (it.challenge ? '컴까기 보스전(10단계)을 깨면 열립니다' : ''))
             })),
             owned: c.owned.slice(),
             equipped: { back: c.back, avatar: c.avatar, title: c.title, frame: c.frame },
@@ -5730,20 +5730,20 @@ io.on('connection', (socket) => {
         const c = normalizeCosmetics(u);
         const id = data && data.id;
         const item = cosItem(id);
-        if (!item) { socket.emit('shopResult', { ok: false, msg: '없는 아이템입니데이.' }); return; }
+        if (!item) { socket.emit('shopResult', { ok: false, msg: '없는 아이템입니다.' }); return; }
         // 🏅 테두리는 등급으로만, 📷 사진은 업로드로만 — 돈으로 사는 물건이 아니다
-        if (item.noBuy) { socket.emit('shopResult', { ok: false, msg: '이건 돈으로 살 수 있는 게 아닙니데이.' }); return; }
-        if (c.owned.includes(id)) { socket.emit('shopResult', { ok: false, msg: '이미 가지고 있습니데이.' }); return; }
+        if (item.noBuy) { socket.emit('shopResult', { ok: false, msg: '이건 돈으로 살 수 있는 게 아닙니다.' }); return; }
+        if (c.owned.includes(id)) { socket.emit('shopResult', { ok: false, msg: '이미 가지고 있습니다.' }); return; }
         if (item.cur === 'core') {
             // 🔷 컴까기 전용 아이템은 코어로만 — 토큰이나 뱅크롤로는 못 산다
             if ((u.cores || 0) < item.price) {
-                socket.emit('shopResult', { ok: false, msg: `코어가 ${item.price - (u.cores || 0)}개 모자랍니데이. 컴까기 단계를 깨면 받습니데이.` });
+                socket.emit('shopResult', { ok: false, msg: `코어가 ${item.price - (u.cores || 0)}개 모자랍니다. 컴까기 단계를 깨면 받습니다.` });
                 return;
             }
             u.cores = (u.cores || 0) - item.price;
         } else {
             if ((u.tokens || 0) < item.price) {
-                socket.emit('shopResult', { ok: false, msg: `토큰이 ${item.price - (u.tokens || 0)}개 모자랍니데이. 사람 ${TOKEN_MIN_HUMANS}명 이상 토너먼트에서 우승하면 1개씩 받습니데이.` });
+                socket.emit('shopResult', { ok: false, msg: `토큰이 ${item.price - (u.tokens || 0)}개 모자랍니다. 사람 ${TOKEN_MIN_HUMANS}명 이상 토너먼트에서 우승하면 1개씩 받습니다.` });
                 return;
             }
             u.tokens = (u.tokens || 0) - item.price; // 🏆 토큰으로만 산다 — 뱅크롤은 건드리지 않는다
@@ -5751,7 +5751,7 @@ io.on('connection', (socket) => {
         c.owned.push(id);
         c[item.kind] = id; // 산 건 바로 장착
         MockDB.save();
-        socket.emit('shopResult', { ok: true, msg: `${item.name} 구매 완료! 바로 장착했습니데이.` });
+        socket.emit('shopResult', { ok: true, msg: `${item.name} 구매 완료! 바로 장착했습니다.` });
         socket.emit('shopData', shopPayload(u));
         const room = rooms.get(socket.currentRoom);
         if (room) room.sendState();
@@ -5764,21 +5764,21 @@ io.on('connection', (socket) => {
         if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
         const fail = msg => socket.emit('shopResult', { ok: false, msg });
         const now = Date.now();
-        if (now - (photoRate.get(socket.nickname) || 0) < 5000) { fail('조금 있다 다시 올리이소.'); return; }
+        if (now - (photoRate.get(socket.nickname) || 0) < 5000) { fail('조금 있다 다시 올리세요.'); return; }
 
         const raw = data && data.data;
-        if (typeof raw !== 'string' || raw.length > PHOTO_MAX_B64) { fail('사진이 너무 큽니데이.'); return; }
+        if (typeof raw !== 'string' || raw.length > PHOTO_MAX_B64) { fail('사진이 너무 큽니다.'); return; }
         const m = /^data:image\/(?:jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(raw);
-        if (!m) { fail('사진 형식을 못 읽겠습니데이.'); return; }
+        if (!m) { fail('사진 형식을 못 읽겠습니다.'); return; }
         let buf;
-        try { buf = Buffer.from(m[1], 'base64'); } catch (e) { fail('사진을 못 읽겠습니데이.'); return; }
-        if (!buf.length || buf.length > PHOTO_MAX_BYTES) { fail('사진이 너무 큽니데이.'); return; }
+        try { buf = Buffer.from(m[1], 'base64'); } catch (e) { fail('사진을 못 읽겠습니다.'); return; }
+        if (!buf.length || buf.length > PHOTO_MAX_BYTES) { fail('사진이 너무 큽니다.'); return; }
 
         const isJpg = buf.length > 3 && buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
         const isPng = buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
         const isWebp = buf.length > 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP';
         const mime = isJpg ? 'image/jpeg' : isPng ? 'image/png' : isWebp ? 'image/webp' : null;
-        if (!mime) { fail('이미지 파일이 아닙니데이.'); return; }
+        if (!mime) { fail('이미지 파일이 아닙니다.'); return; }
 
         const u = MockDB.users.get(socket.nickname);
         photoRate.set(socket.nickname, now);
@@ -5787,7 +5787,7 @@ io.on('connection', (socket) => {
         if (!c.owned.includes('av_photo')) c.owned.push('av_photo');
         c.avatar = 'av_photo'; // 올렸으면 바로 쓴다
         MockDB.save();
-        socket.emit('shopResult', { ok: true, msg: '프로필 사진을 바꿨습니데이!' });
+        socket.emit('shopResult', { ok: true, msg: '프로필 사진을 바꿨습니다!' });
         socket.emit('shopData', shopPayload(u));
         const room = rooms.get(socket.currentRoom);
         if (room) room.sendState();
@@ -5801,7 +5801,7 @@ io.on('connection', (socket) => {
         c.owned = c.owned.filter(id => id !== 'av_photo');
         if (c.avatar === 'av_photo') c.avatar = 'av_none';
         MockDB.save();
-        socket.emit('shopResult', { ok: true, msg: '사진을 내렸습니데이.' });
+        socket.emit('shopResult', { ok: true, msg: '사진을 내렸습니다.' });
         socket.emit('shopData', shopPayload(u));
         const room = rooms.get(socket.currentRoom);
         if (room) room.sendState();
@@ -5814,20 +5814,20 @@ io.on('connection', (socket) => {
         const c = normalizeCosmetics(u);
         const id = data && data.id;
         const item = cosItem(id);
-        if (!item) { socket.emit('shopResult', { ok: false, msg: '없는 아이템입니데이.' }); return; }
+        if (!item) { socket.emit('shopResult', { ok: false, msg: '없는 아이템입니다.' }); return; }
         if (item.kind === 'frame') {
             // 🏅 테두리는 owned 가 아니라 등급으로 판정한다
             if (item.rank > rankIndexOf(u)) {
-                socket.emit('shopResult', { ok: false, msg: `아직 못 답니데이 — ${rankNeedText(item.rank)}` });
+                socket.emit('shopResult', { ok: false, msg: `아직 못 답니다 — ${rankNeedText(item.rank)}` });
                 return;
             }
             c.frame = id;
             c.frameAuto = false; // 직접 골랐으니 이제 자동으로 안 바꾼다
         } else if (item.photo) {
-            if (!hasPhoto(u)) { socket.emit('shopResult', { ok: false, msg: '먼저 사진을 올리이소.' }); return; }
+            if (!hasPhoto(u)) { socket.emit('shopResult', { ok: false, msg: '먼저 사진을 올리세요.' }); return; }
             c.avatar = id;
         } else {
-            if (!c.owned.includes(id)) { socket.emit('shopResult', { ok: false, msg: '아직 가지고 있지 않습니데이.' }); return; }
+            if (!c.owned.includes(id)) { socket.emit('shopResult', { ok: false, msg: '아직 가지고 있지 않습니다.' }); return; }
             c[item.kind] = id;
         }
         MockDB.save();
@@ -5857,7 +5857,7 @@ io.on('connection', (socket) => {
         p._revealCards = rc;
         if (rc && room.gameStage === 5) {
             const shown = [rc[0] ? p.hand[0] : null, rc[1] ? p.hand[1] : null].filter(Boolean);
-            io.to(room.roomId).emit('gameMessage', `🃏 ${socket.nickname} 님이 죽은 패를 공개했습니데이 (${shown.length}장).`);
+            io.to(room.roomId).emit('gameMessage', `🃏 ${socket.nickname} 님이 죽은 패를 공개했습니다 (${shown.length}장).`);
         }
         room.sendState();
     });
@@ -5874,12 +5874,12 @@ io.on('connection', (socket) => {
         // 자리 확인 (클라이언트 좌석 레이아웃과 동일한 정원)
         const withChips = Object.keys(room.players).filter(n => (room.players[n].chips || 0) > 0).length;
         if (withChips >= TABLE_SEATS) {
-            socket.emit('gameMessage', '🪑 자리가 가득 찼습니데이 — 자리가 나면 앉을 수 있어예.');
+            socket.emit('gameMessage', '🪑 자리가 가득 찼습니다 — 자리가 나면 앉을 수 있어요.');
             return;
         }
         // 진행 중인 토너먼트에는 중간 합류 불가 (공정성)
         if (room.mode !== 'cash' && room.tournamentStarted) {
-            socket.emit('gameMessage', '🏆 토너먼트 진행 중에는 합류할 수 없습니데이 — 끝나면 자동으로 참여됩니더.');
+            socket.emit('gameMessage', '🏆 토너먼트 진행 중에는 합류할 수 없습니다 — 끝나면 자동으로 참여됩니다.');
             return;
         }
 
@@ -5892,9 +5892,9 @@ io.on('connection', (socket) => {
             MockDB.recordCashNet(nick, -room.startingChips);
             MockDB.adjustBankroll(nick, -room.startingChips).then(nb => socket.emit('bankrollUpdate', { bankroll: nb || 0 }));
         }
-        io.to(room.roomId).emit('gameMessage', `🪑 ${nick} 님이 관전석에서 자리에 앉았습니데이.`);
+        io.to(room.roomId).emit('gameMessage', `🪑 ${nick} 님이 관전석에서 자리에 앉았습니다.`);
         if (room.gameStage === 0 && !room.playerOrder.includes(nick)) room.playerOrder.push(nick);
-        else if (room.gameStage !== 0) socket.emit('gameMessage', '🪑 다음 핸드부터 플레이합니데이.');
+        else if (room.gameStage !== 0) socket.emit('gameMessage', '🪑 다음 핸드부터 플레이합니다.');
         room.sendState();
         if (room.mode === 'cash') room.tryAutoResume();
         io.to('lobby').emit('roomList', roomListArray());
@@ -5906,9 +5906,9 @@ io.on('connection', (socket) => {
         if (!room || !socket.nickname) return;
         const p = room.players[socket.nickname];
         if (!p || p.isSpectator) return;
-        if (room.mode !== 'cash') { socket.emit('gameMessage', '🏆 토너먼트에선 중간에 관전으로 바꿀 수 없습니데이.'); return; }
+        if (room.mode !== 'cash') { socket.emit('gameMessage', '🏆 토너먼트에선 중간에 관전으로 바꿀 수 없습니다.'); return; }
         if (room.gameStage >= 1 && room.gameStage <= 4 && !p.isFolded && ((p.totalInvested || 0) > 0 || p.isAllIn)) {
-            socket.emit('gameMessage', '🚨 이번 핸드가 끝난 뒤에 관전으로 바꿀 수 있습니데이.');
+            socket.emit('gameMessage', '🚨 이번 핸드가 끝난 뒤에 관전으로 바꿀 수 있습니다.');
             return;
         }
         const back = room._learnMode ? 0 : (p.chips || 0);
@@ -5920,7 +5920,7 @@ io.on('connection', (socket) => {
         p.isSpectator = true;
         p._wantSpectate = true;
         room.playerOrder = room.playerOrder.filter(n => n !== socket.nickname);
-        io.to(room.roomId).emit('gameMessage', `👀 ${socket.nickname} 님이 ${back.toLocaleString()} 칩을 정산하고 관전으로 돌아갔습니데이.`);
+        io.to(room.roomId).emit('gameMessage', `👀 ${socket.nickname} 님이 ${back.toLocaleString()} 칩을 정산하고 관전으로 돌아갔습니다.`);
         room.sendState();
     });
 
@@ -5934,7 +5934,7 @@ io.on('connection', (socket) => {
         if (Date.now() > (room._muckDeadline || 0) + 1500) return; // 시간 초과
         p._muckChoice = false;
         p.isMucked = false;
-        io.to(room.roomId).emit('gameMessage', `🃏 ${socket.nickname} 님이 패를 공개했습니데이.`);
+        io.to(room.roomId).emit('gameMessage', `🃏 ${socket.nickname} 님이 패를 공개했습니다.`);
         room.sendState();
     });
 
@@ -5953,8 +5953,8 @@ io.on('connection', (socket) => {
     socket.on('joinMtt', (data) => {
         if (!socket.nickname || socket.currentRoom) return;
         const mtt = mtts.get(data && data.mttId);
-        if (!mtt || mtt.started) { socket.emit('gameMessage', '🚫 이미 시작했거나 없는 토너먼트입니데이.'); return; }
-        if (mtt.entrants.length >= mtt.tableSize * 6) { socket.emit('gameMessage', '🚫 정원이 가득 찼습니데이.'); return; }
+        if (!mtt || mtt.started) { socket.emit('gameMessage', '🚫 이미 시작했거나 없는 토너먼트입니다.'); return; }
+        if (mtt.entrants.length >= mtt.tableSize * 6) { socket.emit('gameMessage', '🚫 정원이 가득 찼습니다.'); return; }
         if (mtt.addEntrant(socket.nickname, socket.id, false)) {
             socket._mttId = mtt.mttId;
             leaveLobby(socket);
@@ -5967,7 +5967,7 @@ io.on('connection', (socket) => {
     socket.on('addMttBot', () => {
         const mtt = mtts.get(socket._mttId);
         if (!mtt || mtt.hostNick !== socket.nickname || mtt.started) return;
-        if (mtt.entrants.length >= mtt.tableSize * 6) { socket.emit('gameMessage', '🚫 정원이 가득 찼습니데이.'); return; }
+        if (mtt.entrants.length >= mtt.tableSize * 6) { socket.emit('gameMessage', '🚫 정원이 가득 찼습니다.'); return; }
         mtt.addBot();
         io.emit('mttList', mttListArray());
     });
@@ -5976,7 +5976,7 @@ io.on('connection', (socket) => {
     socket.on('startMtt', () => {
         const mtt = mtts.get(socket._mttId);
         if (!mtt || mtt.hostNick !== socket.nickname || mtt.started) return;
-        if (mtt.entrants.length < 2) { socket.emit('gameMessage', '🚫 최소 2명 필요합니데이.'); return; }
+        if (mtt.entrants.length < 2) { socket.emit('gameMessage', '🚫 최소 2명 필요합니다.'); return; }
         mtt.start();
         io.emit('mttList', mttListArray());
     });
@@ -6041,7 +6041,7 @@ io.on('connection', (socket) => {
         if (!socket.currentRoom) {
             const refill = await MockDB.refillIfBroke(socket.nickname, 0, 10000);
             if (refill.refilled) {
-                socket.emit('gameMessage', '💸 뱅크롤이 바닥나 무료 보너스 10,000 칩을 받았습니데이!');
+                socket.emit('gameMessage', '💸 뱅크롤이 바닥나 무료 보너스 10,000 칩을 받았습니다!');
                 socket.emit('freeRefill', { bankroll: refill.bankroll });
             }
         }
