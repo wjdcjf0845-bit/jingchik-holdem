@@ -1509,8 +1509,11 @@ class GameRoom {
                 }
 
                 // 표준 오픈 사이즈로 "raise to" 금액 계산 (2.4~3.1bb, 최소레이즈·스택 보정)
+                const _v3 = this.botV3(nick);
                 const openRaiseDecision = () => {
-                    const openTo = Math.round(bb * (2.4 + Math.random() * 0.7));
+                    // 림퍼(블라인드가 아닌데 bb 만 넣고 남은 사람)가 있으면 한 명마다 1bb 더 — 같은 크기로 열면 모두 싸게 따라온다 (학습 조언과 같은 기준)
+                    const limpers = _v3 ? this.playerOrder.filter(n => { const o = this.players[n]; return n !== nick && o && !o.isFolded && (o.currentBet || 0) === bb && !(o.role && o.role.includes('BB')); }).length : 0;
+                    const openTo = Math.round(bb * (2.4 + Math.random() * 0.7 + Math.min(4, limpers)));
                     const minRaiseTo = this.currentHighestBet + (this.lastFullRaiseAmount || bb);
                     const target = Math.min(p.currentBet + p.chips, Math.max(openTo, minRaiseTo));
                     return (target > this.currentHighestBet) ? { type: 'raise', amount: target } : { type: 'call' };
@@ -1537,7 +1540,9 @@ class GameRoom {
                     //    예전엔 equity만 살짝 올려 아래 로직에 맡겨서 3벳 빈도가 4%에 그쳤다(프로 6~10%).
                     const _late = (p.position === 'BTN' || p.position === 'CO' || p.position === 'SB');
                     const threeBetTo = () => {
-                        const mult = _late ? 3.0 : 3.6; // 포지션 있으면 작게, 없으면 크게 (정석)
+                        // 포지션 있으면 작게, 없으면 크게 (정석). 이미 콜한 사람이 있으면 한 명마다 한 배 더(스퀴즈)
+                        const callers = _v3 ? Math.max(0, this.playerOrder.filter(n => { const o = this.players[n]; return n !== nick && o && !o.isFolded && (o.currentBet || 0) === this.currentHighestBet; }).length - 1) : 0;
+                        const mult = (_late ? 3.0 : 3.6) + Math.min(2, callers);
                         const want = Math.round(this.currentHighestBet * mult);
                         const minRaiseTo = this.currentHighestBet + (this.lastFullRaiseAmount || bb);
                         const target = Math.min(p.currentBet + p.chips, Math.max(want, minRaiseTo));
@@ -1669,7 +1674,14 @@ class GameRoom {
             .map(n => this.players[n].chips + (this.players[n].currentBet || 0)));
         const effBehind = Math.max(0, Math.min(p.chips - toCall, maxOppChips));
         const sprBehind = totalPot + toCall > 0 ? effBehind / (totalPot + toCall) : 0;
-        const isDraw = Defense.looksLikeDraw(board, equity, street);
+        // 드로우 판정: 예전엔 "보드가 젖었고 승률이 22~50%"면 드로우로 쳤다 — 내 패에 드로우가 없어도 임플라이드 오즈를 받았다.
+        //   고수 봇은 실제로 내 카드로 된 8아웃 이상 드로우만 인정하고, 보드 3장 + 낮은 카드 한 장짜리 플러시 드로우는 뺀다.
+        const _v3p = persona.proStrategy && this.botV3(nick);
+        let isDraw = Defense.looksLikeDraw(board, equity, street);
+        if (_v3p && street >= 2 && street < 4) {
+            const _d = GtoAdvice.detectDraws(p.hand, this.communityCards);
+            isDraw = !!(_d && _d.outs >= 8 && !_d.weak) && equity <= 0.55;
+        }
         const oppAggr = oppRead && oppRead.aggression != null ? oppRead.aggression : null;
         let callThresh = Defense.requiredEquity({ potOdds, isDraw, sprBehind, oppAggression: oppAggr, skill });
         // 🛡️ [최소 방어 빈도 MDF] 작은 벳에 과하게 접으면 상대가 아무 패로나 블러프해서 공짜로 번다.
@@ -1696,8 +1708,18 @@ class GameRoom {
             try {
                 const _bf = toCall / Math.max(bb, totalPot - toCall);
                 const _ag = HandRead.summarizeVillain(this.actionLog, this.lastAggressorBefore(street + 1) || '').aggroStreets || 1;
-                const share = this.equityVsBettingRange(nick, _bf, _ag);
-                if (share != null) eqReal = RangeEq.blendWithDraws(share, eqReal, street);
+                const _mc = _v3p ? this.equityVsRangeMC(nick, _bf, _ag) : null;
+                if (_mc != null) {
+                    // 벳 범위의 패 하나하나와 끝까지 깔아 본 승률 — 드로우 몫이 제대로 들어간다(예전 혼합식은 턴 플러시 드로우를 15%로 봤다).
+                    // 벳한 사람 말고도 남은 상대가 있으면 그 사람들도 이겨야 한다. 포지션·남은 스트리트에 따른 실현율은 그대로 깎는다.
+                    const _oppAll = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded).length;
+                    const _others = Math.max(0, _oppAll - 1);
+                    const _vs = _others > 0 ? _mc * Math.pow(Math.max(0.01, Math.min(1, rawEquity)), _others / _oppAll) : _mc;
+                    eqReal = _vs * Postflop.realizationFactor({ street, inPosition: this.isInPosition(nick), nOpp: 1, hasDraw: isDraw, allIn: toCall >= p.chips });
+                } else {
+                    const share = this.equityVsBettingRange(nick, _bf, _ag);
+                    if (share != null) eqReal = RangeEq.blendWithDraws(share, eqReal, street);
+                }
             } catch (e) {}
         }
         const margin = eqReal - potOdds;
@@ -1847,6 +1869,14 @@ class GameRoom {
     //    반환: 0~1, 계산 불가(보드 없음 등)면 null.
     // 🔬 A/B 측정용 스위치. BOT_AB 가 없으면(운영) 고수 봇 전원이 새 전략을 쓴다.
     //    BOT_AB=1 이면 닉네임 해시 비트로 절반만, 2 면 반대쪽 절반만 — 같은 테이블에서 신·구 전략을 맞붙여 잰다.
+    // 🔬 학습 조언 점검(드로우 판정·벳 범위 상대 승률·림퍼 크기)을 봇에 옮긴 것의 측정 스위치. 운영에선 항상 켜짐.
+    botV3(nick) {
+        const ab = process.env.BOT_AB3;
+        if (!ab) return true;
+        const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
+        return ab === '2' ? !bit : bit;
+    }
+
     botV2(nick) {
         const ab = process.env.BOT_AB;
         if (!ab) return true;
