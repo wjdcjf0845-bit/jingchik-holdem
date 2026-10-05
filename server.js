@@ -245,6 +245,43 @@ try {
     }
 } catch (e) { console.error('접속 기록 로드 실패:', e.message); }
 
+// 🌐 [버그픽스] 접속 기록이 배포할 때마다 사라졌다. 로컬 파일에만 저장했는데, 무료 호스팅은 영구 디스크가 없어
+//    재배포·재시작마다 파일이 초기화되기 때문이다(전적 DB 는 이미 원격에 저장해서 멀쩡했다).
+//    → 전적 DB 와 같은 원격 저장소에 'access_log' 키로 따로 저장한다. (저장소는 비공개 DB — 깃에는 올라가지 않는다)
+//    전적과 같은 안전 규칙: 원격 로드에 성공하기 전에는 원격에 쓰지 않는다(빈 기록으로 덮어쓰는 사고 방지).
+const accessRemote = createRemoteStorage('access_log');
+let _accessRemoteOk = false, _accessPushing = false, _accessPushAgain = false;
+function pushAccessRemote() {
+    if (!accessRemote || !_accessRemoteOk) return;
+    if (_accessPushing) { _accessPushAgain = true; return; }
+    _accessPushing = true;
+    accessRemote.save(JSON.stringify(accessLog.toJSON()))
+        .catch(e => console.error('🌐 접속 기록 원격 저장 실패(다음 저장 때 재시도):', e.message))
+        .finally(() => { _accessPushing = false; if (_accessPushAgain) { _accessPushAgain = false; pushAccessRemote(); } });
+}
+async function initAccessRemote() {
+    if (!accessRemote) return;
+    try {
+        const json = await accessRemote.load();
+        const before = accessLog.events.length;
+        if (json) accessLog.merge(JSON.parse(json));
+        _accessRemoteOk = true;
+        console.log(`🌐 접속 기록 원격 로드: ${accessLog.events.length}건 (서버 시작 후 쌓인 ${before}건 포함)`);
+        accessLog.dirty = true;
+        flushAccessLog();
+    } catch (e) {
+        console.error(`🌐 접속 기록 원격 로드 실패(${e.message}) — 30초 후 재시도. 성공 전까지 원격 저장은 비활성.`);
+        setTimeout(initAccessRemote, 30000);
+    }
+}
+async function flushAccessRemoteNow(timeoutMs = 3000) {
+    if (!accessRemote || !_accessRemoteOk) return;
+    await Promise.race([
+        accessRemote.save(JSON.stringify(accessLog.toJSON())),
+        new Promise(res => setTimeout(res, timeoutMs))
+    ]).catch(e => console.error('🌐 종료 시 접속 기록 원격 저장 실패:', e.message));
+}
+
 // 기록할 때마다 디스크를 때리면 손해라 15초마다 모아서 쓴다.
 function flushAccessLog() {
     if (!accessLog.dirty) return;
@@ -254,8 +291,10 @@ function flushAccessLog() {
         fs.writeFileSync(tmp, JSON.stringify(accessLog.toJSON()));
         fs.renameSync(tmp, ACCESS_FILE); // 원자적 교체
     } catch (e) { console.error('접속 기록 저장 실패:', e.message); }
+    pushAccessRemote();
 }
 setInterval(flushAccessLog, 15000);
+initAccessRemote();
 
 // 소켓에서 진짜 접속 IP 뽑기 (프록시를 거치면 handshake.address 는 프록시 주소다)
 function socketIp(socket) {
@@ -6124,7 +6163,8 @@ function gracefulShutdown(signal) {
     console.log(`\n🛑 ${signal} 수신 — 전적 저장 후 종료합니다...`);
     try { MockDB.flush(); } catch (e) { console.error('종료 저장 실패:', e.message); }
     // 🌐 원격(Turso) 저장까지 완료 대기(최대 3초) 후 종료 — Render 재배포 시 마지막 변경 보존
-    MockDB.flushRemoteNow(3000).catch(() => {}).finally(() => {
+    try { flushAccessLog(); } catch (e) {}
+    Promise.all([MockDB.flushRemoteNow(3000).catch(() => {}), flushAccessRemoteNow(2500).catch(() => {})]).finally(() => {
         try { server.close(() => { console.log('✅ 안전하게 종료되었습니다.'); process.exit(0); }); } catch (e) { process.exit(0); }
     });
     // 소켓이 안 닫혀 hang되는 경우 대비 강제 종료 타임아웃
