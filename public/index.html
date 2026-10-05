@@ -3906,7 +3906,7 @@
            · 내 카드는 아래 가운데 크게
            · 맨 아래 한 줄: 다이 · 콜 · 삥 · 하프 · 풀 · 올인 (버튼 위에 금액)
            ═══════════════════════════════════════════════════════════════ */
-        @media screen and (max-width: 960px) and (orientation: landscape) {
+        @media screen and (max-width: 960px) {
             :root { --bar-h: 64px; }
             /* ── 테이블 ── */
             .poker-table {
@@ -4030,6 +4030,90 @@
             .player-spot { width: 88px; }
             .player-spot.me .card-container { width: 46px !important; height: 65px !important; }
             .player-spot.me .cf-center { font-size: 23px !important; margin-top: 13px !important; }
+        }
+    
+        /* ═══════════════════════════════════════════════════════════════
+           📱 세로 폰 — 같은 식(원형 아바타 좌석 · 큰 보드 · 하단 버튼 바)을 세로 배치로
+           테이블이 상단바 아래부터 버튼 바 바로 위까지 화면을 채운다.
+           ═══════════════════════════════════════════════════════════════ */
+        @media screen and (max-width: 960px) and (orientation: portrait) {
+            :root { --bar-h: 70px; }
+            body { overflow: hidden; }
+            #game-container { padding-bottom: 0 !important; }
+            .poker-table {
+                width: 96vw !important; height: calc(100dvh - 52px - env(safe-area-inset-top) - var(--bar-h) - env(safe-area-inset-bottom) - 6px) !important;
+                margin: 6px auto 0 !important; padding: calc((100dvh - 128px) * 0.30) 0 0 !important; border-radius: 46vw !important; transform: none !important;
+            }
+            .pot-area { padding: 4px 18px !important; }
+            #pot-amount { font-size: 17px !important; }
+            .community-area { gap: 4px !important; min-height: 72px !important; }
+            #community-area .card-container { width: min(52px, 15.2vw) !important; height: min(73px, 21.3vw) !important; }
+            #community-area .cf-corner { font-size: 16px !important; }
+            #community-area .cf-center { font-size: 26px !important; margin-top: 16px !important; }
+            .felt-blinds { display: none !important; }
+
+            .player-spot { width: 96px; }
+            .player-spot .avatar { width: 46px !important; height: 46px !important; font-size: 18px !important; }
+            .player-spot .ps-nick { font-size: 11px !important; }
+            .player-spot .chips-info { font-size: 11.5px !important; }
+            .player-spot .ps-cards { top: 18px; left: calc(50% + 6px); }
+            .player-spot:not(.me) .card-container { width: 22px !important; height: 31px !important; }
+            .player-spot:not(.me) .ps-rank { top: 32px; }
+            .player-spot.me .avatar { width: 52px !important; height: 52px !important; font-size: 21px !important; }
+            .player-spot.me .card-container { width: 62px !important; height: 87px !important; }
+            .player-spot.me .cf-corner { font-size: 20px !important; }
+            .player-spot.me .cf-center { font-size: 32px !important; margin-top: 19px !important; }
+
+            /* 좌석 자리 — 위 가운데 1, 양옆 위·아래 2씩, 아래 가운데가 나 */
+            .players-area .pos-0 { bottom: 34px !important; top: auto !important; left: 50% !important; right: auto !important; transform: translate(-50%, 0) !important; }
+            .players-area .pos-1 { left: -1% !important; right: auto !important; top: 56% !important; bottom: auto !important; transform: none !important; }
+            .players-area .pos-2 { left: -1% !important; right: auto !important; top: 15% !important; bottom: auto !important; transform: none !important; }
+            .players-area .pos-3 { left: 50% !important; right: auto !important; top: 0 !important; bottom: auto !important; transform: translateX(-50%) !important; }
+            .players-area .pos-4 { right: -1% !important; left: auto !important; top: 15% !important; bottom: auto !important; transform: none !important; }
+            .players-area .pos-5 { right: -1% !important; left: auto !important; top: 56% !important; bottom: auto !important; transform: none !important; }
+            /* 벳 칩은 좌석에서 테이블 안쪽으로 */
+            #players-area .pos-1 .bet-chip, #players-area .pos-2 .bet-chip { left: calc(100% + 2px) !important; right: auto !important; top: 22px !important; bottom: auto !important; transform: none !important; }
+            #players-area .pos-4 .bet-chip, #players-area .pos-5 .bet-chip { right: calc(100% + 2px) !important; left: auto !important; top: 22px !important; bottom: auto !important; transform: none !important; }
+            #players-area .pos-3 .bet-chip { top: calc(100% + 4px) !important; left: 50% !important; right: auto !important; bottom: auto !important; transform: translateX(-50%) !important; }
+            #players-area .pos-0 .bet-chip { left: 50% !important; right: auto !important; top: -26px !important; bottom: auto !important; transform: translateX(-50%) !important; }
+
+            /* 하단: 패널 껍데기를 없애고 버튼 바를 화면 바닥에 붙인다 */
+            .controls { display: contents !important; }
+            #action-controls { position: fixed; left: 0; right: 0; bottom: 0; z-index: 120; pointer-events: none; flex-direction: row !important; align-items: flex-end; gap: 0; box-sizing: border-box; }
+            #action-controls > * { pointer-events: auto; }
+            .key-hint { display: none !important; }
+            .pb { height: 52px; font-size: 14.5px; letter-spacing: 0; }
+            .pb b::before { width: 11px; height: 11px; margin-right: 4px; vertical-align: -1px; }
+            .pb i { left: 3%; right: 3%; font-size: 9.5px; }
+            .pb-allin.confirming { font-size: 12px; }
+            #action-controls.custom .action-top-row {
+                left: calc(6px + env(safe-area-inset-left)); right: calc(6px + env(safe-area-inset-right)); width: auto !important;
+                flex-direction: row !important; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px !important; border-radius: 12px;
+                background: rgba(10,14,26,0.94) !important; border: 1px solid rgba(255,255,255,0.16) !important;
+            }
+            #action-controls.custom .quick-bets { flex: 1 1 100%; width: 100% !important; }
+            #action-controls.custom .quick-bets button { flex: 1 1 0; height: 34px; }
+            #action-controls.custom .slider-container { flex: 1 1 auto; min-width: 0; margin: 0; }
+            #timebank-row.on { position: fixed !important; margin: 0; z-index: 121; }
+            #timebank-row.on button { padding: 4px 10px; font-size: 11px; }
+
+            /* 내 차례가 아닐 때: 아래 두 줄 — 미리 정해두기 / 진행 안내 */
+            #preaction-bar { position: fixed; left: calc(6px + env(safe-area-inset-left)); right: calc(6px + env(safe-area-inset-right)); bottom: calc(30px + env(safe-area-inset-bottom)) !important; width: auto; margin: 0; z-index: 119; }
+            #preaction-bar .pa-t { display: none; }
+            #preaction-bar .pa-row { gap: 5px; }
+            #preaction-bar button { flex: 1 1 0; min-width: 0; height: 38px; padding: 0 2px; font-size: 13px; white-space: nowrap; }
+            #turn-indicator {
+                position: fixed; left: calc(6px + env(safe-area-inset-left)); right: calc(6px + env(safe-area-inset-right)); bottom: calc(4px + env(safe-area-inset-bottom)) !important; margin: 0 !important; z-index: 118;
+                padding: 4px 10px; border-radius: 9px; font-size: 11px !important; line-height: 1.3; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                background: rgba(10,14,26,0.80); border: 1px solid rgba(255,255,255,0.10);
+            }
+            #action-controls:not([style*="none"]) ~ #turn-indicator { display: none !important; }
+            #ready-controls {
+                position: fixed; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 122; width: auto !important; max-width: none !important; box-sizing: border-box;
+                max-height: 46vh; overflow-y: auto; padding: 10px; border-radius: 14px;
+                background: rgba(12,16,30,0.95); border: 1px solid rgba(245,201,71,0.3); box-shadow: 0 10px 28px rgba(0,0,0,0.7);
+            }
+            #center-message { top: 40% !important; }
         }
     </style>
 </head>
