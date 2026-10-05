@@ -107,6 +107,7 @@ const ShortStack = require('./lib/shortstack'); // 🤖 숏스택 푸시/폴드 
 const OppModel = require('./lib/oppmodel');     // 🧠 상대 읽기 — 세션 표본 + 계정 누적 전적
 const Challenge = require('./lib/challenge');   // 🤖 컴까기(AI 도장깨기) 단계표·보상
 const Rogue = require('./lib/roguerun');        // 🍀 증강 컴까기(로그라이크 런) — 층·증강·정산
+const { Capacity } = require('./lib/capacity');  // 🚦 서버 정원 · 입장 대기열
 const Blunder = require('./lib/blunder');       // 💥 리포트의 '치명적 플레이' 기록
 const GtoAdvice = require('./lib/gtoadvice');   // 🎓 학습모드 조언 — 상대 수·포지션·스택 깊이별
 const Quiz = require('./lib/gtoquiz');          // 🧠 GTO 문제 학습
@@ -4203,6 +4204,33 @@ class GameRoom {
 
 const rooms = new Map();
 
+// 🚦 [정원] 동시 접속 정원. 넘으면 줄을 세우고 자리가 나면 먼저 온 순서대로 들여보낸다.
+//    환경변수 MAX_PLAYERS 로 정한다(0 = 제한 없음). 관리자 페이지에서 켜진 동안 바꿀 수도 있다(재시작하면 환경변수 값으로 돌아간다).
+//    기본 20 — 무료 서버(CPU 0.1개)에서 실측·환산한 "버튼이 밀리지 않는" 인원 근처.
+const capacity = new Capacity(process.env.MAX_PLAYERS !== undefined ? process.env.MAX_PLAYERS : 20);
+function onlineNicks() {
+    const set = new Set();
+    try { io.sockets.sockets.forEach(sk => { if (sk.nickname) set.add(sk.nickname); }); } catch (e) {}
+    return set;
+}
+function nickInGame(nick) {
+    for (const room of rooms.values()) { if (room.players && room.players[nick]) return true; }
+    return false;
+}
+// 자리가 났으면 대기열 앞에서부터 들여보내고, 남은 사람들에게 바뀐 순서를 알린다
+function drainCapacity() {
+    const now = Date.now();
+    capacity.drain(onlineNicks(), now).forEach(q => {
+        const sk = io.sockets.sockets.get(q.socketId);
+        if (sk) sk.emit('queueAdmit'); else capacity.held.delete(q.nick);
+    });
+    capacity.queue.forEach((q, i) => {
+        const sk = io.sockets.sockets.get(q.socketId);
+        if (sk) sk.emit('loginQueued', { position: i + 1, waiting: capacity.queue.length, max: capacity.max });
+    });
+}
+setInterval(() => { if (capacity.queue.length) drainCapacity(); }, 5000);   // 맡아 둔 자리가 시간 초과로 풀린 경우 등
+
 // 📋 [세션 리포트] 닉네임 → 이번 세션 시작 시점의 지표 스냅샷 (재접속해도 유지)
 const sessionSnapshots = new Map();
 
@@ -4976,6 +5004,14 @@ io.on('connection', (socket) => {
                     return;
                 }
             }
+
+            // 🚦 [정원] 비밀번호까지 맞았으면 자리가 있는지 본다. 없으면 줄을 세우고 여기서 멈춘다(자리가 나면 클라이언트가 다시 로그인한다).
+            if (!capacity.canEnter(user.nickname, onlineNicks(), Date.now(), nickInGame(user.nickname))) {
+                const position = capacity.enqueue(user.nickname, socket.id, Date.now());
+                socket.emit('loginQueued', { position, waiting: capacity.queue.length, max: capacity.max });
+                return;
+            }
+            capacity.entered(user.nickname);
 
             socket.nickname = user.nickname;
 
@@ -6247,7 +6283,11 @@ io.on('connection', (socket) => {
         io.to('lobby').emit('lobbyChat', { nick: socket.nickname, msg: safeMsg });
     });
 
+    socket.on('leaveQueue', () => { if (capacity.leave(socket.id)) drainCapacity(); });
     socket.on('disconnect', () => {
+        // 🚦 줄 서 있던 사람이면 줄에서 빼고, 접속해 있던 사람이면 그 자리를 다음 사람에게 준다
+        capacity.leave(socket.id);
+        setTimeout(drainCapacity, 100);
         try {
             // 📋 [접속 기록] 머문 시간까지 남긴다
             if (socket.nickname) {
@@ -6339,7 +6379,7 @@ io.on('connection', (socket) => {
 
 // 🛡️ 관리자 페이지 — MockDB·rooms·io 가 다 만들어진 뒤에 붙인다(위에서 붙이면 참조가 비어 있다)
 try {
-    adminRouter = require('./admin')({ accessLog, MockDB, rooms, io, adminNick: ADMIN_NICK, verify: verifyAdmin });
+    adminRouter = require('./admin')({ accessLog, MockDB, rooms, io, adminNick: ADMIN_NICK, verify: verifyAdmin, capacity, onlineNicks, drainCapacity });
     app.use('/admin', adminRouter);
 } catch (e) {
     console.error('🛡️ [관리자] 마운트 실패(게임에는 영향 없음):', e && e.message);

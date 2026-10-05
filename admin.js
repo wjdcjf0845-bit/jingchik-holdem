@@ -64,7 +64,7 @@ module.exports = function createAdminRouter(deps) {
     const authed = req => verifyToken(SECRET, parseCookies(req.headers.cookie)[COOKIE]);
     const needAuth = (req, res, next) => {
         if (authed(req)) return next();
-        if (req.path.startsWith('/api/')) return res.status(401).json({ error: '로그인이 필요합니데이.' });
+        if (req.path.startsWith('/api/')) return res.status(401).json({ error: '로그인이 필요합니다.' });
         res.status(401).type('html').send(loginPage(''));
     };
 
@@ -77,7 +77,7 @@ module.exports = function createAdminRouter(deps) {
         if (limiter.blocked(ip)) {
             const mins = Math.ceil(limiter.retryAfterMs(ip) / 60000);
             d.accessLog && d.accessLog.push({ type: 'adminfail', ip, detail: '시도 횟수 초과 차단' });
-            return res.status(429).type('html').send(loginPage(`시도가 너무 많습니데이. ${mins}분 뒤에 다시 해보이소.`));
+            return res.status(429).type('html').send(loginPage(`시도가 너무 많습니다. ${mins}분 뒤에 다시 해보세요.`));
         }
         const u = (req.body && req.body.user) || '';
         const p = (req.body && req.body.pass) || '';
@@ -86,7 +86,7 @@ module.exports = function createAdminRouter(deps) {
         if (!ok) {
             const n = limiter.fail(ip);
             d.accessLog && d.accessLog.push({ type: 'adminfail', ip, nick: String(u).slice(0, 24), detail: `실패 ${n}/${FAIL_MAX}` });
-            return res.status(401).type('html').send(loginPage(`아이디나 비밀번호가 틀렸습니데이. (${n}/${FAIL_MAX})`));
+            return res.status(401).type('html').send(loginPage(`아이디나 비밀번호가 틀렸습니다. (${n}/${FAIL_MAX})`));
         }
         limiter.reset(ip);
         d.accessLog && d.accessLog.push({ type: 'admin', ip, nick: USER, ua: shortUA(req.headers['user-agent']), detail: '관리자 로그인' });
@@ -142,8 +142,20 @@ module.exports = function createAdminRouter(deps) {
             online,
             rooms,
             totalUsers: d.MockDB ? d.MockDB.users.size : 0,
-            uptimeSec: Math.floor(process.uptime())
+            uptimeSec: Math.floor(process.uptime()),
+            capacity: (d.capacity && d.onlineNicks) ? d.capacity.view(d.onlineNicks(), now) : null
         });
+    });
+
+    // 🚦 정원 바꾸기 (0 = 제한 없음). 서버가 켜져 있는 동안만 유지 — 재시작하면 환경변수 MAX_PLAYERS 값으로 돌아간다.
+    router.post('/api/capacity', needAuth, express.json({ limit: '1kb' }), (req, res) => {
+        const max = Number(req.body && req.body.max);
+        if (!d.capacity || !Number.isInteger(max) || max < 0 || max > 5000) return res.status(400).json({ error: '정원은 0(제한 없음)~5000 사이 정수로 넣으세요.' });
+        const before = d.capacity.max;
+        d.capacity.setMax(max);
+        d.accessLog && d.accessLog.push({ type: 'admin', nick: USER, ip: clientIp(req), detail: `정원 ${before || '무제한'} → ${max || '무제한'}` });
+        try { d.drainCapacity && d.drainCapacity(); } catch (e) {}
+        res.json({ ok: true, max: d.capacity.max });
     });
 
     router.get('/api/log', needAuth, (req, res) => {
@@ -163,9 +175,9 @@ module.exports = function createAdminRouter(deps) {
     router.post('/api/grant', needAuth, express.json({ limit: '2kb' }), (req, res) => {
         const nick = String((req.body && req.body.nick) || '');
         const amount = Number(req.body && req.body.amount);
-        if (!d.MockDB || !d.MockDB.users.has(nick)) return res.status(404).json({ error: '그런 계정이 없습니데이.' });
+        if (!d.MockDB || !d.MockDB.users.has(nick)) return res.status(404).json({ error: '그런 계정이 없습니다.' });
         if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 10000000) {
-            return res.status(400).json({ error: '금액은 0이 아닌 정수, 한 번에 ±1,000만 이내로 넣으이소.' });
+            return res.status(400).json({ error: '금액은 0이 아닌 정수, 한 번에 ±1,000만 이내로 넣으세요.' });
         }
         const u = d.MockDB.users.get(nick);
         const before = u.bankroll || 0;
@@ -277,7 +289,11 @@ function dashboardPage() {
   <form method="post" action="/admin/logout"><button class="btn">로그아웃</button></form>
 </div>
 
-<div class="card"><div class="kpis" id="kpis"></div></div>
+<div class="card"><div class="kpis" id="kpis"></div>
+  <div class="note" style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <span>🚦 동시 접속 정원</span><input id="cap-max" type="number" min="0" max="5000" style="width:90px;">
+    <button class="btn" id="cap-go">적용</button><span id="cap-info"></span>
+  </div></div>
 
 <div class="tabs">
   <button data-v="log" class="on">📋 접속 기록</button>
@@ -304,7 +320,7 @@ const num = n => (n||0).toLocaleString();
 
 // 표는 전부 textContent 로 채운다 — 닉네임·UA 는 바깥에서 들어온 값이라 HTML 로 붙이면 안 된다
 function table(cols, rows, cell) {
-  if (!rows.length) return Object.assign(document.createElement('div'), { className:'empty', textContent:'기록이 없습니데이.' });
+  if (!rows.length) return Object.assign(document.createElement('div'), { className:'empty', textContent:'기록이 없습니다.' });
   const wrap = document.createElement('div'); wrap.className = 'scroll';
   const t = document.createElement('table');
   const thead = document.createElement('thead'); const htr = document.createElement('tr');
@@ -323,7 +339,8 @@ async function loadOverview() {
   const s = over.summary || {};
   $('#sub').textContent = \`가동 \${Math.floor(over.uptimeSec/3600)}시간 \${Math.floor(over.uptimeSec%3600/60)}분 · 갱신 \${fmt(over.now)}\`;
   const k = [
-    ['🟢 지금 접속', num(over.online.length)],
+    ['🟢 지금 접속', num(over.online.length) + (over.capacity && over.capacity.max ? ' / ' + num(over.capacity.max) : '')],
+    ['⏳ 입장 대기', num(over.capacity ? over.capacity.waiting.length : 0)],
     ['24시간 접속자', num(s.uniqueNicks24h)],
     ['24시간 IP', num(s.uniqueIps24h)],
     ['24시간 기록', num(s.today)],
@@ -337,8 +354,21 @@ async function loadOverview() {
     const a = document.createElement('div'); a.className='v'; a.textContent=v;
     const b = document.createElement('div'); b.className='k'; b.textContent=label;
     d.append(a,b); box.appendChild(d); });
+  if (over.capacity) {
+    const inp = $('#cap-max');
+    if (document.activeElement !== inp) inp.value = over.capacity.max;
+    $('#cap-info').textContent = (over.capacity.max ? '' : '제한 없음 · ') + '0을 넣으면 제한 없음 · 재시작하면 환경변수 MAX_PLAYERS 값으로 돌아갑니다'
+      + (over.capacity.waiting.length ? ' · 대기: ' + over.capacity.waiting.map(w => w.nick).join(', ') : '');
+  }
   if (view === 'online' || view === 'rooms') render();
 }
+$('#cap-go').onclick = async () => {
+  const max = Number($('#cap-max').value);
+  const r = await fetch('/admin/api/capacity', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ max }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { alert(j.error || '실패했습니다.'); return; }
+  loadOverview();
+};
 
 async function render() {
   const p = $('#panel'); p.textContent = '';
@@ -400,11 +430,11 @@ async function render() {
           const raw = prompt(u.nick + ' 에게 줄 뱅크롤 (빼려면 음수, 예: 200000)');
           if (raw === null) return;
           const amount = Number(String(raw).replace(/[,s]/g, ''));
-          if (!Number.isInteger(amount) || amount === 0) { alert('0이 아닌 정수로 넣으이소.'); return; }
-          if (!confirm(u.nick + ' 뱅크롤 ' + (amount > 0 ? '+' : '') + amount.toLocaleString() + ' — 진행할까예?')) return;
+          if (!Number.isInteger(amount) || amount === 0) { alert('0이 아닌 정수로 넣으세요.'); return; }
+          if (!confirm(u.nick + ' 뱅크롤 ' + (amount > 0 ? '+' : '') + amount.toLocaleString() + ' — 진행할까요?')) return;
           const r = await fetch('/admin/api/grant', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ nick: u.nick, amount }) });
           const j = await r.json().catch(() => ({}));
-          if (!r.ok) { alert(j.error || '실패했습니데이.'); return; }
+          if (!r.ok) { alert(j.error || '실패했습니다.'); return; }
           alert(j.nick + ': ' + num(j.before) + ' → ' + num(j.after));
           run();
         };

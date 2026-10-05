@@ -4115,6 +4115,15 @@
             }
             #center-message { top: 40% !important; }
         }
+    
+        /* 🚦 정원 대기 */
+        #queue-box { display: none; margin: 12px 0 4px; padding: 14px 14px 12px; border-radius: 14px; text-align: center; background: rgba(255,200,87,0.10); border: 1px solid rgba(255,200,87,0.5); }
+        #queue-box .qb-t { font-size: 15px; font-weight: 900; color: #ffe27a; }
+        #queue-box .qb-n { font-size: 14px; color: #fff; margin: 8px 0 4px; }
+        #queue-box .qb-n b { font-family: var(--font-num); font-size: 30px; color: #ffe27a; margin: 0 3px; }
+        #queue-box .qb-n small { color: #9aa6c2; font-size: 12px; }
+        #queue-box .qb-s { font-size: 12px; color: #c3cbe0; line-height: 1.5; word-break: keep-all; }
+        #queue-box button { margin-top: 10px; padding: 7px 18px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.06); color: #dfe6f5; font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -5671,7 +5680,31 @@
         bgm.play().catch(e => console.log("BGM 자동재생 대기"));
     }
 
+    // 🚦 정원이 차서 줄을 선 상태 — 자리가 나면 서버가 queueAdmit 을 보내고, 그때 같은 닉네임·비밀번호로 다시 로그인한다
+    function showQueue(d) {
+        let box = document.getElementById('queue-box');
+        if (!box) {
+            box = document.createElement('div'); box.id = 'queue-box';
+            const err = document.getElementById('login-error');
+            err.parentNode.insertBefore(box, err);
+        }
+        document.getElementById('login-overlay').style.display = 'flex';
+        document.getElementById('login-error').style.display = 'none';
+        box.innerHTML = `<div class="qb-t">🚦 지금은 정원이 찼습니다</div>
+            <div class="qb-n">내 순서 <b>${Number(d.position) || 1}</b>번째${d.waiting > 1 ? ` <small>(대기 ${Number(d.waiting)}명)</small>` : ''}</div>
+            <div class="qb-s">자리가 나면 자동으로 입장합니다. 이 화면을 켜 두세요.${d.max ? ` (정원 ${Number(d.max)}명)` : ''}</div>
+            <button type="button" onclick="leaveQueue()">대기 취소</button>`;
+        box.style.display = 'block';
+    }
+    function hideQueue() { const b = document.getElementById('queue-box'); if (b) b.style.display = 'none'; }
+    function leaveQueue() { socket.emit('leaveQueue'); hideQueue(); }
+    socket.on('loginQueued', showQueue);
+    socket.on('queueAdmit', () => {
+        const nick = (document.getElementById('nick-input').value || '').trim() || myNickname;
+        if (nick && myPin) socket.emit('login', { nickname: nick, pin: myPin, deviceId: getDeviceId() });
+    });
     socket.on('loginError', msg => {
+        hideQueue();
         const errEl = document.getElementById('login-error');
         errEl.innerText = '⚠ ' + msg;
         errEl.style.display = 'block';
@@ -5685,6 +5718,7 @@
 
     let myBankroll = 0;
     socket.on('loginSuccess', (data) => {
+        hideQueue();
         myNickname = data.nickname;
         myBankroll = data.bankroll || 0;
         hadSession = true;
