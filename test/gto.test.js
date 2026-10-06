@@ -191,7 +191,7 @@ test('방어 폭: 앞자리 오픈일수록 좁게, 버튼·SB 스틸일수록 �
     assert.ok(bb('UTG') < bb('CO') && bb('CO') < bb('BTN') && bb('BTN') <= bb('SB'));
     assert.ok(ip('UTG') < ip('CO'));
     ['UTG', 'HJ', 'CO'].forEach(o => assert.ok(bb(o) > ip(o) * 1.5, o + ': BB 가 훨씬 넓어야 한다'));
-    assert.ok(bb('UTG') > 0.18 && bb('UTG') < 0.30 && bb('BTN') > 0.30 && bb('BTN') < 0.50);
+    assert.ok(bb('UTG') > 0.18 && bb('UTG') < 0.30 && bb('BTN') > 0.45 && bb('BTN') < 0.60);
     const hu = frac('BB', { headsUp: true, closing: true });
     assert.ok(hu > 0.55 && hu < 0.75, '헤즈업 BB 는 절반 넘게 지킨다: ' + hu);
 });
@@ -212,7 +212,7 @@ test('오픈 받기 문제: 정답은 자리별 기준과 일치하고 경계에
         const hero = q.tags[2].replace('내 자리 ', ''), opener = q.tags[3].split(' ')[0];
         const code = PF.handToCode(q.hand), ctx = { openerPos: opener, closing: hero === 'BB' };
         assert.strictEqual(q.answer, PF.preflopRangeTier(code, hero, true, ctx).tier, q.prompt);
-        const th = PF.studyDefense(ctx).callTh + (PF.isInOpenRange(code, hero) ? 0 : 4);
+        const th = PF.studyDefense(ctx, hero).callTh + (PF.isInOpenRange(code, hero) ? 0 : 4);
         assert.ok(Math.abs(PF.handRangeScore(code) - th) > 2, '경계 근처: ' + q.prompt);
     }
 });
@@ -352,4 +352,20 @@ test('콜이 곧 올인인 자리에서 올인 버튼은 콜로 채점한다', (
     assert.strictEqual(require('../lib/blunder').assess(adv, 'allin', { bb: 100, pot: 3000, toCall: 2000, putIn: 2000, equity: 0.55, street: 'preflop' }), null);
     // 일반 자리에서는 예전처럼 레이즈
     assert.strictEqual(A.actionKey({ mix: { fold: 8, call: 92 }, bestAction: 'call' }, 'allin'), 'raise');
+});
+
+test('BB 방어·3벳 폭이 공개된 솔버 범위 안에 든다 (6인 100bb, 2.5bb 오픈)', () => {
+    const combos = c => c.length === 2 ? 6 : (c[2] === 's' ? 4 : 12);
+    const pct = f => { let n = 0; Q.ALL_CODES.forEach(c => { if (f(c)) n += combos(c); }); return n / 1326 * 100; };
+    const want = { UTG: [24, 31, 4, 7], HJ: [31, 39, 6, 8.5], CO: [40, 48, 7.5, 11], BTN: [50, 58, 11, 13.5], SB: [55, 62, 13, 16.5] };   // [방어 최소, 최대, 3벳 최소, 최대]
+    Object.keys(want).forEach(o => {
+        const t = c => PF.preflopRangeTier(c, 'BB', true, { openerPos: o, closing: true }).tier;
+        const d = pct(c => t(c) !== 'fold'), r = pct(c => t(c) === 'raise'), w = want[o];
+        assert.ok(d >= w[0] && d <= w[1], `BB vs ${o} 방어 ${d.toFixed(1)}%`);
+        assert.ok(r >= w[2] && r <= w[3], `BB vs ${o} 3벳 ${r.toFixed(1)}%`);
+    });
+    // SB 는 버튼 오픈에 3벳 아니면 폴드, 18~22%
+    const sb = c => PF.preflopRangeTier(c, 'SB', true, { openerPos: 'BTN', closing: false }).tier;
+    assert.strictEqual(pct(c => sb(c) === 'call'), 0);
+    const r = pct(c => sb(c) === 'raise'); assert.ok(r >= 17 && r <= 23, 'SB vs BTN 3벳 ' + r.toFixed(1));
 });
