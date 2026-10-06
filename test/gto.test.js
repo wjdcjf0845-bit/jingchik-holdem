@@ -344,3 +344,12 @@ test('점검: 약한 플러시 드로우는 임플라이드 콜 근거가 아니
     // 체크할 수 있는 자리에서의 '레이즈'는 벳으로 채점된다
     assert.strictEqual(A.actionKey({ mix: { check: 40, bet: 60 } }, 'raise'), 'bet');
 });
+
+test('콜이 곧 올인인 자리에서 올인 버튼은 콜로 채점한다', () => {
+    const adv = { mix: { fold: 8, call: 92 }, bestAction: 'call', allinIsCall: true, street: 'preflop', equity: 55, potOdds: 45 };
+    assert.strictEqual(A.actionKey(adv, 'allin'), 'call');
+    assert.strictEqual(A.scoreAction(adv, 'allin'), 95);
+    assert.strictEqual(require('../lib/blunder').assess(adv, 'allin', { bb: 100, pot: 3000, toCall: 2000, putIn: 2000, equity: 0.55, street: 'preflop' }), null);
+    // 일반 자리에서는 예전처럼 레이즈
+    assert.strictEqual(A.actionKey({ mix: { fold: 8, call: 92 }, bestAction: 'call' }, 'allin'), 'raise');
+});

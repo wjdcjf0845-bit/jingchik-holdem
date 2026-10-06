@@ -3805,7 +3805,9 @@ class GameRoom {
             //   ② 1bb 짜리 결정과 50bb 짜리 결정을 똑같이 세면 큰 판의 실수가 묻힌다 → 팟 크기(bb)의 제곱근으로 가중(1~6배).
             const sa = this._statAdv;
             const adv = sa && sa.nick === nick ? sa.advice : null;
-            const easyFold = !!(adv && adv.street === 'preflop' && type === 'fold' && adv.bestAction === 'fold' && (adv.mix.fold || 0) >= 85);
+            //   (공짜로 넘기는 뻔한 체크도 같다 — 체크 권장 85% 이상을 체크한 것은 누구나 맞히는 결정)
+            const easyFold = !!(adv && ((adv.street === 'preflop' && type === 'fold' && adv.bestAction === 'fold' && (adv.mix.fold || 0) >= 85)
+                || (type === 'check' && adv.bestAction === 'check' && (adv.mix.check || 0) >= 85)));
             if (easyFold) ev.gtoEasy = true;
             else {
                 ev.gtoScore = gto;
@@ -3841,9 +3843,16 @@ class GameRoom {
         try { equity = this.estimateBotEquity(nick); } catch (e) { return null; }
         if (typeof equity !== 'number' || isNaN(equity)) return null;
 
-        const toCall = Math.max(0, this.currentHighestBet - p.currentBet);
-        const potBefore = this.pot + Object.values(this.players).reduce((s, x) => s + x.currentBet, 0) - p.currentBet;
-        const potOdds = toCall > 0 ? toCall / (potBefore + toCall) : 0;
+        // 🐛 [숏스택 팟오즈] 예전엔 "상대 벳 전체"를 콜 금액으로 보고 팟오즈를 냈다. 내 칩이 그보다 적으면 실제로는 내 칩만큼만 걸고,
+        //    상대 벳 중 내가 못 받는 부분은 상대에게 돌아간다. 예: 팟 1000에 상대 3000 벳, 내 칩 500 → 필요 승률은 43%가 아니라 25%.
+        //    그래서 칩이 적을 때 조언이 지나치게 폴드로 기울었다.
+        const _fullCall = Math.max(0, this.currentHighestBet - p.currentBet);
+        const toCall = Math.min(_fullCall, p.chips);
+        const _myMax = p.currentBet + p.chips;
+        const potBefore = this.pot + Object.keys(this.players).reduce((s, n) => n === nick ? s : s + Math.min(this.players[n].currentBet || 0, _myMax), 0);
+        // 🐛 [팟오즈] 이번 스트리트에 내가 이미 낸 칩(블라인드·앞선 벳)도 팟의 일부다. 예전엔 그걸 빼고 계산해서 필요 승률이 높게 나왔다
+        //    (BB가 2.5bb 오픈을 받을 때: 실제 27%인데 33%로 계산).
+        const potOdds = toCall > 0 ? toCall / (potBefore + p.currentBet + toCall) : 0;
         const street = this.communityCards.length === 0 ? 'preflop' : (this.communityCards.length === 3 ? 'flop' : (this.communityCards.length === 4 ? 'turn' : 'river'));
         const opponents = this.playerOrder.filter(n => n !== nick && !this.players[n].isFolded).length;
 
@@ -3919,6 +3928,7 @@ class GameRoom {
                 if (_aggr && _aggrAllIn) { const js = this.jamStat(_aggr); if (js.j >= 2 && js.h >= 3) x = Math.max(x, Math.min(1, js.j / js.h)); }
                 x = Math.min(1, x);
                 const res = ShortStack.shouldCallShove(code, x, potOdds, 0.02);
+                equity = res.equity; equityLabel = '올인 범위 상대 승률';   // 판단에 쓴 숫자를 그대로 보여 준다
                 notes.push('올인 받기');
                 _special = true;
                 if (res.call) {
@@ -4076,6 +4086,7 @@ class GameRoom {
             potSize: potBefore,
             mix, bestAction, reason,
             notes, sizeHint, equityLabel,
+            allinIsCall: _fullCall > 0 && _fullCall >= p.chips,   // 콜이 곧 올인인 자리 — '올인' 버튼을 눌러도 콜로 채점한다
             rawEquity: rawEquity == null ? null : Math.round(rawEquity * 100),
             posInfo,
             handStr: p.hand.join(' ')
