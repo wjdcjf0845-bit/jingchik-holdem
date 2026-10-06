@@ -1587,8 +1587,28 @@ class GameRoom {
                 //    (2bb 걸어 1.5bb 먹기는 57%만 접혀도 본전). 버튼도 42%만 열어 블라인드를 그냥 내줬다.
                 //    → BB는 약 65%로 지키고, 버튼은 약 76%를 연다 (학습 조언·문제와 같은 기준).
                 const _huBot = persona.proStrategy && this.playerOrder.length === 2;
+                // 📚 [자리별 방어 — 고수] 오픈을 받을 때 "누가 열었나"를 본다(학습 조언과 같은 기준표: 공개된 솔버 범위에 맞춘 값).
+                //    예전엔 살아 있는 인원 수만 봐서 BB가 버튼 스틸에도 UTG 오픈에도 비슷하게 좁게 방어했다.
+                const _v4 = persona.proStrategy && !_huBot && facingRaise && this.botV4(nick);
+                let _opnPos = '';
+                if (_v4) {
+                    const _o = this.playerOrder.find(n => n !== nick && this.players[n] && !this.players[n].isFolded
+                        && (this.players[n].currentBet || 0) === this.currentHighestBet && this.currentHighestBet > bb);
+                    _opnPos = _o ? (this.players[_o].position || '') : '';
+                }
+                const _study = _v4 && !!_opnPos && (isBB || p.position === 'SB');      // 블라인드 방어에만 적용(콜드콜 자리는 예전 기준)
                 let rt = preflopRangeTier(code, p.position || '', facingRaise,
                     { numActive: _numActive, threeBetPlus: _threeBetPlus, headsUp: _huBot, closing: _huBot && !!isBB });
+                // 📊 [맞대결 실측 — 2026-10-06, 100bb 하드 봇 5명, 각 약 3만 핸드]
+                //    · 기준표를 통째로 적용(넓은 콜 방어 포함): 새 −9.9 vs 옛 +37.1 bb/100, 우승 32:58 — 뚜렷하게 약해짐.
+                //      솔버의 넓은 방어는 플랍 이후를 솔버처럼 칠 때 성립한다. 봇의 포스트플랍으로는 약한 패를 포지션 없이 끌고 가다 샌다.
+                //    · 3벳 폭만 적용(+ SB는 3벳 아니면 폴드): 새 13.3 vs 옛 15.4 bb/100, 우승 42:47 — 차이 없음(노이즈 범위).
+                //    → 운영에는 "3벳 폭만" 적용한다. 콜 방어 폭은 예전 그대로. (BOT_V4MODE=full 은 다시 재 볼 때 쓰는 스위치)
+                if (_study) {
+                    const rtNew = preflopRangeTier(code, p.position || '', facingRaise, { numActive: _numActive, threeBetPlus: _threeBetPlus, openerPos: _opnPos, closing: !!isBB });
+                    if (rtNew.tier === 'raise' && process.env.BOT_V4MODE !== 'full') rt = rtNew;
+                    else if (process.env.BOT_V4MODE === 'full') rt = rtNew;
+                }
                 if (_huBot && !facingRaise && rt.tier !== 'raise' && rt.score > Quiz.HU_OPEN_SCORE) rt = { tier: 'raise', label: '오픈 레이즈', score: rt.score };
 
                 // 🤖 [반복 올인 대응 — 초보·중수] 이 방에서 올인을 남발한 사람의 올인은 "그 사람이 실제로 미는 빈도"로 받는다.
@@ -1660,6 +1680,8 @@ class GameRoom {
                         equity = Math.min(1, equity * 1.10);
                     } else if (_singleRaise && _late && r < 0.13 * skill) {
                         return threeBetTo(); // 🃏 블러프 3벳 — 늦은 포지션 마지널 일부를 섞어 레인지를 숨긴다
+                    } else if (_study && process.env.BOT_V4MODE === 'full' && rt.tier === 'call' && _rc <= 1 && toCall <= bb * 3.5 && toCall < p.chips * 0.25 && r < 0.9 * skill + 0.08) {
+                        return { type: 'call' };   // 기준표상 방어할 패 — 아래의 일반 승률 계산에 맡기면 넓은 방어 범위의 아래쪽을 다시 접어 버린다
                     }
                     // rt.tier === 'call' 이면 통과 (아래 로직에서 콜/가끔 3벳)
                 } else {
@@ -1987,6 +2009,14 @@ class GameRoom {
     // 🔬 학습 조언 점검(드로우 판정·벳 범위 상대 승률·림퍼 크기)을 봇에 옮긴 것의 측정 스위치. 운영에선 항상 켜짐.
     botV3(nick) {
         const ab = process.env.BOT_AB3;
+        if (!ab) return true;
+        const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
+        return ab === '2' ? !bit : bit;
+    }
+
+    // 🔬 외부 솔버 자료에 맞춘 방어 기준(BB 방어·3벳 폭, SB 3벳-폴드)을 고수 봇에 옮긴 것의 측정 스위치. 운영에선 항상 켜짐.
+    botV4(nick) {
+        const ab = process.env.BOT_AB4;
         if (!ab) return true;
         const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
         return ab === '2' ? !bit : bit;
