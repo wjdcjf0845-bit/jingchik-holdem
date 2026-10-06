@@ -345,7 +345,7 @@ const MockDB = {
     //    · 이전 값은 지우지 않고 statsArchive 에 보관한다(되돌릴 수 있게). 계정마다 한 번만 적용된다.
     STATS_EPOCH: '2026-10-06b',   // b: 점수 계산을 가중 평균으로 바꾸면서 같은 날 한 번 더 맞췄다
     STAT_FIELDS: ['handsPlayed', 'handsWon', 'vpipHands', 'preflopOpps', 'pfrHands', 'threeBetCount', 'threeBetOpps', 'aggrBets', 'aggrCalls',
-        'foldToBet', 'faceBet', 'wentToShowdown', 'wonAtShowdown', 'gtoScoreSum', 'gtoScoreCount', 'gtoW', 'seatSum', 'seatCnt'],
+        'foldToBet', 'faceBet', 'wentToShowdown', 'wonAtShowdown', 'gtoScoreSum', 'gtoScoreCount', 'gtoW', 'seatSum', 'seatCnt', 'netBB', 'netHands'],
     applyStatsEpoch() {
         let n = 0;
         this.users.forEach(u => {
@@ -606,7 +606,7 @@ const MockDB = {
             if (dt >= cutoff) {
                 const day = log[key];
                 Object.keys(sum).forEach(f => { sum[f] += (day[f] || 0); });
-                Object.keys(day).forEach(f => { if (f.startsWith('lk') || f.startsWith('gq') || f === 'seatSum' || f === 'seatCnt') sum[f] = (sum[f] || 0) + (day[f] || 0); });
+                Object.keys(day).forEach(f => { if (f.startsWith('lk') || f.startsWith('gq') || f === 'seatSum' || f === 'seatCnt' || f === 'netBB' || f === 'netHands') sum[f] = (sum[f] || 0) + (day[f] || 0); });
             }
         });
         return sum;
@@ -800,6 +800,14 @@ const MockDB = {
         out.push(['gqS_' + st, ev.gtoScore * w], ['gqW_' + st, w], ['gqC_' + st, 1]);
         out.push(['gqN_' + (ev.gtoScore >= 95 ? 'best' : ev.gtoScore >= 60 ? 'ok' : ev.gtoScore >= 30 ? 'weak' : 'bad'), 1]);
         return out;
+    },
+    // 📒 실제 성적 — 한 판에서 칩이 얼마나 늘거나 줄었나(bb). 실력 점수가 실제 결과와 같은 방향인지 견주어 보려고 쌓는다.
+    recordNet(nickname, netBB, isLearn) {
+        const u = this.users.get(nickname);
+        if (!u || nickname.startsWith('🤖') || !Number.isFinite(netBB)) return;
+        if (isLearn) { const L = u.learnStats || (u.learnStats = {}); L.netBB = Math.round(((L.netBB || 0) + netBB) * 10) / 10; L.netHands = (L.netHands || 0) + 1; return; }
+        u.netBB = Math.round(((u.netBB || 0) + netBB) * 10) / 10; u.netHands = (u.netHands || 0) + 1;
+        this._bumpDaily(u, { netBB, netHands: 1 });
     },
     // 최근 결정 기록(계정당 40건) — "이 결정이 몇 점이었나"를 본인이 직접 확인할 수 있게
     recordDecision(nickname, rec, isLearn) {
@@ -3382,6 +3390,7 @@ class GameRoom {
         const totalPotAll = potResults.reduce((s, p) => s + p.amount, 0);
         const wonByNick = {};
         potResults.forEach(p => p.winners.forEach(w => { wonByNick[w.nick] = (wonByNick[w.nick] || 0) + w.won; }));
+        try { this.settleHandResults(); } catch (e) {}
         this.playerOrder.forEach(nick => {
             MockDB.recordHand(nick, allWinnerIds.has(nick), wonByNick[nick] || 0, this.vpipThisHand && this.vpipThisHand.has(nick), !!this._learnMode);
             // 📊 쇼다운 도달 통계 (폴드하지 않고 카드를 깐 플레이어)
@@ -3734,6 +3743,19 @@ class GameRoom {
         };
         const saved = MockDB.recordBlunder(nick, rec, a.kind, a.costBB, !!this._learnMode);
         if (saved) (this._handBl || (this._handBl = [])).push({ nick, rec: saved, bb });
+    }
+    // 🏁 핸드가 끝나 칩 정산이 끝난 직후: 사람마다 그 판의 칩 증감(bb)을 적고, 그 판에 기록된 실수에도 결과를 붙인다.
+    //    🐛 예전엔 "다음 핸드 시작 직전"에만 했는데, 학습 모드는 그 전에 스택을 다시 채워서 결과가 늘 0으로 적혔다.
+    settleHandResults() {
+        if (!this.handStartStacks || this._netHand === this.handId) return;
+        this._netHand = this.handId;
+        const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+        this.playerOrder.forEach(nick => {
+            const pl = this.players[nick], start = this.handStartStacks[nick];
+            if (!pl || pl.isBot || typeof start !== 'number') return;
+            MockDB.recordNet(nick, Math.round((pl.chips - start) / bb * 10) / 10, !!this._learnMode);
+        });
+        this.settleBlunders();
     }
     // 다음 핸드를 시작하기 직전(또는 방이 끝날 때): 그 판에서 실제로 칩이 얼마나 오갔는지 적는다
     settleBlunders() {
@@ -4253,6 +4275,7 @@ class GameRoom {
         }
 
         // 📊 전적 집계 + 📜 핸드 히스토리
+        try { this.settleHandResults(); } catch (e) {}
         this.playerOrder.forEach(n => MockDB.recordHand(n, n === winnerId, n === winnerId ? this.pot : 0, this.vpipThisHand && this.vpipThisHand.has(n), !!this._learnMode));
 
         // 🏅 기권승 업적: 허풍선이(폴드 유도 10회 누적) + 고래
@@ -5507,6 +5530,8 @@ io.on('connection', (socket) => {
                 vpip: a30.preflopOpps > 0 ? Math.round(a30.vpipHands / a30.preflopOpps * 100) : null,
                 pfr: a30.preflopOpps > 0 ? Math.round(a30.pfrHands / a30.preflopOpps * 100) : null,
                 low: a30.gtoScoreCount < 30,
+                // 실제 성적: 100판당 칩 증감(bb). 운이 크게 섞이므로 30판 이상일 때만 보여 준다
+                net100: (a30.netHands || 0) >= 30 ? Math.round(a30.netBB / a30.netHands * 100) : null, netHands: a30.netHands || 0,
                 // 유형별 손실(bb) — 비교표용
                 leaks: Object.fromEntries(Blunder.KIND_KEYS.map(k => [k, Math.round((a30['lkB_' + k] || 0) * 10) / 10]).filter(x => x[1] > 0)),
                 // 날짜별 점수(결정 5번 이상인 날만) — 추세선용
