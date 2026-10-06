@@ -1434,7 +1434,7 @@ class GameRoom {
                     try {
                         const advice = this.getGtoAdvice(expectedNick);
                         this._advCache = { nick: expectedNick, key, advice };
-                        if (this._learnMode && advice && cp.socketId) io.to(cp.socketId).emit('gtoAdvice', advice);
+                        if ((this._learnMode || process.env.DEV_ADVICE === '1') && advice && cp.socketId) io.to(cp.socketId).emit('gtoAdvice', advice);   // DEV_ADVICE: 검증용(일반 방에서도 조언을 내보냄)
                     } catch (e) {}
                 };
                 if (this._learnMode) run(); else setTimeout(run, 40);      // 일반 게임은 화면 갱신을 먼저 내보낸 뒤에 계산

@@ -4174,7 +4174,8 @@
         .skd.me { border: 1px solid rgba(255,200,87,0.6); }
         .skd b { font-size: 13px; color: #fff; } .skd span { font-size: 12px; color: #c9d2e6; word-break: keep-all; } .skd span em { font-style: normal; color: #ffb9ae; font-weight: 800; }
         .skd small { font-size: 10.5px; color: var(--txt-dim); }
-        @media (max-width: 520px) { .skb-extra { flex-basis: 70px; } .skb-extra svg { width: 70px; } .skb-name { flex-basis: 24%; } }
+        /* 폰 세로: 추세선까지 한 줄에 넣으면 상자 밖으로 삐져나온다(실측) → 추세선은 빼고 ▲▼만 남긴다 */
+        @media (max-width: 520px) { .skb-extra { display: none; } .skb-name { flex-basis: 26%; } .skb-track { min-width: 40px; } .skv-n { flex-basis: 36%; } .skv-m { flex-basis: 54px; font-size: 12px; } }
     
         /* 🔎 실력 점수의 근거 */
         .skbs .skb[data-nick] { cursor: pointer; } .skbs .skb[data-nick]:hover .skb-name { text-decoration: underline; }
