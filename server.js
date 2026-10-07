@@ -1023,12 +1023,16 @@ class GameRoom {
         this.pendingStageTimeout = null;
 
         this.blindStructure = [
+            // 🐛 [치명] 레벨 2부터 "앤티"가 빅블라인드와 같은 금액으로 걸려 있었고, 그걸 블라인드가 아닌 사람까지 전원이 매 판 냈다.
+            //    6명이면 한 바퀴에 블라인드 1.5bb 외에 6bb 가 더 나가서, 아무것도 안 해도 스택이 빠르게 녹았다
+            //    (실측: 레벨 2~3에서 블라인드가 아닌 자리로 시작한 143판 전부에서 빅블라인드 한 개씩 빠짐).
+            //    → 앤티를 없앤다. 칩은 SB·BB 만 낸다.
             { level: 1, sb: 50, bb: 100, ante: 0 },
-            { level: 2, sb: 100, bb: 200, ante: 200 },
-            { level: 3, sb: 200, bb: 400, ante: 400 },
-            { level: 4, sb: 500, bb: 1000, ante: 1000 },
-            { level: 5, sb: 1000, bb: 2000, ante: 2000 },
-            { level: 6, sb: 2000, bb: 4000, ante: 4000 }
+            { level: 2, sb: 100, bb: 200, ante: 0 },
+            { level: 3, sb: 200, bb: 400, ante: 0 },
+            { level: 4, sb: 500, bb: 1000, ante: 0 },
+            { level: 5, sb: 1000, bb: 2000, ante: 0 },
+            { level: 6, sb: 2000, bb: 4000, ante: 0 }
         ];
 
         // 💵 캐시게임: 블라인드업 없이 고정 — 단일 레벨 구조로 교체
