@@ -5954,7 +5954,7 @@
         if (!f) { el.textContent = ''; return; }
         el.textContent = f.isCash
             ? `💵 블라인드 ${f.sb.toLocaleString()}/${f.bb.toLocaleString()}`
-            : `🏆 Lv.${f.level} · ${f.sb.toLocaleString()}/${f.bb.toLocaleString()}${f.ante > 0 ? ` · 앤티 ${f.ante.toLocaleString()}` : ''} · ⏱ ${fmtClock(f.time)}`;
+            : `🏆 Lv.${f.level} · ${f.sb.toLocaleString()}/${f.bb.toLocaleString()}${f.ante > 0 ? ` · BB 앤티 ${f.ante.toLocaleString()}` : ''} · ⏱ ${fmtClock(f.time)}`;
     }
 
     let _endVoteSig = '', _endVoteTick = null;
@@ -6449,7 +6449,7 @@
         el.querySelector('.bb-new').innerText = `${fmt(info.sb)}/${fmt(info.bb)}`;
         const ante = info.ante || 0;
         const aEl = el.querySelector('.bb-a');
-        aEl.innerText = ante > 0 ? `앤티 ${fmt(ante)} · 레벨 ${info.level}` : `레벨 ${info.level}`;
+        aEl.innerText = ante > 0 ? `BB 앤티 ${fmt(ante)} · 레벨 ${info.level}` : `레벨 ${info.level}`;
         if (_noMotion()) {
             el.style.display = 'block';
             setTimeout(() => { el.style.display = 'none'; }, 2200);
@@ -6651,7 +6651,7 @@
                 document.querySelector('#tournament-header .timer').style.display = '';
                 document.getElementById('blind-level').innerText = data.tournamentInfo.level;
                 const ante = data.tournamentInfo.ante || 0;
-                document.getElementById('blind-amounts').innerText = `${data.tournamentInfo.sb.toLocaleString()}/${data.tournamentInfo.bb.toLocaleString()}` + (ante > 0 ? ` (Ante ${ante.toLocaleString()})` : '');
+                document.getElementById('blind-amounts').innerText = `${data.tournamentInfo.sb.toLocaleString()}/${data.tournamentInfo.bb.toLocaleString()}` + (ante > 0 ? ` (BB 앤티 ${ante.toLocaleString()})` : '');
                 document.getElementById('time-left').innerText = `${String(Math.floor(data.timeRemaining/60)).padStart(2,'0')}:${String(data.timeRemaining%60).padStart(2,'0')}`;
             }
         } else {

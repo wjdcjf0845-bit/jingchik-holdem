@@ -1026,13 +1026,14 @@ class GameRoom {
             // 🐛 [치명] 레벨 2부터 "앤티"가 빅블라인드와 같은 금액으로 걸려 있었고, 그걸 블라인드가 아닌 사람까지 전원이 매 판 냈다.
             //    6명이면 한 바퀴에 블라인드 1.5bb 외에 6bb 가 더 나가서, 아무것도 안 해도 스택이 빠르게 녹았다
             //    (실측: 레벨 2~3에서 블라인드가 아닌 자리로 시작한 143판 전부에서 빅블라인드 한 개씩 빠짐).
-            //    → 앤티를 없앤다. 칩은 SB·BB 만 낸다.
+            //    → "빅블라인드 앤티"(정식 토너먼트 방식)로 바꿨다: 레벨 2부터 BB 한 사람만 빅블라인드 한 개를 앤티로 더 낸다.
+            //      테이블 전체로는 한 판에 1bb — 사람 수와 무관하다. 여기의 ante 는 "BB 가 내는 앤티 금액"이다.
             { level: 1, sb: 50, bb: 100, ante: 0 },
-            { level: 2, sb: 100, bb: 200, ante: 0 },
-            { level: 3, sb: 200, bb: 400, ante: 0 },
-            { level: 4, sb: 500, bb: 1000, ante: 0 },
-            { level: 5, sb: 1000, bb: 2000, ante: 0 },
-            { level: 6, sb: 2000, bb: 4000, ante: 0 }
+            { level: 2, sb: 100, bb: 200, ante: 200 },
+            { level: 3, sb: 200, bb: 400, ante: 400 },
+            { level: 4, sb: 500, bb: 1000, ante: 1000 },
+            { level: 5, sb: 1000, bb: 2000, ante: 2000 },
+            { level: 6, sb: 2000, bb: 4000, ante: 4000 }
         ];
 
         // 💵 캐시게임: 블라인드업 없이 고정 — 단일 레벨 구조로 교체
@@ -2904,14 +2905,7 @@ class GameRoom {
         this.playerOrder.forEach(nick => {
             this.players[nick].hand = [this.deck.pop(), this.deck.pop()];
             this.jamStat(nick).h += 1;
-
-            if (bl.ante > 0) {
-                const antePaid = Math.min(bl.ante, this.players[nick].chips);
-                this.players[nick].chips -= antePaid;
-                this.players[nick].totalInvested += antePaid;
-                this.pot += antePaid;
-                if (this.players[nick].chips === 0) this.players[nick].isAllIn = true;
-            }
+            this.players[nick]._ante = 0;
         });
 
         const n = this.playerOrder.length;
@@ -2967,6 +2961,17 @@ class GameRoom {
         }
 
         const bbPlayer = this.players[this.playerOrder[bbIndex]];
+        // 🪙 [빅블라인드 앤티] BB 한 사람만 낸다. 앤티를 먼저 내고(칩이 모자라면 앤티부터), 남은 칩으로 빅블라인드를 낸다.
+        //    앤티는 "죽은 돈"이다 — 팟에는 들어가지만 그 사람의 벳(currentBet·totalInvested)으로 치지 않는다.
+        //    (벳으로 치면 남들이 1bb 만 콜했을 때 남는 부분이 "받아 주지 않은 벳"으로 BB 에게 되돌아가 앤티가 없던 일이 된다.)
+        //    쇼다운 분배는 실제 팟(this.pot)과 벳 합계의 차액을 메인팟에 얹으므로 앤티는 그 판의 승자가 가져간다.
+        if (bl.ante > 0 && !bbPlayer.isAllIn && bbPlayer.chips > 0) {
+            const antePaid = Math.min(bl.ante, bbPlayer.chips);
+            bbPlayer.chips -= antePaid;
+            bbPlayer._ante = antePaid;
+            this.pot += antePaid;
+            if (bbPlayer.chips === 0) bbPlayer.isAllIn = true;
+        }
         if (!bbPlayer.isAllIn) {
             const bbCost = Math.min(bl.bb, bbPlayer.chips);
             bbPlayer.chips -= bbCost;
@@ -2982,7 +2987,7 @@ class GameRoom {
         this.handStartBlinds = { sb: bl.sb, bb: bl.bb, ante: bl.ante, level: bl.level };
         this.playerOrder.forEach(nick => {
             const pl = this.players[nick];
-            this.handStartStacks[nick] = pl.chips + pl.currentBet + (pl.totalInvested - pl.currentBet);
+            this.handStartStacks[nick] = pl.chips + pl.currentBet + (pl.totalInvested - pl.currentBet) + (pl._ante || 0);
         });
         // 블라인드 포스팅 자체도 로그에 남김
         this.logAction(this.playerOrder[sbIndex], 'sb', bl.sb, 1);
