@@ -7576,10 +7576,10 @@
             </div>`;
         }).join('');
     }
-    let _skRows = [];
+    let _skRows = [], _skCal = [];
     socket.on('skillBoard', d => {
         const rows = (d && d.rows) || [];
-        _skRows = rows;
+        _skRows = rows; _skCal = (d && d.cal) || [];
         // 로비의 작은 순위 카드
         const mini = document.getElementById('skill-mini');
         if (mini) {
@@ -7679,7 +7679,13 @@
             ${verdict}
             <div class="gd-text" style="font-size:12px; margin-top:6px;">실제 성적은 한 판 한 판의 칩 증감을 그대로 더한 것입니다. 홀덤은 운이 커서 <b>수백 판으로는 실력보다 운이 더 크게</b> 보입니다. 판수가 쌓일수록 점수 순서와 가까워지는지 여기서 계속 확인할 수 있습니다. 올인 승부의 운을 뺀 값은 각자의 점수 근거 화면 ⑤에서 볼 수 있습니다.</div>
 
-            <div class="sr-section-title" style="margin-top:14px;">④ 아직 부족한 점</div>
+            <div class="sr-section-title" style="margin-top:14px;">④ 승률 추정은 얼마나 맞나 <small style="font-weight:400; color:var(--txt-dim);">(우리 방 실측 · 최근 30일)</small></div>
+            <div class="gd-text" style="font-size:12.5px;">벳을 받았을 때 조언은 "상대가 벳하는 범위"를 추정해 승률을 냅니다. 이 추정이 점수에서 가장 약한 부분이라, 판이 끝난 뒤 <b>상대의 실제 패 상대 승률</b>과 견준 차이를 계속 쌓고 있습니다(패는 저장하지 않고 합계만).</div>
+            ${_skCal.length ? `<div class="skbs">${_skCal.map(c => `<div class="skv"><span class="skv-n"><b>${{ flop: '플랍', turn: '턴', river: '리버' }[c.st]} · ${c.who === 'h' ? '사람이 벳' : '봇이 벳'}</b><small>${c.n.toLocaleString()}번</small></span><span class="skv-m ${Math.abs(c.bias) < 4 ? 'up' : 'down'}" style="flex-basis:96px;">${c.bias > 0 ? '+' : ''}${c.bias}%p<small>${Math.abs(c.bias) < 4 ? '거의 맞음' : c.bias < 0 ? '승률을 낮게 봄' : '승률을 높게 봄'}</small></span></div>`).join('')}</div>
+            <div class="gd-text" style="font-size:12px; margin-top:5px;">숫자는 "조언이 계산한 승률 − 실제 승률"의 평균입니다. −면 조언이 상대를 실제보다 강하게 본 것이라 <b>접으라는 쪽으로 기울고</b>, +면 콜하라는 쪽으로 기웁니다. ±4%p 안이면 잘 맞는 것으로 봅니다.</div>`
+            : '<div class="bl-none">아직 자료가 부족합니다. 벳을 받은 결정이 스트리트마다 30번 넘게 쌓이면 여기에 나옵니다.</div>'}
+
+            <div class="sr-section-title" style="margin-top:14px;">⑤ 아직 부족한 점</div>
             <div class="gd-text" style="font-size:12.5px;">· 기준이 되는 "권장 플레이"는 실제 솔버가 아니라 승률·팟오즈·포지션·인원·스택으로 만든 <b>근사치</b>입니다. "이 게임의 조언에서 벗어나 잃은 기대값"이지 절대적인 실력은 아닙니다.
                 <br>· 콜·폴드의 손실은 승률로 계산하지만, <b>벳·레이즈·체크의 손실은 어림값</b>입니다(상대가 접을 확률을 알 수 없음). 프리플랍 오픈의 값도 "오픈 기준에서 얼마나 떨어진 패인가"로 어림합니다.
                 <br>· 6인 테이블에서 전부 접기만 해도 100판당 21bb밖에 안 잃어 54점이 나옵니다. 평범하게 치는 사람(63~66점)과 차이가 크지 않습니다. 헤즈업에서는 31점으로 뚜렷이 갈립니다.

@@ -3938,6 +3938,13 @@ class GameRoom {
                 // 📊 상황별 빈도: 이 자리에서 "했나"와 "조언이 권한 빈도"를 같이 쌓는다
                 try {
                     const pre0 = st0x(sa0.advice.street) === 'preflop';
+                    // 📏 승률 추정의 정확도: (조언이 쓴 승률 − 상대의 실제 패 상대 승률)을 스트리트·상대 종류별 합계로
+                    const q = this._eqCal;
+                    if (q && q.nick === nick && q.hand === this.handId && q.st === st0x(sa0.advice.street)) {
+                        const k = q.st + '_' + (q.bot ? 'b' : 'h'), e = q.est - q.tr;
+                        MockDB.recordEv(nick, { ['evQn_' + k]: 1, ['evQe_' + k]: e, ['evQs_' + k]: e * e }, !!this._learnMode);
+                    }
+                    this._eqCal = null;
                     const spot = Freqs.spotOf({
                         street: st0x(sa0.advice.street), mix: sa0.advice.mix, type, isRaise, toCall: Math.max(0, toCall),
                         pos: p.position || '', isBB: !!(p.role && p.role.includes('BB')), raisesBefore: raisesBefore || 0,
@@ -4290,17 +4297,25 @@ class GameRoom {
                     if (_wf) _vRangeW = VRange.widthOf(_wf);
                     const vsRange = this.equityVsRangeMC(nick, _bf, _ag, _wf);
                     // 🔬 [검증용 · DEV_EQLOG] 추정 승률(범위 반영 전/후)을 "벳한 사람의 실제 패 상대 승률"과 견준다
-                    if (process.env.DEV_EQLOG && _vn && this.players[_vn] && (this.players[_vn].hand || []).length === 2 && opponents === 1) {
+                    //    📏 [실전 보정 자료] 운영 중에도 같은 비교를 합계로만 쌓는다(collectActionStats → evQ*). 패는 저장하지 않고,
+                    //    이 값은 상대 패에서 나온 것이라 조언 객체(화면으로 나감)에는 절대 넣지 않는다 — 방 안에만 잠깐 둔다.
+                    this._eqCal = null;
+                    if (vsRange != null && _vn && this.players[_vn] && (this.players[_vn].hand || []).length === 2 && opponents === 1 && (process.env.DEV_EQLOG || this.countsForSkill())) {
                         try {
                             const vh = this.players[_vn].hand, known = new Set([...this.communityCards, ...p.hand, ...vh]);
                             const deck0 = FULL_DECK.filter(c => !known.has(c)), need = 5 - this.communityCards.length;
                             let w = 0, n = 0;
-                            for (let it = 0; it < (need ? 300 : 1); it++) {
+                            // 리버는 한 번, 턴은 남은 카드 전부(정확), 플랍은 60번 표본(운영 서버 부담을 줄이려고 — 합계로 쌓이면 표본 오차는 평균된다)
+                            const iters = need === 0 ? 1 : need === 1 ? deck0.length : (process.env.DEV_EQLOG ? 300 : 60);
+                            for (let it = 0; it < iters; it++) {
                                 const d = deck0.slice(), bd = this.communityCards.slice();
-                                for (let k = 0; k < need; k++) bd.push(d.splice(Math.floor(Math.random() * d.length), 1)[0]);
+                                if (need === 1) bd.push(d[it]);
+                                else for (let k = 0; k < need; k++) bd.push(d.splice(Math.floor(Math.random() * d.length), 1)[0]);
                                 const m = Hand.solve(p.hand.concat(bd)), h = Hand.solve(vh.concat(bd)), ws = Hand.winners([m, h]);
                                 w += ws.length === 2 ? 0.5 : (ws[0] === m ? 1 : 0); n++;
                             }
+                            this._eqCal = { nick, hand: this.handId, st: street, est: vsRange, tr: w / n, bot: !!this.players[_vn].isBot };
+                            if (process.env.DEV_EQLOG)
                             console.log('EQLOG ' + JSON.stringify({ st: street, old: this.equityVsRangeMC(nick, _bf, _ag), nw: vsRange, tr: w / n, raw: equity, bf: Math.round(_bf * 100) / 100, wd: _vRangeW, bot: !!this.players[_vn].isBot }));
                         } catch (e) {}
                     }
@@ -5846,12 +5861,14 @@ io.on('connection', (socket) => {
     socket.on('getSkillBoard', (req) => {
         if (!socket.nickname) return;
         const rows = [];
+        const calSum = {};      // 📏 승률 추정 정확도 — 모든 계정의 최근 30일 합계
         // 최근 14일의 날짜 열쇠 (추세선용)
         const dayKeys = [];
         { const now = new Date(); for (let i = 13; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i); dayKeys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`); } }
         MockDB.users.forEach(u => {
             if (!u || !u.nickname || u.nickname.startsWith('🤖') || u.nickname === ADMIN_NICK) return;
             const a30 = MockDB.aggregateRange(u, 30);
+            Object.keys(a30).forEach(k => { if (k.startsWith('evQ')) calSum[k] = (calSum[k] || 0) + a30[k]; });
             const ev = evView(a30);
             if (!ev || ev.hands < 10) return;
             const a7 = MockDB.aggregateRange(u, 7);
@@ -5878,7 +5895,12 @@ io.on('connection', (socket) => {
             });
         });
         rows.sort((x, y) => (x.low ? 1 : 0) - (y.low ? 1 : 0) || y.gto - x.gto || x.loss100 - y.loss100);
-        socket.emit('skillBoard', { rows: rows.slice(0, 40), days: 30, mini: !!(req && req.mini),
+        const cal = [];
+        ['h', 'b'].forEach(w => ['flop', 'turn', 'river'].forEach(st => {
+            const n = calSum['evQn_' + st + '_' + w] || 0;
+            if (n >= 30) cal.push({ who: w, st, n, bias: Math.round((calSum['evQe_' + st + '_' + w] || 0) / n * 1000) / 10, rmse: Math.round(Math.sqrt(Math.max(0, (calSum['evQs_' + st + '_' + w] || 0) / n)) * 1000) / 10 });
+        }));
+        socket.emit('skillBoard', { rows: rows.slice(0, 40), days: 30, mini: !!(req && req.mini), cal,
             kinds: Blunder.KIND_KEYS.map(k => ({ id: k, name: Blunder.KINDS[k].name })) });
     });
 
