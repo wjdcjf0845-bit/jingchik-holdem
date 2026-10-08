@@ -109,7 +109,10 @@ const Challenge = require('./lib/challenge');   // 🤖 컴까기(AI 도장깨�
 const Rogue = require('./lib/roguerun');        // 🍀 증강 컴까기(로그라이크 런) — 층·증강·정산
 const { Capacity } = require('./lib/capacity');  // 🚦 서버 정원 · 입장 대기열
 const Blunder = require('./lib/blunder');       // 💥 리포트의 '치명적 플레이' 기록
+const Ranges = require('./lib/ranges');         // 📊 프리플랍 범위표(레이즈를 받았을 때 패마다 3벳·콜·폴드 빈도)
 const EvLoss = require('./lib/evloss');         // 📉 결정마다 잃은 기대값(bb) — 실력 점수의 단위
+const Freqs = require('./lib/freqs');           // 📊 상황별 빈도(오픈·방어·3벳·c벳…)를 기준과 비교
+const VRange = require('./lib/vrange');         // 🔍 상대의 프리플랍 행동 → 들고 있을 만한 패의 무게
 const GtoAdvice = require('./lib/gtoadvice');   // 🎓 학습모드 조언 — 상대 수·포지션·스택 깊이별
 const Quiz = require('./lib/gtoquiz');          // 🧠 GTO 문제 학습
 // 칭호는 화면에 그대로 찍히는 문구라 id 대신 문구를 내려보낸다 (클라이언트에 카탈로그 사본을 두지 않으려고)
@@ -353,7 +356,7 @@ const MockDB = {
             if (!u || !u.nickname || u.nickname.startsWith('🤖') || u.statsEpoch === this.STATS_EPOCH) return;
             const totals = {};
             this.STAT_FIELDS.forEach(k => { if (u[k]) totals[k] = u[k]; u[k] = 0; });
-            Object.keys(u).filter(k => k.startsWith('lk') || k.startsWith('gq') || k.startsWith('ev')).forEach(k => { totals[k] = u[k]; delete u[k]; });
+            Object.keys(u).filter(k => k.startsWith('lk') || k.startsWith('gq') || k.startsWith('ev') || k.startsWith('fq')).forEach(k => { totals[k] = u[k]; delete u[k]; });
             delete u.recentDec;
             const had = Object.keys(totals).length || (u.dailyLog && Object.keys(u.dailyLog).length);
             if (had) {
@@ -592,7 +595,7 @@ const MockDB = {
             seasonPoints: u.seasonPoints || 0,
             seatSum: u.seatSum || 0, seatCnt: u.seatCnt || 0,
             // 실수 유형별 누적 (lkN_*, lkB_*)
-            ...Object.fromEntries(Object.keys(u).filter(k => k.startsWith('lk') || k.startsWith('gq') || k.startsWith('ev')).map(k => [k, u[k] || 0]))
+            ...Object.fromEntries(Object.keys(u).filter(k => k.startsWith('lk') || k.startsWith('gq') || k.startsWith('ev') || k.startsWith('fq')).map(k => [k, u[k] || 0]))
         };
     },
     // 📅 [일/주/월 리포트] 지정 범위(일수)의 dailyLog를 합산
@@ -607,7 +610,7 @@ const MockDB = {
             if (dt >= cutoff) {
                 const day = log[key];
                 Object.keys(sum).forEach(f => { sum[f] += (day[f] || 0); });
-                Object.keys(day).forEach(f => { if (f.startsWith('lk') || f.startsWith('gq') || f.startsWith('ev') || f === 'seatSum' || f === 'seatCnt' || f === 'netBB' || f === 'netHands') sum[f] = (sum[f] || 0) + (day[f] || 0); });
+                Object.keys(day).forEach(f => { if (f.startsWith('lk') || f.startsWith('gq') || f.startsWith('ev') || f.startsWith('fq') || f === 'seatSum' || f === 'seatCnt' || f === 'netBB' || f === 'netHands') sum[f] = (sum[f] || 0) + (day[f] || 0); });
             }
         });
         return sum;
@@ -2161,7 +2164,17 @@ class GameRoom {
     //    예전엔 "지금 이 순간 상대 범위를 이기는 비율"에 아무 패 상대 승률을 조금 섞었다. 그 계산은 드로우를 거의 0으로 쳐서,
     //    턴의 플러시 드로우(9아웃, 실제 약 18~20%)가 15%로 나왔다. 여기서는 상대 범위의 패 하나하나와 끝까지 가 본다.
     //    상대 범위 = 지금 보드에서 강한 순 상위 top(벳 크기·스트리트에 따라) + 그 밖의 패 일부(블러프·드로우).
-    equityVsRangeMC(nick, betFrac, aggroStreets) {
+    // 🔍 상대(v)가 이번 판 프리플랍에 한 행동으로 본 범위 — 패 코드 → 무게(0~1). 기록이 없으면 null.
+    villainRangeWeights(v) {
+        const pl = this.players[v];
+        if (!pl) return null;
+        const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+        const acts = VRange.lineFromLog((this.actionLog || []).filter(a => a.street === 1), v, bb, n => (this.players[n] && this.players[n].position) || '');
+        if (!acts.length) return null;
+        return VRange.weightFn({ pos: pl.position || '', headsUp: this.playerOrder.length === 2, inPosition: this.isInPosition(v), acts });
+    }
+    //   weightFn(선택): 상대의 프리플랍 범위 무게. 주면 "아무 두 장"이 아니라 그 범위에서 상대 패를 뽑는다(학습 조언·채점용. 봇은 주지 않는다).
+    equityVsRangeMC(nick, betFrac, aggroStreets, weightFn) {
         const p = this.players[nick];
         const cc = this.communityCards;
         if (!p || !p.hand || p.hand.length !== 2 || !cc || cc.length < 3) return null;
@@ -2173,15 +2186,32 @@ class GameRoom {
             return RangeEq.handScore(h.rank, h.cards.map(c => ORDER.indexOf(c.value === '10' ? 'T' : c.value)));
         };
         const cand = [];
-        for (let i = 0; i < 600; i++) {   // 표본을 넉넉히 — 조언을 보여줄 때와 채점할 때 값이 흔들리지 않게
+        for (let i = 0, tries = 0; i < 600 && tries < 9000; tries++) {   // 표본을 넉넉히 — 조언을 보여줄 때와 채점할 때 값이 흔들리지 않게
             const a = pool[Math.floor(Math.random() * pool.length)], b = pool[Math.floor(Math.random() * pool.length)];
             if (a === b) continue;
+            if (weightFn && Math.random() > weightFn(handToCode([a, b]))) continue;      // 범위 밖의 패는 그 무게만큼만 뽑힌다
+            i++;
             try { cand.push({ h: [a, b], s: score([a, b].concat(cc)) }); } catch (e) {}
         }
         if (cand.length < 60) return null;
         cand.sort((x, y) => y.s - x.s);
         const top = RangeEq.bettingRangeTop({ street: this.gameStage, betFrac, aggroStreets });
-        const nTop = Math.max(8, Math.ceil(cand.length * top));
+        let nTop = Math.max(8, Math.ceil(cand.length * top));
+        if (weightFn) {
+            // 벳에 필요한 패의 세기는 예전과 같은 기준(아무 두 장의 상위 top)으로 두고, 상대 범위 안에서 그 기준을 넘는 패만 벳 범위로 본다.
+            //   (범위를 좁힌 뒤에 또 "그중 상위 top"만 남기면 이중으로 좁혀져서 상대가 세트·투페어만 들고 있는 것처럼 계산된다 — 실측)
+            const base = [];
+            for (let i = 0; i < 300; i++) {
+                const a = pool[Math.floor(Math.random() * pool.length)], b2 = pool[Math.floor(Math.random() * pool.length)];
+                if (a === b2) continue;
+                try { base.push(score([a, b2].concat(cc))); } catch (e) {}
+            }
+            if (base.length >= 60) {
+                base.sort((x, y) => y - x);
+                const thr = base[Math.min(base.length - 1, Math.max(0, Math.ceil(base.length * top) - 1))];
+                nTop = Math.max(8, cand.filter(c => c.s >= thr).length);
+            }
+        }
         const range = cand.slice(0, nTop);
         // 블러프·드로우 몫: 범위 밖의 패를 벳 범위의 25%만큼 섞는다 (리버는 20%)
         const rest = cand.slice(nTop), nBluff = Math.min(rest.length, Math.round(nTop * (this.gameStage >= 4 ? 0.20 : 0.25)));
@@ -3861,6 +3891,7 @@ class GameRoom {
     // 📊 [신규] 액션 단위 포커 지표 + GTO 근접도 수집
     collectActionStats(nick, type, p, beforeBet, beforeHighest, raisesBefore) {
         const ev = {};
+        const st0x = s => s || 'preflop';
         const toCall = beforeHighest - beforeBet;
         const facingBet = toCall > 0;
         const isRaise = (type === 'raise' || type === 'allin') && p.currentBet > beforeHighest;
@@ -3904,6 +3935,18 @@ class GameRoom {
                     const st0 = sa0.advice.street || 'preflop';
                     MockDB.recordEv(nick, { ['evG_' + _el.grade]: 1, ['evC_' + st0]: 1, ['evS_' + st0]: _el.lossBB }, !!this._learnMode);
                 }
+                // 📊 상황별 빈도: 이 자리에서 "했나"와 "조언이 권한 빈도"를 같이 쌓는다
+                try {
+                    const pre0 = st0x(sa0.advice.street) === 'preflop';
+                    const spot = Freqs.spotOf({
+                        street: st0x(sa0.advice.street), mix: sa0.advice.mix, type, isRaise, toCall: Math.max(0, toCall),
+                        pos: p.position || '', isBB: !!(p.role && p.role.includes('BB')), raisesBefore: raisesBefore || 0,
+                        iRaised: (this.actionLog || []).some(a => a.nick === nick && a.street === 1 && (a.type === 'raise' || a.type === 'allin')),
+                        limpers: pre0 ? this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded && (this.players[n].currentBet || 0) === bb0 && !(this.players[n].role && this.players[n].role.includes('BB'))).length : 0,
+                        pfAggressor: !pre0 && this.lastAggressorBefore(this.gameStage) === nick, allinIsCall: !!sa0.advice.allinIsCall
+                    });
+                    if (spot) MockDB.recordEv(nick, Freqs.fields(spot), !!this._learnMode);
+                } catch (e) {}
             }
         }
         const gto = this.countsForSkill() ? this.gtoProximity(nick, type, p, toCall) : null;
@@ -3945,6 +3988,7 @@ class GameRoom {
     // 🎓 [학습모드] 현재 플레이어 상황에서 GTO 권장 액션 분석
     //   각 액션(폴드/체크/콜/레이즈)의 EV와 권장 빈도, 핸드 평가를 계산
     getGtoAdvice(nick) {
+        const cont = f => (f.raise || 0) + (f.call || 0);
         const p = this.players[nick];
         if (!p || !p.hand || p.hand.length !== 2 || p.isFolded) return null;
 
@@ -3982,6 +4026,7 @@ class GameRoom {
         let notes = [];
         let sizeHint = '', rawEquity = null, equityLabel = '내 승률';
         const _ev = {};          // 📉 액션별 기대값(칩) — EV 손실 계산용 (lib/evloss.js)
+        let _vRangeW = null;     // 🔍 벳한 상대의 프리플랍 범위 폭(%)
         const _bbNow = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
         const _liveOpp = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded);
         const _stk = n => this.players[n].chips + (this.players[n].currentBet || 0);
@@ -4005,8 +4050,11 @@ class GameRoom {
                 && (this.players[n].currentBet || 0) === this.currentHighestBet && this.currentHighestBet > bb) || null;
             const _opnPos = _opn ? (this.players[_opn].position || '') : '';
             const _huTable = this.playerOrder.length === 2;
+            // 📊 범위표(lib/ranges.js)에 넘길 것: 레이즈가 몇 번 나왔나 · 내가 이미 올렸나(= 내 오픈에 3벳이 온 것) · 올린 사람보다 내가 뒤인가
+            const _iRaised = (this.actionLog || []).some(a => a.nick === nick && (a.board || []).length === 0 && (a.type === 'raise' || a.type === 'allin'));
             const _ctx = { numActive: opponents + 1, threeBetPlus: (this.raiseCountThisStreet || 0) >= 2,
-                headsUp: _huTable, openerPos: _opnPos, closing: !!isBB, potOdds: facingRaise ? potOdds : 0 };   // potOdds: 오픈 크기·앤티에 따라 방어 폭이 달라진다
+                headsUp: _huTable, openerPos: _opnPos, closing: !!isBB, potOdds: facingRaise ? potOdds : 0,   // potOdds: 오픈 크기·앤티에 따라 방어 폭이 달라진다
+                chart: true, raises: this.raiseCountThisStreet || 1, iRaised: _iRaised, inPosition: this.isInPosition(nick) };
             const rt = preflopRangeTier(code, p.position || '', facingRaise, _ctx);
             // 문구: 처음 연 것이면 '오픈', 누가 림프한 뒤 올린 것(내가 림프했거나 블라인드가 올림)이면 '레이즈', 두 번째 레이즈부터는 '리레이즈'
             const _iLimped = !isBB && (p.currentBet || 0) >= bb;
@@ -4098,6 +4146,17 @@ class GameRoom {
                 const _bh = Math.max(1, _liveOpp.filter(n => !this.players[n].hasActed && !this.players[n].isAllIn).length);
                 posInfo.chart.push = { range: ShortStack.pushPct(effBB, _bh), behind: _bh };
             }
+            // 📊 레이즈를 받은 자리면 그 상황의 범위표 한 장을 같이 보낸다(패마다 [레이즈 %, 콜 %])
+            if (facingRaise && rt.freq && !_special) {
+                const cells = {}; let wr = 0, wc = 0;
+                Ranges.ALL.forEach(c => {
+                    const f = (preflopRangeTier(c, p.position || '', true, _ctx).freq) || null;
+                    if (!f) return;
+                    if (f.raise || f.call) cells[c] = [f.raise, f.call];
+                    wr += f.raise / 100 * Ranges.combos(c); wc += f.call / 100 * Ranges.combos(c);
+                });
+                posInfo.chart.vs = { name: rt.chartName, raiseName: rt.raiseName || '3벳', cells, raise: Math.round(wr / 13.26), call: Math.round(wc / 13.26), priced: !!rt.priced };
+            }
             if (_special) {
                 // 위에서 결정됨
                 if (bestAction === 'raise') sizeHint = '올인';
@@ -4137,7 +4196,21 @@ class GameRoom {
                 }
             } else {
                 // 레이즈에 직면 — 3벳/콜/폴드
-                if (rt.tier === 'raise') {
+                if (rt.freq) {
+                    // 📊 범위표가 있는 자리: 패마다 정해진 빈도를 그대로 쓴다
+                    const f = rt.freq, rn = rt.raiseName || '3벳';
+                    mix = { fold: f.fold, call: f.call, raise: f.raise };
+                    bestAction = rt.tier;
+                    const parts = [f.raise ? `${rn} ${f.raise}%` : '', f.call ? `콜 ${f.call}%` : '', f.fold ? `폴드 ${f.fold}%` : ''].filter(Boolean).join(' · ');
+                    const pure = Math.max(f.raise, f.call, f.fold) >= 85;
+                    let why;
+                    if (rt.tier === 'raise') {
+                        const bluffy = rt.score < 70 && !/^(AA|KK|QQ|JJ|TT|AK)/.test(code);
+                        why = bluffy ? `${code}는 ${rn} 범위의 "블러프 쪽"입니다 — 상대의 강한 패(에이스·킹)를 막거나 뒤집을 길이 있어서, 콜보다 ${rn}으로 섞습니다.` : `${code}는 ${rn}으로 값을 키우는 패입니다.`;
+                    } else if (rt.tier === 'call') why = `${code}는 콜로 플랍을 보는 패입니다.${f.raise >= 15 ? ` ${rn}도 섞입니다.` : ''}`;
+                    else why = cont(f) > 0 ? `${code}는 접는 쪽이 기본이지만 가끔 섞어 치는 패입니다.` : `${code}는 이 자리의 방어 범위 밖입니다 — 폴드.`;
+                    reason = `${why} 범위표(${rt.chartName}): ${parts}${pure ? '' : ' — 섞어 치는 패라 어느 쪽도 실수가 아닙니다'}.${rt.priced ? ' (오픈 크기·앤티에 맞춰 콜 폭을 조정했습니다.)' : ''}${_vs}`;
+                } else if (rt.tier === 'raise') {
                     mix = { fold: 5, call: 35, raise: 60 };
                     bestAction = 'raise'; reason = `강한 핸드(${code}) — 3벳으로 밸류를 키우세요.${_vs}`;
                 } else if (rt.tier === 'call') {
@@ -4163,6 +4236,12 @@ class GameRoom {
                     const callers = _liveOpp.filter(n => n !== _opn && (this.players[n].currentBet || 0) === this.currentHighestBet).length;
                     const inPos = !(p.role && (p.role.includes('SB') || p.role.includes('BB'))) || _huTable && p.role.includes('D');
                     sizeHint = GtoAdvice.threeBetSize(this.currentHighestBet, callers, inPos, bb, _stk(nick)).text;
+                    // 4벳은 3벳의 2.2~2.5배, 그 위(5벳)는 올인이 기준
+                    if (_raises >= 3) sizeHint = '올인';
+                    else if (_raises === 2) {
+                        const to = Math.round(this.currentHighestBet * (inPos ? 2.2 : 2.5) / bb) * bb;
+                        sizeHint = to >= _stk(nick) * 0.4 ? '올인 (4벳 크기가 스택의 40%를 넘어 어차피 못 접습니다)' : `약 ${to.toLocaleString()} (상대 3벳의 ${inPos ? '2.2' : '2.5'}배)`;
+                    }
                 }
             }
             // 📉 기대값(칩). 레이즈를 받았으면 "콜의 기대값" = 상대 범위 상대 승률 × 실현율 × 콜 뒤 팟 − 콜 금액,
@@ -4204,8 +4283,27 @@ class GameRoom {
             if (toCall > 0) {
                 try {
                     const _bf = toCall / Math.max(_bbNow, potBefore - toCall);
-                    const _ag = HandRead.summarizeVillain(this.actionLog, this.lastAggressorBefore(this.gameStage + 1) || '').aggroStreets || 1;
-                    const vsRange = this.equityVsRangeMC(nick, _bf, _ag);
+                    const _vn = this.lastAggressorBefore(this.gameStage + 1) || '';
+                    const _ag = HandRead.summarizeVillain(this.actionLog, _vn).aggroStreets || 1;
+                    // 🔍 벳한 사람의 프리플랍 행동으로 범위를 먼저 좁히고, 그 안에서 "이 보드에 강한 쪽"을 벳 범위로 본다
+                    const _wf = _vn ? this.villainRangeWeights(_vn) : null;
+                    if (_wf) _vRangeW = VRange.widthOf(_wf);
+                    const vsRange = this.equityVsRangeMC(nick, _bf, _ag, _wf);
+                    // 🔬 [검증용 · DEV_EQLOG] 추정 승률(범위 반영 전/후)을 "벳한 사람의 실제 패 상대 승률"과 견준다
+                    if (process.env.DEV_EQLOG && _vn && this.players[_vn] && (this.players[_vn].hand || []).length === 2 && opponents === 1) {
+                        try {
+                            const vh = this.players[_vn].hand, known = new Set([...this.communityCards, ...p.hand, ...vh]);
+                            const deck0 = FULL_DECK.filter(c => !known.has(c)), need = 5 - this.communityCards.length;
+                            let w = 0, n = 0;
+                            for (let it = 0; it < (need ? 300 : 1); it++) {
+                                const d = deck0.slice(), bd = this.communityCards.slice();
+                                for (let k = 0; k < need; k++) bd.push(d.splice(Math.floor(Math.random() * d.length), 1)[0]);
+                                const m = Hand.solve(p.hand.concat(bd)), h = Hand.solve(vh.concat(bd)), ws = Hand.winners([m, h]);
+                                w += ws.length === 2 ? 0.5 : (ws[0] === m ? 1 : 0); n++;
+                            }
+                            console.log('EQLOG ' + JSON.stringify({ st: street, old: this.equityVsRangeMC(nick, _bf, _ag), nw: vsRange, tr: w / n, raw: equity, bf: Math.round(_bf * 100) / 100, wd: _vRangeW, bot: !!this.players[_vn].isBot }));
+                        } catch (e) {}
+                    }
                     if (vsRange != null) {
                         rawEquity = equity;
                         // 벳한 사람 말고도 남은 상대가 있으면 그 사람들도 이겨야 한다. 아무 패 상대 승률(전원 상대)을 한 명분으로 환산해 나머지 인원만큼 곱한다.
@@ -4228,7 +4326,7 @@ class GameRoom {
             // 📉 콜의 기대값(칩) = 승률 × 실현율 × 콜 뒤 팟 − 콜 금액. 카드가 남은 스트리트는 뒤에 또 벳을 맞아 승률만큼 못 가져가므로 실현율을 곱한다(플랍 0.8 · 턴 0.9 · 리버 1).
             if (toCall > 0) _ev.call = Math.round(equity * (street === 'flop' ? 0.8 : street === 'turn' ? 0.9 : 1) * (potBefore + p.currentBet + toCall) - toCall);
             tier = pa.tier; tierLabel = pa.tierLabel; tierColor = pa.tierColor;   // 등급도 "한 명 상대 환산"으로
-            if (rawEquity != null) notes.push('상대 벳 범위 반영');
+            if (rawEquity != null) notes.push(_vRangeW != null && _vRangeW < 90 ? `상대 범위 반영 (프리플랍 약 ${_vRangeW}% → 그중 벳하는 쪽)` : '상대 벳 범위 반영');
             const _tx = this.analyzeBoardTexture() || {};
             if ((mix.bet || 0) > 0 && bestAction === 'bet') {
                 sizeHint = GtoAdvice.betSize({ opponents, wet: !!_tx.wet, dry: !!_tx.dry, spr: _spr, pot: potBefore, thin: !!pa.thin, range: !!pa.rangeBet }).text;
@@ -5801,6 +5899,7 @@ io.on('connection', (socket) => {
             nick, me, hands: ev.hands, decisions: ev.decisions, easy: a.gqEasy || 0,
             score: ev.score, pm: ev.pm, lo: ev.lo, hi: ev.hi, raw: si.raw, loss100: ev.loss100, se100: ev.se100, L0: EvLoss.L0,
             grades: ev.grades, evStreets: ev.streets, net100: ev.net100, adj100: ev.adj100, allins: ev.allins,
+            freqs: Freqs.summarize(a), freqMin: Freqs.MIN,
             buckets: { best: a.gqN_best || 0, ok: a.gqN_ok || 0, weak: a.gqN_weak || 0, bad: a.gqN_bad || 0 },
             streets, leaks,
             recent: me ? (u.recentDec || []).slice(-30).reverse().map(r => Object.assign({}, r, { why: Blunder.std(r.why) })) : null
@@ -6667,7 +6766,7 @@ io.on('connection', (socket) => {
             wtsd = d('wentToShowdown'); wsd = d('wonAtShowdown'); gtoSum = d('gtoScoreSum'); gtoCnt = d('gtoScoreCount'); gtoWt = d('gtoW');
             since = snap.ts; seatSum = d('seatSum'); seatCnt = d('seatCnt');
             leakFrom(k => (u[k] || 0) - (snap[k] || 0));
-            evSrc = {}; Object.keys(u).filter(k => k.startsWith('ev')).forEach(k => { evSrc[k] = (u[k] || 0) - (snap[k] || 0); });
+            evSrc = {}; Object.keys(u).filter(k => k.startsWith('ev') || k.startsWith('fq')).forEach(k => { evSrc[k] = (u[k] || 0) - (snap[k] || 0); });
             const prevAch = new Set(snap.achievements || []);
             const newAch = (u.achievements || []).filter(id => !prevAch.has(id)).map(id => ACHIEVEMENTS[id] ? { id, ...ACHIEVEMENTS[id] } : null).filter(Boolean);
             metaTop = {
@@ -6717,6 +6816,7 @@ io.on('connection', (socket) => {
             .sort((a, b) => b.bb - a.bb);
         report.avgSeats = seatCnt >= 5 ? Math.round(seatSum / seatCnt * 10) / 10 : null;
         report.ev = evView(evSrc);     // 📉 실력 점수(EV 손실 기준) · 오차 · 등급 분포 · 운을 뺀 결과
+        report.freqs = Freqs.summarize(evSrc);      // 📊 상황별 빈도 비교
         report.coaching = buildCoaching(report.stats, handsPlayed, { avgSeats: report.avgSeats, leaks: report.leaks, decisions: gtoCnt });
         socket.emit('sessionReport', report);
     });

@@ -205,15 +205,15 @@ test('방어 기준 입력이 없으면(봇) 예전 기준 그대로', () => {
     assert.strictEqual(PF.studyDefense({ openerPos: 'nope' }), null);
 });
 
-test('오픈 받기 문제: 정답은 자리별 기준과 일치하고 경계에서 떨어져 있다', () => {
+test('오픈 받기 문제: 정답은 범위표와 일치하고, 섞어 치는 패는 나오지 않는다', () => {
     const rng = lcg(31);
     for (let i = 0; i < 300; i++) {
         const q = Q.generate('defend', rng);
         const hero = q.tags[2].replace('내 자리 ', ''), opener = q.tags[3].split(' ')[0];
-        const code = PF.handToCode(q.hand), ctx = { openerPos: opener, closing: hero === 'BB' };
-        assert.strictEqual(q.answer, PF.preflopRangeTier(code, hero, true, ctx).tier, q.prompt);
-        const th = PF.studyDefense(ctx, hero).callTh + (PF.isInOpenRange(code, hero) ? 0 : 4);
-        assert.ok(Math.abs(PF.handRangeScore(code) - th) > 2, '경계 근처: ' + q.prompt);
+        const code = PF.handToCode(q.hand), ctx = { chart: true, openerPos: opener, closing: hero === 'BB' };
+        const t = PF.preflopRangeTier(code, hero, true, ctx);
+        assert.strictEqual(q.answer, t.tier, q.prompt);
+        assert.ok(t.freq && Math.max(t.freq.raise, t.freq.call, t.freq.fold) >= 85, '섞어 치는 패: ' + q.prompt);
     }
 });
 
