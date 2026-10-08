@@ -109,6 +109,7 @@ const Challenge = require('./lib/challenge');   // 🤖 컴까기(AI 도장깨�
 const Rogue = require('./lib/roguerun');        // 🍀 증강 컴까기(로그라이크 런) — 층·증강·정산
 const { Capacity } = require('./lib/capacity');  // 🚦 서버 정원 · 입장 대기열
 const Blunder = require('./lib/blunder');       // 💥 리포트의 '치명적 플레이' 기록
+const EvLoss = require('./lib/evloss');         // 📉 결정마다 잃은 기대값(bb) — 실력 점수의 단위
 const GtoAdvice = require('./lib/gtoadvice');   // 🎓 학습모드 조언 — 상대 수·포지션·스택 깊이별
 const Quiz = require('./lib/gtoquiz');          // 🧠 GTO 문제 학습
 // 칭호는 화면에 그대로 찍히는 문구라 id 대신 문구를 내려보낸다 (클라이언트에 카탈로그 사본을 두지 않으려고)
@@ -343,7 +344,7 @@ const MockDB = {
     //    · 0으로 돌리는 것: 핸드 수·승수, VPIP/PFR 등 지표, GTO 점수, 실수 유형·치명적 플레이, 일별 기록, 학습 모드 통계
     //    · 그대로 두는 것: 뱅크롤, 우승·토큰·코어, 꾸미기, 업적, 상대전적, 컴까기·런 진행, 문제 풀이 기록
     //    · 이전 값은 지우지 않고 statsArchive 에 보관한다(되돌릴 수 있게). 계정마다 한 번만 적용된다.
-    STATS_EPOCH: '2026-10-06b',   // b: 점수 계산을 가중 평균으로 바꾸면서 같은 날 한 번 더 맞췄다
+    STATS_EPOCH: '2026-10-09',    // 실력 점수를 "권장과 일치한 비율"에서 "잃은 기대값(EV 손실)"으로 바꾸면서 새로 시작
     STAT_FIELDS: ['handsPlayed', 'handsWon', 'vpipHands', 'preflopOpps', 'pfrHands', 'threeBetCount', 'threeBetOpps', 'aggrBets', 'aggrCalls',
         'foldToBet', 'faceBet', 'wentToShowdown', 'wonAtShowdown', 'gtoScoreSum', 'gtoScoreCount', 'gtoW', 'seatSum', 'seatCnt', 'netBB', 'netHands'],
     applyStatsEpoch() {
@@ -352,7 +353,7 @@ const MockDB = {
             if (!u || !u.nickname || u.nickname.startsWith('🤖') || u.statsEpoch === this.STATS_EPOCH) return;
             const totals = {};
             this.STAT_FIELDS.forEach(k => { if (u[k]) totals[k] = u[k]; u[k] = 0; });
-            Object.keys(u).filter(k => k.startsWith('lk') || k.startsWith('gq')).forEach(k => { totals[k] = u[k]; delete u[k]; });
+            Object.keys(u).filter(k => k.startsWith('lk') || k.startsWith('gq') || k.startsWith('ev')).forEach(k => { totals[k] = u[k]; delete u[k]; });
             delete u.recentDec;
             const had = Object.keys(totals).length || (u.dailyLog && Object.keys(u.dailyLog).length);
             if (had) {
@@ -591,7 +592,7 @@ const MockDB = {
             seasonPoints: u.seasonPoints || 0,
             seatSum: u.seatSum || 0, seatCnt: u.seatCnt || 0,
             // 실수 유형별 누적 (lkN_*, lkB_*)
-            ...Object.fromEntries(Object.keys(u).filter(k => k.startsWith('lk') || k.startsWith('gq')).map(k => [k, u[k] || 0]))
+            ...Object.fromEntries(Object.keys(u).filter(k => k.startsWith('lk') || k.startsWith('gq') || k.startsWith('ev')).map(k => [k, u[k] || 0]))
         };
     },
     // 📅 [일/주/월 리포트] 지정 범위(일수)의 dailyLog를 합산
@@ -606,7 +607,7 @@ const MockDB = {
             if (dt >= cutoff) {
                 const day = log[key];
                 Object.keys(sum).forEach(f => { sum[f] += (day[f] || 0); });
-                Object.keys(day).forEach(f => { if (f.startsWith('lk') || f.startsWith('gq') || f === 'seatSum' || f === 'seatCnt' || f === 'netBB' || f === 'netHands') sum[f] = (sum[f] || 0) + (day[f] || 0); });
+                Object.keys(day).forEach(f => { if (f.startsWith('lk') || f.startsWith('gq') || f.startsWith('ev') || f === 'seatSum' || f === 'seatCnt' || f === 'netBB' || f === 'netHands') sum[f] = (sum[f] || 0) + (day[f] || 0); });
             }
         });
         return sum;
@@ -781,15 +782,28 @@ const MockDB = {
         const nK = 'lkN_' + kind, bK = 'lkB_' + kind;
         if (isLearn) {
             const L = u.learnStats || (u.learnStats = {});
-            L[nK] = (L[nK] || 0) + 1; L[bK] = Math.round(((L[bK] || 0) + costBB) * 10) / 10;
-            L.blunders = Blunder.add(L.blunders, rec);
+            L[nK] = (L[nK] || 0) + 1; L[bK] = Math.round(((L[bK] || 0) + costBB) * 100) / 100;
+            if (rec) L.blunders = Blunder.add(L.blunders, rec);
         } else {
-            u[nK] = (u[nK] || 0) + 1; u[bK] = Math.round(((u[bK] || 0) + costBB) * 10) / 10;
+            u[nK] = (u[nK] || 0) + 1; u[bK] = Math.round(((u[bK] || 0) + costBB) * 100) / 100;
             this._bumpDaily(u, { [nK]: 1, [bK]: costBB });
-            u.blunders = Blunder.add(u.blunders, rec);
+            if (rec) u.blunders = Blunder.add(u.blunders, rec);
         }
         this.save();
         return rec;
+    },
+    // 📉 EV 손실 집계 — 이름이 ev 로 시작하는 칸에 더한다(일별 기록에도). 판 단위(evLoss·evLossSq·evHands)와 결정 단위(evG_등급·evC_스트리트·evS_스트리트)를 같이 쓴다.
+    recordEv(nickname, fields, isLearn) {
+        const u = this.users.get(nickname);
+        if (!u || typeof nickname !== 'string' || nickname.startsWith('🤖')) return;
+        const box = isLearn ? (u.learnStats || (u.learnStats = {})) : u;
+        const daily = {};
+        Object.keys(fields).forEach(k => {
+            const v = fields[k];
+            if (!Number.isFinite(v) || v === 0) return;
+            box[k] = Math.round(((box[k] || 0) + v) * 1e4) / 1e4; daily[k] = v;
+        });
+        if (!isLearn) this._bumpDaily(u, daily);
     },
     // 🔎 점수의 근거로 보여줄 세부 집계 — 스트리트별(가중 합·가중치·건수), 점수 구간별 건수, 점수에서 뺀 뻔한 폴드 수
     _gqFields(ev) {
@@ -3289,6 +3303,7 @@ class GameRoom {
             if (actioners.length <= 1 && active.length >= 2 && this.gameStage >= 1 && this.gameStage <= 3) {
                 this.turnIndex = -1;
                 this.sendState();
+                try { this.captureAllinEq(); } catch (e) {}
                 this.emitEquity();
                 if (this.pendingStageTimeout) clearTimeout(this.pendingStageTimeout);
                 this.pendingStageTimeout = setTimeout(() => this.nextStage(), SHOWDOWN_REVEAL_MS);
@@ -3307,6 +3322,7 @@ class GameRoom {
             // 다음 카드를 깔기 전에 3초를 준다 (승률 배지를 보고 상황을 파악할 시간).
             this.turnIndex = -1;
             this.sendState();
+            try { this.captureAllinEq(); } catch (e) {}
             this.emitEquity();
             if (this.pendingStageTimeout) clearTimeout(this.pendingStageTimeout);
             this.pendingStageTimeout = setTimeout(() => this.nextStage(), SHOWDOWN_REVEAL_MS);
@@ -3768,8 +3784,12 @@ class GameRoom {
         const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
         const toCall = Math.max(0, Math.min(beforeHighest - beforeBet, pre.chips));
         const putIn = Math.max(0, (p.currentBet || 0) - beforeBet);
-        const a = Blunder.assess(advice, type, { bb, pot: pre.pot, toCall, putIn, equity: (advice.equity || 0) / 100, street: advice.street });
-        if (!a) return;
+        // 손실은 실력 점수와 같은 계산(EV 손실)을 쓴다 — 점수와 리포트의 숫자가 서로 어긋나지 않게
+        const el = this._evLast && this._evLast.nick === nick ? this._evLast.res : null;
+        if (!el || !el.kind || !(el.lossBB > 0)) return;
+        const a = { kind: el.kind, costBB: el.lossBB };
+        // 유형별 합계는 전부 세고, 상황째로 보관하는 것은 1bb 이상 잃은 결정만
+        if (el.lossBB < 1) { MockDB.recordBlunder(nick, null, a.kind, a.costBB, !!this._learnMode); return; }
         const key = GtoAdvice.actionKey(advice, type);
         const r1 = x => Math.round(x / bb * 10) / 10;
         const ch = this._challenge;
@@ -3797,10 +3817,33 @@ class GameRoom {
         this.playerOrder.forEach(nick => {
             const pl = this.players[nick], start = this.handStartStacks[nick];
             if (!pl || pl.isBot || typeof start !== 'number' || !this.countsForSkill()) return;
-            MockDB.recordNet(nick, Math.round((pl.chips - start) / bb * 10) / 10, !!this._learnMode);
+            const net = (pl.chips - start) / bb;
+            MockDB.recordNet(nick, Math.round(net * 10) / 10, !!this._learnMode);
+            // 📉 이 판에서 잃은 기대값(결정별 손실의 합) + 🎲 운을 뺀 결과(올인 뒤 남은 카드는 승률만큼 받은 것으로 계산)
+            const loss = (this._evHandId === this.handId && this._evHand && this._evHand[nick]) || 0;
+            const aq = this._allinEq && this._allinEq.handId === this.handId ? this._allinEq.adj : null;
+            const hasAdj = !!(aq && typeof aq[nick] === 'number');
+            MockDB.recordEv(nick, { evLoss: loss, evLossSq: loss * loss, evHands: 1, evNetAdj: Math.round((hasAdj ? aq[nick] / bb : net) * 100) / 100, evAllin: hasAdj ? 1 : 0 }, !!this._learnMode);
         });
         this.settleBlunders();
         if (this._mtt) { try { this._mtt.onHandEnd(this); } catch (e) { console.error('[MTT onHandEnd 오류]', e && e.message); } }
+    }
+    // 🎲 [운 보정] 둘이 올인으로 맞붙고 카드가 남았을 때, 그 순간의 승률로 "평균적으로 받았을 칩"을 계산해 둔다.
+    //    실제로는 이기면 전부·지면 0 이지만, 실력은 승률만큼 받은 것으로 봐야 한다. (셋 이상이 얽힌 올인은 사이드팟이 복잡해 실제 결과를 그대로 쓴다)
+    captureAllinEq() {
+        if (!this.handStartStacks || (this._allinEq && this._allinEq.handId === this.handId) || this.communityCards.length >= 5) return;
+        const live = this.playerOrder.filter(n => this.players[n] && !this.players[n].isFolded);
+        if (live.length !== 2) return;
+        const eq = this.computeEquities();
+        if (!eq || typeof eq[live[0]] !== 'number' || typeof eq[live[1]] !== 'number') return;
+        const inv = n => Math.max(0, (this.handStartStacks[n] || 0) - this.players[n].chips);
+        let total = 0;
+        this.playerOrder.forEach(n => { if (this.players[n] && typeof this.handStartStacks[n] === 'number') total += inv(n); });
+        const m = Math.min(inv(live[0]), inv(live[1]));           // 서로 맞붙은 금액
+        const dead = Math.max(0, total - inv(live[0]) - inv(live[1]));   // 접은 사람들이 두고 간 칩
+        const adj = {};
+        live.forEach(n => { const e = eq[n] / 100; adj[n] = e * (dead + m) - (1 - e) * m; });
+        this._allinEq = { handId: this.handId, adj };
     }
     // 다음 핸드를 시작하기 직전(또는 방이 끝날 때): 그 판에서 실제로 칩이 얼마나 오갔는지 적는다
     settleBlunders() {
@@ -3844,6 +3887,25 @@ class GameRoom {
 
         // 🎯 실력 점수는 토너먼트 · 캐시 · MTT 에서만 쌓는다(운영자 요청). 컴까기·증강 컴까기는 목표 칩·기한·증강 때문에
         //    정석과 다르게 쳐야 하는 판이라 점수에 섞지 않는다. (GTO 학습은 원래 학습 통계에 따로 쌓인다)
+        // 📉 EV 손실 — 이 결정으로 잃은 기대값(bb). 실력 점수는 이것의 100판당 합으로 낸다.
+        this._evLast = null;
+        let _el = null;
+        if (this.countsForSkill()) {
+            const sa0 = this._statAdv;
+            if (sa0 && sa0.nick === nick && sa0.advice && sa0.pre) {
+                const bb0 = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+                _el = EvLoss.of(sa0.advice, type, { bb: bb0, pot: sa0.pre.pot, toCall: Math.max(0, Math.min(toCall, sa0.pre.chips)),
+                    putIn: Math.max(0, (p.currentBet || 0) - beforeBet), street: sa0.advice.street, equity: (sa0.advice.equity || 0) / 100, opponents: sa0.pre.opp });
+                if (_el) {
+                    this._evLast = { nick, res: _el };
+                    if (process.env.DEV_EVLOG) console.log('EVLOG ' + JSON.stringify({ n: nick, seats: this.playerOrder.length, pos: p.position || '', st: sa0.advice.street, type, best: sa0.advice.bestAction, call: toCall / bb0, pot: sa0.pre.pot / bb0, ev: sa0.advice.ev, h: p.hand.join(''), l: _el.lossBB, k: _el.kind }));
+                    if (this._evHandId !== this.handId) { this._evHandId = this.handId; this._evHand = {}; }
+                    this._evHand[nick] = (this._evHand[nick] || 0) + _el.lossBB;
+                    const st0 = sa0.advice.street || 'preflop';
+                    MockDB.recordEv(nick, { ['evG_' + _el.grade]: 1, ['evC_' + st0]: 1, ['evS_' + st0]: _el.lossBB }, !!this._learnMode);
+                }
+            }
+        }
         const gto = this.countsForSkill() ? this.gtoProximity(nick, type, p, toCall) : null;
         if (gto !== null) {
             // 🎯 [점수 보정 — 실측으로 찾은 두 가지 왜곡]
@@ -3870,7 +3932,7 @@ class GameRoom {
                         t: Date.now(), st: adv.street, h: sa.pre.hand, b: sa.pre.board, pos: p.position || '',
                         pot: r1(sa.pre.pot), call: r1(Math.max(0, toCall)), act: type, amt: r1(p.currentBet || 0),
                         best: adv.bestAction, bestPct: adv.mix[adv.bestAction] || 0, pct: adv.mix[key] || 0,
-                        sc: gto, w: ev.gtoWeight, why: String(adv.reason || '').slice(0, 160)
+                        sc: gto, w: ev.gtoWeight, loss: _el ? _el.lossBB : null, g: _el ? _el.grade : null, why: String(adv.reason || '').slice(0, 160)
                     }, !!this._learnMode);
                 }
             }
@@ -3919,6 +3981,7 @@ class GameRoom {
         //    상대 수 · 유효 스택(bb) · 포지션 · SPR 을 같이 본다. notes 는 화면에 "지금 상황" 꼬리표로 나간다.
         let notes = [];
         let sizeHint = '', rawEquity = null, equityLabel = '내 승률';
+        const _ev = {};          // 📉 액션별 기대값(칩) — EV 손실 계산용 (lib/evloss.js)
         const _bbNow = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
         const _liveOpp = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded);
         const _stk = n => this.players[n].chips + (this.players[n].currentBet || 0);
@@ -4102,6 +4165,38 @@ class GameRoom {
                     sizeHint = GtoAdvice.threeBetSize(this.currentHighestBet, callers, inPos, bb, _stk(nick)).text;
                 }
             }
+            // 📉 기대값(칩). 레이즈를 받았으면 "콜의 기대값" = 상대 범위 상대 승률 × 실현율 × 콜 뒤 팟 − 콜 금액,
+            //    아직 아무도 안 열었으면 "오픈의 기대값" = 오픈 기준에서 얼마나 떨어진 패인가로 어림(기준 위 d점이면 0.0035·d² bb·최대 8bb, 아래는 1점당 −0.03bb·최대 −1.5bb).
+            //    맞춘 기준: 전부 접는 사람은 이론상 블라인드만큼(6인 약 25bb/100판, 헤즈업 약 75bb/100판) 잃는다 — 자리별 평균이 그 근처가 되게 했다.
+            {
+                const potAll = potBefore + p.currentBet;
+                if (facingRaise) {
+                    let eqR, R = 1;
+                    if (equityLabel === '올인 범위 상대 승률') eqR = equity;      // 올인 받기: 위에서 이미 그 범위 상대 승률을 냈고, 다 깔리니 실현율은 1
+                    else {
+                        const x = (_huTable && _raises <= 1) ? 0.76 : _raises >= 3 ? 0.03 : _raises === 2 ? 0.07 : ShortStack.openPct(_aggrP ? _aggrP.position : _opnPos);
+                        eqR = ShortStack.shouldCallShove(code, Math.min(1, x), 0, 0).equity;
+                        const g = typeof rt.gap === 'number' ? rt.gap : 0;
+                        // 실현율: 자리가 나쁠수록, 패가 방어 기준에서 멀수록 승률만큼 못 가져간다 (BB 0.80 · SB 0.72 · 그 밖 0.93, 패에 따라 −0.2~+0.1)
+                        R = (isBB ? 0.80 : (!_huTable && p.role && p.role.includes('SB')) ? 0.72 : 0.93) + Math.max(-0.2, Math.min(0.1, g / 100));
+                    }
+                    let c = eqR * R * (potAll + toCall) - toCall;
+                    // 강한 패는 지금 팟보다 훨씬 큰 팟을 가져간다(AA 는 콜 뒤 팟의 승률분보다 몇 배 번다) — 승률이 50%를 넘는 만큼 제곱으로 더한다
+                    if (equityLabel !== '올인 범위 상대 승률') c += 9 * Math.pow(Math.max(0, eqR - 0.5), 2) * (potAll + toCall);
+                    // 어림값의 부호가 방어 기준표와 어긋나면 기준표를 따른다(기준표는 외부 솔버 자료에 맞춰 둔 것)
+                    if (!_special && typeof rt.gap === 'number') {
+                        const cap = Math.min(0.3, Math.abs(rt.gap) * 0.05) * bb;
+                        if (rt.tier !== 'fold' && c < 0) c = cap; else if (rt.tier === 'fold' && c > 0) c = -cap;
+                    }
+                    _ev.call = Math.round(c);
+                } else if (_special) {
+                    _ev.open = Math.round((bestAction === 'raise' ? 1 : -0.6) * bb);      // 푸시/폴드 구간
+                } else {
+                    const hu1 = opponents === 1 && !canCheck;      // 한 명만 남은 자리(헤즈업 버튼·블라인드 대결)는 훨씬 넓게 열어 패 하나의 값은 작다
+                    const d = rt.score - (hu1 ? Quiz.HU_OPEN_SCORE : openThreshold(p.position || ''));
+                    _ev.open = Math.round((d >= 0 ? Math.min(8, 0.0035 * d * d) * (hu1 ? 0.6 : 1) : Math.max(-1.5, 0.03 * d)) * bb);
+                }
+            }
         } else {
             // 🎯 [벳 범위 반영] 벳을 받았으면 "아무 패 상대 승률"이 아니라 "벳하는 범위 상대 승률"로 본다.
             //    몬테카를로 승률은 상대가 아무 패나 들고 있다고 가정해서, 큰 벳을 받은 상황에서 과하게 낙관적이었다
@@ -4130,6 +4225,8 @@ class GameRoom {
                     ? Postflop.cbetFrequency({ street: this.gameStage, adv: Postflop.rangeAdvantage(this.communityCards), nOpp: opponents, inPosition: this.isInPosition(nick), skill: 1 }) : 0
             });
             mix = pa.mix; bestAction = pa.bestAction; reason = pa.reason; notes = pa.notes;
+            // 📉 콜의 기대값(칩) = 승률 × 실현율 × 콜 뒤 팟 − 콜 금액. 카드가 남은 스트리트는 뒤에 또 벳을 맞아 승률만큼 못 가져가므로 실현율을 곱한다(플랍 0.8 · 턴 0.9 · 리버 1).
+            if (toCall > 0) _ev.call = Math.round(equity * (street === 'flop' ? 0.8 : street === 'turn' ? 0.9 : 1) * (potBefore + p.currentBet + toCall) - toCall);
             tier = pa.tier; tierLabel = pa.tierLabel; tierColor = pa.tierColor;   // 등급도 "한 명 상대 환산"으로
             if (rawEquity != null) notes.push('상대 벳 범위 반영');
             const _tx = this.analyzeBoardTexture() || {};
@@ -4151,7 +4248,7 @@ class GameRoom {
             notes, sizeHint, equityLabel,
             allinIsCall: _fullCall > 0 && _fullCall >= p.chips,   // 콜이 곧 올인인 자리 — '올인' 버튼을 눌러도 콜로 채점한다
             rawEquity: rawEquity == null ? null : Math.round(rawEquity * 100),
-            posInfo,
+            posInfo, ev: _ev,
             handStr: p.hand.join(' ')
         };
     }
@@ -4441,6 +4538,22 @@ function skillIndex(obj) {
     return { raw, loss100: Math.round(loss100 * 10) / 10, penalty, score: Math.max(0, raw - penalty) };
 }
 function gtoAvg(sum, w, cnt) { return w > 0 ? Math.round(sum / w) : (cnt > 0 ? Math.round(sum / cnt) : null); }
+// 📉 EV 손실 기준 실력 점수 한 묶음 — 순위표·근거 화면·리포트가 같은 계산을 쓴다.
+//   score ± pm (95% 구간 lo~hi) · loss100(100판당 잃은 기대값 bb) · grades(결정 등급별 건수) · streets(스트리트별 손실)
+//   net100 = 실제 결과, adj100 = 올인 뒤의 운을 뺀 결과 (둘 다 100판당 bb, 30판 이상일 때만)
+function evView(a) {
+    const ix = a ? EvLoss.index(a) : null;
+    if (!ix) return null;
+    const grades = {}; let dec = 0;
+    EvLoss.GRADE_KEYS.forEach(g => { grades[g] = a['evG_' + g] || 0; dec += grades[g]; });
+    const streets = ['preflop', 'flop', 'turn', 'river'].map(st => ({ st, n: a['evC_' + st] || 0, loss: Math.round((a['evS_' + st] || 0) * 10) / 10,
+        per100: Math.round((a['evS_' + st] || 0) / ix.hands * 1000) / 10 }));
+    const n = ix.hands;
+    return Object.assign({}, ix, { decisions: dec, grades, streets,
+        net100: (a.netHands || 0) >= 30 ? Math.round((a.netBB || 0) / a.netHands * 100) : null,
+        adj100: n >= 30 && typeof a.evNetAdj === 'number' ? Math.round(a.evNetAdj / n * 100) : null,
+        allins: a.evAllin || 0 });
+}
 
 // 🎓 [코칭] 세션 지표를 포커 이론 기준으로 진단 → 약점 + 구체적 조언 생성
 //   각 지표의 건강 범위는 6맥스 캐시/토너 기준 통념값
@@ -5641,28 +5754,29 @@ io.on('connection', (socket) => {
         MockDB.users.forEach(u => {
             if (!u || !u.nickname || u.nickname.startsWith('🤖') || u.nickname === ADMIN_NICK) return;
             const a30 = MockDB.aggregateRange(u, 30);
-            if ((a30.handsPlayed || 0) < 10 || !(a30.gtoScoreCount > 0)) return;
+            const ev = evView(a30);
+            if (!ev || ev.hands < 10) return;
             const a7 = MockDB.aggregateRange(u, 7);
             const prev = {}; Object.keys(a30).forEach(k => { prev[k] = (a30[k] || 0) - (a7[k] || 0); });
-            const si = skillIndex(a30), si7 = skillIndex(a7), siPrev = skillIndex(prev);
+            const si = skillIndex(a30) || { raw: null }, ix7 = EvLoss.index(a7), ixPrev = EvLoss.index(prev);
             let lossBB = 0, top = null;
             Blunder.KIND_KEYS.forEach(k => { const bb = a30['lkB_' + k] || 0; lossBB += bb; if (bb > 0 && (!top || bb > top.bb)) top = { name: Blunder.KINDS[k].name, bb: Math.round(bb * 10) / 10, n: a30['lkN_' + k] || 0 }; });
             rows.push({
                 nick: u.nickname, me: u.nickname === socket.nickname,
-                hands: a30.netHands || a30.handsPlayed, decisions: a30.gtoScoreCount,   // 점수에 들어가는 판 수(토너먼트·캐시·MTT)
-                gto: si.score, raw: si.raw, penalty: si.penalty,          // gto = 실력 점수(일치 점수 − 실수 감점)
-                trend: (a7.gtoScoreCount >= 15 && prev.gtoScoreCount >= 15 && si7 && siPrev) ? (si7.score - siPrev.score) : null,
-                loss100: si.loss100,
+                hands: ev.hands, decisions: ev.decisions,   // 점수에 들어가는 판 수(토너먼트·캐시·MTT)
+                gto: ev.score, pm: ev.pm, lo: ev.lo, hi: ev.hi, raw: si.raw,      // gto = 실력 점수(100판당 EV 손실에서 환산) ± 오차 · raw = 권장과 일치한 정도(참고)
+                trend: (ix7 && ixPrev && ix7.hands >= 30 && ixPrev.hands >= 30) ? (ix7.score - ixPrev.score) : null,
+                loss100: ev.loss100, se100: ev.se100, grades: ev.grades,
                 top,
                 vpip: a30.preflopOpps > 0 ? Math.round(a30.vpipHands / a30.preflopOpps * 100) : null,
                 pfr: a30.preflopOpps > 0 ? Math.round(a30.pfrHands / a30.preflopOpps * 100) : null,
-                low: a30.gtoScoreCount < 30,
-                // 실제 성적: 100판당 칩 증감(bb). 운이 크게 섞이므로 30판 이상일 때만 보여 준다
-                net100: (a30.netHands || 0) >= 30 ? Math.round(a30.netBB / a30.netHands * 100) : null, netHands: a30.netHands || 0,
+                low: ev.hands < 50,
+                // 실제 성적: 100판당 칩 증감(bb). 운이 크게 섞이므로 30판 이상일 때만 보여 준다. adj100 은 올인 뒤의 운을 뺀 값
+                net100: ev.net100, adj100: ev.adj100, allins: ev.allins, netHands: a30.netHands || 0,
                 // 유형별 손실(bb) — 비교표용
                 leaks: Object.fromEntries(Blunder.KIND_KEYS.map(k => [k, Math.round((a30['lkB_' + k] || 0) * 10) / 10]).filter(x => x[1] > 0)),
                 // 날짜별 점수(결정 5번 이상인 날만) — 추세선용
-                spark: dayKeys.map(k => { const d = (u.dailyLog || {})[k]; return d && d.gtoScoreCount >= 5 ? skillIndex(d).score : null; })
+                spark: dayKeys.map(k => { const d = (u.dailyLog || {})[k]; const x = d && d.evHands >= 10 ? EvLoss.index(d) : null; return x ? x.score : null; })
             });
         });
         rows.sort((x, y) => (x.low ? 1 : 0) - (y.low ? 1 : 0) || y.gto - x.gto || x.loss100 - y.loss100);
@@ -5677,14 +5791,16 @@ io.on('connection', (socket) => {
         const u = MockDB.users.get(nick);
         if (!u || nick.startsWith('🤖')) return;
         const a = MockDB.aggregateRange(u, 30);
-        const si = skillIndex(a);
-        if (!si) { socket.emit('skillDetail', { nick, empty: true }); return; }
+        const si = skillIndex(a) || { raw: null };
+        const ev = evView(a);
+        if (!ev) { socket.emit('skillDetail', { nick, empty: true }); return; }
         const me = nick === socket.nickname;
         const streets = ['preflop', 'flop', 'turn', 'river'].map(st => ({ st, n: a['gqC_' + st] || 0, score: (a['gqW_' + st] > 0) ? Math.round(a['gqS_' + st] / a['gqW_' + st]) : null }));
         const leaks = Blunder.KIND_KEYS.map(k => ({ name: Blunder.KINDS[k].name, tip: Blunder.KINDS[k].tip, n: a['lkN_' + k] || 0, bb: Math.round((a['lkB_' + k] || 0) * 10) / 10 })).filter(l => l.n > 0).sort((x, y) => y.bb - x.bb);
         socket.emit('skillDetail', {
-            nick, me, hands: a.handsPlayed || 0, decisions: a.gtoScoreCount || 0, easy: a.gqEasy || 0,
-            score: si.score, raw: si.raw, penalty: si.penalty, loss100: si.loss100,
+            nick, me, hands: ev.hands, decisions: ev.decisions, easy: a.gqEasy || 0,
+            score: ev.score, pm: ev.pm, lo: ev.lo, hi: ev.hi, raw: si.raw, loss100: ev.loss100, se100: ev.se100, L0: EvLoss.L0,
+            grades: ev.grades, evStreets: ev.streets, net100: ev.net100, adj100: ev.adj100, allins: ev.allins,
             buckets: { best: a.gqN_best || 0, ok: a.gqN_ok || 0, weak: a.gqN_weak || 0, bad: a.gqN_bad || 0 },
             streets, leaks,
             recent: me ? (u.recentDec || []).slice(-30).reverse().map(r => Object.assign({}, r, { why: Blunder.std(r.why) })) : null
@@ -6526,6 +6642,7 @@ io.on('connection', (socket) => {
         let handsPlayed, handsWon, pfOpps, vpipH, pfrH, tbCount, tbOpps, aggrBets, aggrCalls, foldToBet, faceBet, wtsd, wsd, gtoSum, gtoCnt, gtoWt = 0;
         let metaTop = {};
         let since = 0, src = u, blSrc = u.blunders, seatSum = 0, seatCnt = 0;
+        let evSrc = null;      // 📉 EV 손실 집계의 출처(범위별)
         const leaks = {};
         const leakFrom = get => Blunder.KIND_KEYS.forEach(k => { const n = get('lkN_' + k) || 0; if (n > 0) leaks[k] = { n, bb: Math.round((get('lkB_' + k) || 0) * 10) / 10 }; });
 
@@ -6539,6 +6656,7 @@ io.on('connection', (socket) => {
             metaTop = { durationMin: null, bankrollStart: null, bankrollDelta: null, tourneyWins: null, seasonPointsGained: null, newAchievements: [] };
             blSrc = L.blunders; seatSum = L.seatSum || 0; seatCnt = L.seatCnt || 0;
             leakFrom(k => L[k]);
+            evSrc = L;
         } else if (range === 'session') {
             const snap = sessionSnapshots.get(socket.nickname);
             if (!snap) { socket.emit('sessionReport', null); return; }
@@ -6549,6 +6667,7 @@ io.on('connection', (socket) => {
             wtsd = d('wentToShowdown'); wsd = d('wonAtShowdown'); gtoSum = d('gtoScoreSum'); gtoCnt = d('gtoScoreCount'); gtoWt = d('gtoW');
             since = snap.ts; seatSum = d('seatSum'); seatCnt = d('seatCnt');
             leakFrom(k => (u[k] || 0) - (snap[k] || 0));
+            evSrc = {}; Object.keys(u).filter(k => k.startsWith('ev')).forEach(k => { evSrc[k] = (u[k] || 0) - (snap[k] || 0); });
             const prevAch = new Set(snap.achievements || []);
             const newAch = (u.achievements || []).filter(id => !prevAch.has(id)).map(id => ACHIEVEMENTS[id] ? { id, ...ACHIEVEMENTS[id] } : null).filter(Boolean);
             metaTop = {
@@ -6569,6 +6688,7 @@ io.on('connection', (socket) => {
             { const now = new Date(); since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)).getTime(); }
             seatSum = agg.seatSum || 0; seatCnt = agg.seatCnt || 0;
             leakFrom(k => agg[k]);
+            evSrc = agg;
             metaTop = { durationMin: null, bankrollStart: null, bankrollDelta: null, tourneyWins: null, seasonPointsGained: null, newAchievements: [] };
         }
 
@@ -6596,6 +6716,7 @@ io.on('connection', (socket) => {
         report.leaks = Object.keys(leaks).map(k => ({ kind: k, name: Blunder.KINDS[k].name, tip: Blunder.KINDS[k].tip, n: leaks[k].n, bb: leaks[k].bb }))
             .sort((a, b) => b.bb - a.bb);
         report.avgSeats = seatCnt >= 5 ? Math.round(seatSum / seatCnt * 10) / 10 : null;
+        report.ev = evView(evSrc);     // 📉 실력 점수(EV 손실 기준) · 오차 · 등급 분포 · 운을 뺀 결과
         report.coaching = buildCoaching(report.stats, handsPlayed, { avgSeats: report.avgSeats, leaks: report.leaks, decisions: gtoCnt });
         socket.emit('sessionReport', report);
     });
