@@ -3759,7 +3759,10 @@ class GameRoom {
     }
 
     // 💥 [리포트] 방금 한 액션이 큰 실수면 상황째로 저장한다 (기준은 학습 조언과 같다)
+    // 실력 점수·실수 기록·실제 성적을 쌓는 판인가: 일반 토너먼트 · 캐시 · MTT (+ 학습 모드는 학습 통계로 따로)
+    countsForSkill() { return !this._challenge; }
     noteBlunder(nick, type, p, advice, pre, beforeBet, beforeHighest) {
+        if (!this.countsForSkill()) return;
         const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
         const toCall = Math.max(0, Math.min(beforeHighest - beforeBet, pre.chips));
         const putIn = Math.max(0, (p.currentBet || 0) - beforeBet);
@@ -3791,7 +3794,7 @@ class GameRoom {
         const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
         this.playerOrder.forEach(nick => {
             const pl = this.players[nick], start = this.handStartStacks[nick];
-            if (!pl || pl.isBot || typeof start !== 'number') return;
+            if (!pl || pl.isBot || typeof start !== 'number' || !this.countsForSkill()) return;
             MockDB.recordNet(nick, Math.round((pl.chips - start) / bb * 10) / 10, !!this._learnMode);
         });
         this.settleBlunders();
@@ -3836,7 +3839,9 @@ class GameRoom {
             if (type === 'fold') ev.foldToBet = true;
         }
 
-        const gto = this.gtoProximity(nick, type, p, toCall);
+        // 🎯 실력 점수는 토너먼트 · 캐시 · MTT 에서만 쌓는다(운영자 요청). 컴까기·증강 컴까기는 목표 칩·기한·증강 때문에
+        //    정석과 다르게 쳐야 하는 판이라 점수에 섞지 않는다. (GTO 학습은 원래 학습 통계에 따로 쌓인다)
+        const gto = this.countsForSkill() ? this.gtoProximity(nick, type, p, toCall) : null;
         if (gto !== null) {
             // 🎯 [점수 보정 — 실측으로 찾은 두 가지 왜곡]
             //   ① 프리플랍에 쓰레기 패를 접는 건 누구나 맞히는 결정이다. 이걸 전부 세면 "전부 폴드만 하는 사람"이 84점,
@@ -5584,7 +5589,7 @@ io.on('connection', (socket) => {
             Blunder.KIND_KEYS.forEach(k => { const bb = a30['lkB_' + k] || 0; lossBB += bb; if (bb > 0 && (!top || bb > top.bb)) top = { name: Blunder.KINDS[k].name, bb: Math.round(bb * 10) / 10, n: a30['lkN_' + k] || 0 }; });
             rows.push({
                 nick: u.nickname, me: u.nickname === socket.nickname,
-                hands: a30.handsPlayed, decisions: a30.gtoScoreCount,
+                hands: a30.netHands || a30.handsPlayed, decisions: a30.gtoScoreCount,   // 점수에 들어가는 판 수(토너먼트·캐시·MTT)
                 gto: si.score, raw: si.raw, penalty: si.penalty,          // gto = 실력 점수(일치 점수 − 실수 감점)
                 trend: (a7.gtoScoreCount >= 15 && prev.gtoScoreCount >= 15 && si7 && siPrev) ? (si7.score - siPrev.score) : null,
                 loss100: si.loss100,
