@@ -2604,6 +2604,8 @@ class GameRoom {
         //    늦게 온 쪽이 진행 중이던 판을 통째로 날리고 새 핸드를 돌렸다.
         //    (실측: 스트리트 1~3 진행 중에 결과 없이 handId가 바뀜 — 그 판의 블라인드·베팅 칩은 소멸)
         if (this.gameStage >= 1 && this.gameStage <= 4) return;
+        // 🏆 [MTT] 테이블을 합쳐야 할 때(파이널 테이블 구성 등)는 새 판을 돌리지 않고 기다린다 — 매니저가 합친 뒤 다시 시작시킨다
+        if (this._mtt && this._mtt.hold && !this._mtt.finished) return;
         // 🤖 [컴까기] 끝난 도전방은 더 딜하지 않는다. 사람이 칩을 다 잃었으면 봇끼리 계속 칠 이유가 없으니 바로 실패 처리.
         if (this._challenge) {
             if (this._challenge.done || this._challenge.waiting) return;
@@ -3798,6 +3800,7 @@ class GameRoom {
             MockDB.recordNet(nick, Math.round((pl.chips - start) / bb * 10) / 10, !!this._learnMode);
         });
         this.settleBlunders();
+        if (this._mtt) { try { this._mtt.onHandEnd(this); } catch (e) { console.error('[MTT onHandEnd 오류]', e && e.message); } }
     }
     // 다음 핸드를 시작하기 직전(또는 방이 끝날 때): 그 판에서 실제로 칩이 얼마나 오갔는지 적는다
     settleBlunders() {
@@ -3940,7 +3943,7 @@ class GameRoom {
             const _opnPos = _opn ? (this.players[_opn].position || '') : '';
             const _huTable = this.playerOrder.length === 2;
             const _ctx = { numActive: opponents + 1, threeBetPlus: (this.raiseCountThisStreet || 0) >= 2,
-                headsUp: _huTable, openerPos: _opnPos, closing: !!isBB };
+                headsUp: _huTable, openerPos: _opnPos, closing: !!isBB, potOdds: facingRaise ? potOdds : 0 };   // potOdds: 오픈 크기·앤티에 따라 방어 폭이 달라진다
             const rt = preflopRangeTier(code, p.position || '', facingRaise, _ctx);
             // 문구: 처음 연 것이면 '오픈', 누가 림프한 뒤 올린 것(내가 림프했거나 블라인드가 올림)이면 '레이즈', 두 번째 레이즈부터는 '리레이즈'
             const _iLimped = !isBB && (p.currentBet || 0) >= bb;
@@ -4038,6 +4041,8 @@ class GameRoom {
             } else if (!facingRaise) {
                 // 미오픈/오픈 기회 (아직 레이즈 없음) — 정석은 raise-or-fold, 림프 지양 (BB는 공짜 체크 가능)
                 const late = (p.position === 'BTN' || p.position === 'CO' || p.position === 'SB');
+                // 모두 접고 SB 가 BB 한 명만 상대하는 자리(6인 테이블의 블라인드 대결). 헤즈업 테이블은 아래에서 따로 넓게 연다.
+                const _sbVsBb = !_huTable && opponents === 1 && !!(p.role && p.role.includes('SB'));
                 if (opponents === 1 && !canCheck && rt.tier !== 'raise' && rt.score > Quiz.HU_OPEN_SCORE) {
                     // 헤즈업 버튼(SB)은 6인 버튼 차트보다 훨씬 넓게 연다
                     mix = { fold: 15, raise: 85 };
@@ -4045,6 +4050,12 @@ class GameRoom {
                 } else if (rt.tier === 'raise') {
                     mix = canCheck ? { check: 8, raise: 92 } : { fold: 6, raise: 94 };
                     bestAction = 'raise'; reason = `${p.position || ''} 오픈 레인지에 드는 핸드(${code}) — 오픈 레이즈가 정석입니다.`;
+                    if (_sbVsBb && !canCheck) mix = { fold: 4, call: 26, raise: 70 };
+                } else if (_sbVsBb && !canCheck) {
+                    // 🐛 블라인드끼리(모두 접고 SB 차례) 또는 헤즈업 버튼의 "콜만 하기(림프)"는 솔버도 자주 쓰는 선택이다(절반 값에 BB 한 명만 상대).
+                    //    예전엔 믹스에 콜이 아예 없어서 SB 림프가 매번 0%짜리 실수로 채점됐다.
+                    if (rt.tier === 'call' || rt.score >= 30) { mix = { fold: 30, call: 40, raise: 30 }; bestAction = 'call'; reason = `SB에서 BB 한 명만 남았습니다 — ${code}는 접기엔 아깝고 올리기엔 약한 패라 콜(림프)로 싸게 보는 것이 무난합니다. 스틸 레이즈도 섞입니다.`; }
+                    else { mix = { fold: 72, call: 20, raise: 8 }; bestAction = 'fold'; reason = `약한 핸드(${code}) — 폴드가 기본입니다. 절반 값이라 가끔 콜도 나옵니다.`; }
                 } else if (rt.tier === 'call') {
                     if (canCheck) {
                         mix = { check: 100 };
@@ -4067,11 +4078,16 @@ class GameRoom {
                     mix = { fold: 5, call: 35, raise: 60 };
                     bestAction = 'raise'; reason = `강한 핸드(${code}) — 3벳으로 밸류를 키우세요.${_vs}`;
                 } else if (rt.tier === 'call') {
-                    mix = { fold: 35, call: 60, raise: 5 };
-                    bestAction = 'call'; reason = `콜 가능한 핸드(${code}, 점수 ${rt.score}) — 콜로 플랍을 보세요.${_vs}`;
+                    // 방어 범위 한가운데면 콜이 분명하고, 경계 바로 위면 폴드도 섞인다
+                    const edge = typeof rt.gap === 'number' && rt.gap < 6;
+                    mix = edge ? { fold: 40, call: 56, raise: 4 } : { fold: 15, call: 77, raise: 8 };
+                    bestAction = 'call'; reason = `콜 가능한 핸드(${code}, 점수 ${rt.score}) — 콜로 플랍을 보세요.${edge ? ' (방어 범위의 아래쪽 경계라 접어도 큰 차이는 없습니다.)' : ''}${_vs}`;
                 } else {
-                    mix = { fold: 88, call: 12, raise: 0 };
-                    bestAction = 'fold'; reason = `레이즈에 약한 핸드(${code}) — 폴드가 정석입니다.${_vs}`;
+                    // 🐛 예전엔 경계에서 한 끗 모자란 패도, 한참 모자란 패도 똑같이 "폴드 88 · 콜 12"였다 — 경계선 패를 콜하면 "접어야 할 패로 콜"로 채점됐다.
+                    const edge = typeof rt.gap === 'number' && rt.gap >= -6;
+                    mix = edge ? { fold: 60, call: 38, raise: 2 } : { fold: 90, call: 9, raise: 1 };
+                    bestAction = 'fold';
+                    reason = edge ? `경계선 핸드(${code}) — 접는 쪽이 조금 낫지만 콜도 나오는 패입니다.${_vs}` : `레이즈에 약한 핸드(${code}) — 폴드가 정석입니다.${_vs}`;
                 }
             }
             if (!_special && (bestAction === 'raise' || (mix.raise || 0) >= 30)) {
@@ -4108,14 +4124,17 @@ class GameRoom {
             const pa = GtoAdvice.postflopAdvice({
                 equity, potOdds, toCall, opponents, inPosition: this.isInPosition(nick),
                 spr: _spr, stackShare: p.chips > 0 ? toCall / p.chips : 1,
-                draw: _draw, pot: potBefore, behind: Math.max(0, _effBehind - toCall)
+                draw: _draw, pot: potBefore, behind: Math.max(0, _effBehind - toCall),
+                // 🎯 주도권: 앞 스트리트에 마지막으로 올린 사람이 나이고 아직 벳이 없으면 c벳 자리 — 약한 패의 벳도 정석 비중이 있다
+                cbetFreq: (toCall === 0 && this.lastAggressorBefore(this.gameStage) === nick)
+                    ? Postflop.cbetFrequency({ street: this.gameStage, adv: Postflop.rangeAdvantage(this.communityCards), nOpp: opponents, inPosition: this.isInPosition(nick), skill: 1 }) : 0
             });
             mix = pa.mix; bestAction = pa.bestAction; reason = pa.reason; notes = pa.notes;
             tier = pa.tier; tierLabel = pa.tierLabel; tierColor = pa.tierColor;   // 등급도 "한 명 상대 환산"으로
             if (rawEquity != null) notes.push('상대 벳 범위 반영');
             const _tx = this.analyzeBoardTexture() || {};
             if ((mix.bet || 0) > 0 && bestAction === 'bet') {
-                sizeHint = GtoAdvice.betSize({ opponents, wet: !!_tx.wet, dry: !!_tx.dry, spr: _spr, pot: potBefore, thin: !!pa.thin }).text;
+                sizeHint = GtoAdvice.betSize({ opponents, wet: !!_tx.wet, dry: !!_tx.dry, spr: _spr, pot: potBefore, thin: !!pa.thin, range: !!pa.rangeBet }).text;
             } else if (bestAction === 'raise') {
                 const to = Math.min(p.currentBet + p.chips, this.currentHighestBet * 3);
                 sizeHint = (to >= p.currentBet + p.chips || _spr <= 1.5) ? '올인' : `약 ${to.toLocaleString()} (상대 벳의 3배)`;
@@ -4678,6 +4697,7 @@ class MTTManager {
         if (this.eliminated.find(e => e.nick === nick)) return;
         const place = this.totalEntrants - this.eliminated.length;
         this.eliminated.push({ nick, place });
+        if (process.env.DEV_MTTLOG) console.log(`[MTTLOG] out ${place} ${nick} t=${Date.now()} alive=${this.countAlive()} room=${roomId.split('#')[1]}`);
         const room = rooms.get(roomId);
         if (room && room.players[nick] && room.players[nick].socketId) {
             io.to(room.players[nick].socketId).emit('mttEliminated', { place, total: this.totalEntrants });
@@ -4685,6 +4705,41 @@ class MTTManager {
         io.to(roomId).emit('gameMessage', `💀 ${nick} 님 탈락 — ${place}위 / ${this.totalEntrants}명`);
         // 즉시 한 번 점검(빠른 반응) — 단 tick과 충돌 않도록 가드
         setTimeout(() => this.tick(), 600);
+    }
+
+    // ─────────── 핸드가 끝난 직후(칩 정산 완료)에 테이블이 알려 준다 ───────────
+    //  🐛 [순위 버그] 예전엔 탈락을 "그 테이블의 다음 판이 시작될 때" 기록했다. 그 전에 테이블이 합쳐지거나(재배치) 토너먼트가 끝나면
+    //     기록이 빠졌고, 빠진 사람은 끝날 때 "참가 신청 순서대로" 빈 순위를 받았다 — 그래서 1대1에서 진 방장(신청 1번)이 3위,
+    //     훨씬 전에 탈락했지만 기록이 빠져 있던 사람이 2위가 됐다. 이제 탈락하는 그 판이 끝나는 즉시 기록한다.
+    //  ⏱ [파이널 테이블] 예전엔 테이블들이 계속 새 판을 돌려서 "전 테이블이 동시에 쉬는 순간"이 잘 안 왔고, 그 사이에 더 탈락해서
+    //     6명이 되어도 한참 뒤에(더 적은 인원으로) 모였다. 이제 합쳐야 하는 순간부터 새 판을 멈추고, 돌던 판이 끝나는 대로 모은다.
+    onHandEnd(room) {
+        if (this.finished) return;
+        const starts = room.handStartStacks || {};
+        const recorded = new Set(this.eliminated.map(e => e.nick));
+        room.playerOrder
+            .filter(n => room.players[n] && room.players[n].chips <= 0 && !recorded.has(n))
+            .sort((a, b) => (starts[a] || 0) - (starts[b] || 0))      // 같은 판에서 여럿이 탈락하면 그 판을 더 적은 칩으로 시작한 사람이 더 낮은 순위
+            .forEach(n => this.onPlayerEliminated(room.roomId, n));
+        this.updateHold();
+        // 결과를 볼 시간(3초)이 지나자마자 한 번 점검해서 바로 합친다 (4초 하트비트를 기다리지 않는다)
+        if (this.hold) setTimeout(() => this.tick(), DEV_FAST ? 150 : 3100);
+    }
+    // 지금 테이블을 합쳐야 하는 상태인가 (파이널 테이블 구성 · 테이블 수 과다 · 한 명만 남은 테이블)
+    updateHold() {
+        const info = this.tables.map(rid => rooms.get(rid)).filter(Boolean)
+            // 판이 도는 중에 올인한 사람은 칩이 0 이어도 아직 살아 있다 — 이들을 빼면 판정이 판마다 깜빡인다
+            .map(r => r.playerOrder.filter(n => r.players[n] && (r.players[n].chips > 0 || (r.gameStage >= 1 && r.gameStage <= 4 && r.players[n].isAllIn && !r.players[n].isFolded))).length).filter(n => n > 0);
+        const total = info.reduce((a, b) => a + b, 0);
+        const was = !!this.hold;
+        this.hold = info.length > 1 && (info.length > this.idealTableCount(total) || info.some(n => n === 1));
+        if (this.hold && !was) {
+            this._holdSince = Date.now();
+            if (process.env.DEV_MTTLOG) console.log(`[MTTLOG] hold total=${total} tables=${info.join('/')} t=${Date.now()}`);
+            const final = total <= this.tableSize;
+            this.tables.forEach(rid => io.to(rid).emit('gameMessage', final ? `🏆 ${total}명 남았습니다 — 진행 중인 판이 끝나면 파이널 테이블로 모입니다.` : '🔄 진행 중인 판이 끝나면 테이블을 다시 나눕니다.'));
+        }
+        return this.hold;
     }
 
     // ─────────── 생존자 조회 ───────────
@@ -4742,6 +4797,7 @@ class MTTManager {
         this.tables = this.tables.filter(rid => rooms.has(rid));
 
         const live = this.livePlayers();
+        this.updateHold();
 
         // 2) 우승 판정 (생존자 1명) — 핸드 비진행 상태일 때만 확정
         if (live.length === 1) {
@@ -4821,7 +4877,7 @@ class MTTManager {
         //    예전엔 결과창 8초 타이머를 무시하고 1.5초 뒤 재가동을 따로 걸어서,
         //    (1) 쇼다운 결과를 1.5초밖에 못 보고 (2) 뒤늦게 온 8초 타이머가 새 판을 덮어썼다.
         if (r._nextHandTimer) return;
-        if (r.gameStage === 5) r.scheduleNextHand(6000);
+        if (r.gameStage === 5) r.scheduleNextHand(Math.max(800, 6000 - (Date.now() - (r._handEndedAt || 0))));   // 결과창을 이미 충분히 봤으면 곧바로
         else if (r.gameStage === 0) r.scheduleNextHand(1200);
     }
 
@@ -4847,6 +4903,8 @@ class MTTManager {
         this.tables.forEach(rid => { if (rooms.has(rid)) destroyRoom(rid); });
         this.tables = [];
 
+        if (process.env.DEV_MTTLOG) console.log(`[MTTLOG] merge final=${isFinal || survivors.length <= this.tableSize} n=${survivors.length} wait=${this._holdSince ? Date.now() - this._holdSince : -1}ms t=${Date.now()}`);
+        this.hold = false;      // 합쳤으니 새 판을 다시 돌린다
         if (isFinal || survivors.length <= this.tableSize) {
             this.seatTable(survivors, true);
         } else {
@@ -4870,6 +4928,7 @@ class MTTManager {
         const recorded = new Set(this.eliminated.map(e => e.nick));
         recorded.add(champion);
         const missing = this.entrants.filter(e => !recorded.has(e.nick));
+        if (missing.length) console.error(`[MTT] 탈락 기록 누락 ${missing.length}명 — 끝에서 보완: ${missing.map(e => e.nick).join(', ')}`);
         // 누락자는 마지막에 탈락한 것으로 간주(가장 낮은 빈 순위부터 부여)
         missing.forEach(e => {
             const place = this.totalEntrants - this.eliminated.length;
@@ -4879,6 +4938,7 @@ class MTTManager {
         const ranking = [{ place: 1, nick: champion }].concat(
             this.eliminated.slice().sort((a, b) => a.place - b.place).map(e => ({ place: e.place, nick: e.nick }))
         );
+        if (process.env.DEV_MTTLOG) console.log(`[MTTLOG] finish ${JSON.stringify(ranking.map(r => r.place + ':' + r.nick))} missing=${missing.length}`);
         this.tables.forEach(rid => {
             io.to(rid).emit('mttFinished', { champion, totalEntrants: this.totalEntrants, ranking });
             io.to(rid).emit('gameMessage', `🎉 ${champion} 님이 ${this.totalEntrants}명 MTT 우승!`);

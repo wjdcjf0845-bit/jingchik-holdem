@@ -238,7 +238,7 @@ test('근접도 점수: 권장 액션이면 95, 믹스 비중이 낮을수록 �
     assert.strictEqual(A.scoreAction(adv, 'allin'), 95, '올인은 레이즈로 본다');
     assert.strictEqual(A.scoreAction(adv, 'fold'), 25, '권장(94%)에 비해 6% 짜리 선택');
     assert.strictEqual(A.scoreAction(adv, 'call'), 15, '믹스에 없는 림프');
-    assert.strictEqual(A.scoreAction({ mix: { check: 55, bet: 45 }, bestAction: 'check' }, 'raise'), 80, '체크 가능한 자리의 레이즈는 벳으로 본다 — 권장과 비슷한 빈도면 높은 점수');
+    assert.strictEqual(A.scoreAction({ mix: { check: 55, bet: 45 }, bestAction: 'check' }, 'raise'), 90, '체크 가능한 자리의 레이즈는 벳으로 본다 — 권장과 비슷한 빈도면 높은 점수');
     assert.strictEqual(A.scoreAction({ mix: { fold: 93, call: 5, raise: 2 }, bestAction: 'fold' }, 'call'), 23, '폴드가 정석인 자리의 콜');
     assert.ok(A.postflopAdvice({ equity: 0.15, potOdds: 0.33, toCall: 500, opponents: 1, inPosition: true, spr: 5, pot: 1000 }).mix.call < 15, '크게 모자란 콜은 실수로 잡힌다');
     assert.strictEqual(A.scoreAction(null, 'call'), null);
@@ -368,4 +368,37 @@ test('BB 방어·3벳 폭이 공개된 솔버 범위 안에 든다 (6인 100bb, 
     const sb = c => PF.preflopRangeTier(c, 'SB', true, { openerPos: 'BTN', closing: false }).tier;
     assert.strictEqual(pct(c => sb(c) === 'call'), 0);
     const r = pct(c => sb(c) === 'raise'); assert.ok(r >= 17 && r <= 23, 'SB vs BTN 3벳 ' + r.toFixed(1));
+});
+
+test('채점: 의미 있는 비중으로 섞는 액션은 감점이 작고, 명백한 실수는 크게 깎인다', () => {
+    assert.strictEqual(A.scoreAction({ mix: { check: 60, bet: 40 }, bestAction: 'check' }, 'raise'), 90, '약한 패의 헤즈업 블러프(40%)');
+    assert.strictEqual(A.scoreAction({ mix: { check: 70, bet: 30 }, bestAction: 'check' }, 'raise'), 85);
+    assert.strictEqual(A.scoreAction({ mix: { fold: 60, call: 38, raise: 2 }, bestAction: 'fold' }, 'call'), 90, '경계선 패의 콜');
+    assert.ok(A.scoreAction({ mix: { fold: 90, call: 9, raise: 1 }, bestAction: 'fold' }, 'call') < 35, '한참 모자란 패의 콜');
+    assert.ok(A.scoreAction({ mix: { fold: 93, call: 5, raise: 2 }, bestAction: 'fold' }, 'call') < 30);
+});
+
+test('주도권 c벳: 앞 스트리트에 내가 올렸으면 약한 패의 벳 비중이 올라간다 (주도권이 없으면 그대로)', () => {
+    const base = { equity: 0.25, potOdds: 0, toCall: 0, opponents: 1, inPosition: true, spr: 8 };
+    const no = A.postflopAdvice(base), yes = A.postflopAdvice(Object.assign({ cbetFreq: 0.65 }, base));
+    assert.strictEqual(no.mix.bet, 40);
+    assert.strictEqual(yes.mix.bet, 65);
+    assert.strictEqual(yes.bestAction, 'bet');
+    assert.match(yes.reason, /주도권/);
+    // 멀티웨이는 c벳 비중 자체가 낮게 들어오므로 여전히 체크가 기본
+    assert.strictEqual(A.postflopAdvice(Object.assign({}, base, { opponents: 3, cbetFreq: 0.25 })).bestAction, 'check');
+});
+
+test('방어 폭은 가격에 따라 달라진다: 작은 오픈엔 넓게, 큰 오픈엔 좁게', () => {
+    const combos = c => c.length === 2 ? 6 : (c[2] === 's' ? 4 : 12);
+    const pct = f => { let n = 0; Q.ALL_CODES.forEach(c => { if (f(c)) n += combos(c); }); return n / 1326 * 100; };
+    const hu = po => pct(c => PF.preflopRangeTier(c, 'BB', true, { headsUp: true, closing: true, potOdds: po }).tier !== 'fold');
+    assert.ok(hu(1 / 4) > 75 && hu(1 / 4) < 90, '헤즈업 2bb: ' + hu(1 / 4));
+    assert.ok(hu(1.5 / 5) > 60 && hu(1.5 / 5) < 72, '헤즈업 2.5bb: ' + hu(1.5 / 5));
+    assert.ok(hu(2 / 6) > 42 && hu(2 / 6) < 58, '헤즈업 3bb: ' + hu(2 / 6));
+    const bb = po => pct(c => PF.preflopRangeTier(c, 'BB', true, { openerPos: 'BTN', closing: true, potOdds: po }).tier !== 'fold');
+    assert.ok(bb(1 / 4.5) >= 58 && bb(1 / 4.5) <= 66, '6인 BB vs BTN 2bb: ' + bb(1 / 4.5));
+    assert.ok(bb(2 / 6.5) >= 33 && bb(2 / 6.5) <= 40, '6인 BB vs BTN 3bb: ' + bb(2 / 6.5));
+    // 가격을 안 주면(봇 · 예전 호출) 기준표 그대로
+    assert.strictEqual(Math.round(bb(0)), Math.round(bb(1.5 / 5.5)));
 });
