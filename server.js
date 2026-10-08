@@ -4314,6 +4314,18 @@ class GameRoom {
         }
 
         this.playerOrder.forEach(n => { this.pot += this.players[n].currentBet; this.players[n].currentBet = 0; });
+        // 🐛 [올인한 짧은 스택의 기권승] 이긴 사람은 상대 한 명 한 명에게서 "자기가 건 만큼"까지만 가져갈 수 있다.
+        //    예: BB 가 앤티(또는 빅블라인드 일부)만 내고 올인, SB 는 100 을 블라인드로 냈다가 폴드 → 예전엔 BB 가 SB 의 100 을 통째로 가져갔다
+        //    (실측: 20칩으로 앤티만 낸 BB 가 120 을 받음). BB 가 건 돈을 넘는 부분은 낸 사람에게 돌려준다.
+        if (winner && winner.isAllIn) {
+            const cap = winner.totalInvested || 0;
+            this.playerOrder.forEach(n => {
+                const pl = this.players[n];
+                if (n === winnerId || !pl) return;
+                const excess = (pl.totalInvested || 0) - cap;
+                if (excess > 0) { pl.chips += excess; pl.totalInvested -= excess; this.pot -= excess; if (pl.chips > 0) pl.isAllIn = false; }
+            });
+        }
         if (winner) winner.chips += this.pot;
         if (winner) winner.isMucked = true;
 

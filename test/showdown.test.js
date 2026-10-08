@@ -92,8 +92,9 @@ test('3중 사이드팟: 올인 3단계 레이어가 각각 올바른 적격자�
     assert.strictEqual(r.sidePotCount, 3);
 });
 
-test('폴드 롤다운: 상위 사이드팟 적격자가 전원 폴드하면 아래 팟으로 흘러내린다', () => {
-    // A(100 올인) vs B(300, 폴드) vs C(300, 폴드) — B·C만 적격이던 사이드팟 400은 메인으로
+test('올인한 사람은 상대마다 자기가 건 만큼만 가져간다 — 접은 사람이 그보다 더 낸 부분은 돌려준다', () => {
+    // A(100 올인) vs B(300, 폴드) vs C(300, 폴드) — A 는 한 사람당 100 씩만 이길 수 있다. 나머지 200 씩은 낸 사람에게
+    // (예전엔 이 400 이 메인팟으로 굴러 내려가 A 가 700 을 전부 받았다)
     const r = computeShowdown({
         contributions: [{ nick: 'A', invested: 100 }, { nick: 'B', invested: 300 }, { nick: 'C', invested: 300 }],
         totalPot: 700,
@@ -101,7 +102,8 @@ test('폴드 롤다운: 상위 사이드팟 적격자가 전원 폴드하면 아
         holeCards: { A: ['As', 'Ad'], B: ['Ks', 'Kd'], C: ['Qs', 'Qd'] },
         isFolded: (n) => n === 'B' || n === 'C'
     });
-    assert.deepStrictEqual(r.awards, { A: 700 }, '롤다운으로 A가 전액');
+    assert.deepStrictEqual(r.awards, { B: 200, C: 200, A: 300 });
+    assert.deepStrictEqual(r.winnersAll, ['A']);
     assert.strictEqual(sum(r.awards), 700, '칩 보존 실패');
 });
 
@@ -226,9 +228,53 @@ test('프로퍼티: 무작위 시나리오 300개에서 칩이 절대 생성/소
 
         assert.strictEqual(sum(r.awards), totalPot,
             `시나리오#${i}: 수여합 ${sum(r.awards)} ≠ 팟 ${totalPot} (players=${numPlayers} rit=${rit} folded=${[...folded]})`);
-        // 폴드한 사람은 절대 못 받는다
-        for (const f of folded) assert.ok(!(f in r.awards), `시나리오#${i}: 폴드한 ${f}가 칩 수령`);
+        // 폴드한 사람이 받는 것은 "남은 누구보다도 많이 낸 부분"을 돌려받는 것뿐이다
+        const maxActive = Math.max(...contributions.filter(c => !folded.has(c.nick)).map(c => c.invested));
+        for (const f of folded) {
+            const inv = contributions.find(c => c.nick === f).invested;
+            assert.strictEqual(r.awards[f] || 0, Math.max(0, inv - maxActive), `시나리오#${i}: 폴드한 ${f} 수령액`);
+            assert.ok(!r.winnersAll.includes(f));
+        }
         // 수여액은 전부 양수
         for (const [n, w] of Object.entries(r.awards)) assert.ok(w > 0, `시나리오#${i}: ${n} 수여액 ${w}`);
     }
+});
+
+test('죽은 돈(BB 앤티)은 메인팟에 들어간다 — 사이드팟이 있어도 메인팟을 이긴 사람이 가져간다', () => {
+    const S = require('../lib/showdown');
+    // 짧은 스택(12,300 올인)이 이기고, 큰 스택(107,700)은 받아 주지 않은 부분만 돌려받는다. 앤티 400 은 승자에게.
+    const r = S.computeShowdown({
+        contributions: [{ nick: 'short', invested: 12300 }, { nick: 'big', invested: 107700 }],
+        totalPot: 12300 + 107700 + 400,
+        boards: [['2h', 'Kh', 'Qd', '4s', '5h']],
+        holeCards: { short: ['Ac', '4d'], big: ['6h', '7c'] },
+        isFolded: () => false
+    });
+    assert.strictEqual(r.awards.short, 12300 * 2 + 400);
+    assert.strictEqual(r.awards.big, 107700 - 12300);
+});
+
+test('접은 사람이 남은 누구보다 많이 낸 부분은 돌려준다 (올인한 짧은 스택보다 큰 블라인드)', () => {
+    const S = require('../lib/showdown');
+    // X(BB) 50 올인, UTG 80 올인, SB 는 100 내고 폴드 → SB 의 100 중 80 까지만 팟에 들어가고 20 은 돌려받는다
+    const r = S.computeShowdown({
+        contributions: [{ nick: 'X', invested: 50 }, { nick: 'UTG', invested: 80 }, { nick: 'SB', invested: 100 }],
+        totalPot: 230, boards: [['2h', 'Kh', 'Qd', '4s', '5h']],
+        holeCards: { X: ['Ac', '4d'], UTG: ['6h', '7c'], SB: ['9c', '9d'] },
+        isFolded: n => n === 'SB'
+    });
+    assert.strictEqual(r.awards.SB, 20);
+    assert.strictEqual(r.awards.X, 150);                 // 메인팟 50×3
+    assert.strictEqual(r.awards.UTG, 60);                // 사이드팟 30×2
+    assert.ok(!r.winnersAll.includes('SB'));
+    assert.strictEqual(Object.values(r.awards).reduce((a, b) => a + b, 0), 230);
+});
+
+test('앤티만 내고 올인한 사람(건 돈 0)도 앤티는 다툰다 — 이기면 앤티를, 상대는 자기 벳을 돌려받는다', () => {
+    const S = require('../lib/showdown');
+    const base = { contributions: [{ nick: 'B', invested: 200 }], totalPot: 220, boards: [['2h', 'Kh', 'Qd', '4s', '5h']], isFolded: () => false };
+    const win = S.computeShowdown(Object.assign({ holeCards: { A: ['Ac', 'Ad'], B: ['6h', '7c'] } }, base));
+    assert.deepStrictEqual(win.awards, { A: 20, B: 200 });
+    const lose = S.computeShowdown(Object.assign({ holeCards: { A: ['6c', '7d'], B: ['Ah', 'As'] } }, base));
+    assert.deepStrictEqual(lose.awards, { B: 220 });
 });
