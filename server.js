@@ -4711,6 +4711,17 @@ class GameRoom {
                         mix = strongRaise ? { fold: Math.round((100 - call) * k), call: Math.round(call * k), raise: strongRaise } : { fold: 100 - call, call };
                         bestAction = strongRaise >= 50 ? 'raise' : (rr.ev.call > 0 ? 'call' : 'fold');
                         if (!strongRaise && Math.abs(rr.ev.call) < 0.02 * (rr.pot + toCall)) bestAction = call >= 50 ? 'call' : 'fold';
+                        // 🔬 [검증용 · DEV_RLOG] 콜의 기대값 예측 두 가지(예전 근사 · 리버 계산)를 상대의 실제 패로 본 결과와 견준다
+                        if (process.env.DEV_RLOG) {
+                            try {
+                                const vn = this.playerOrder.find(n => n !== nick && this.players[n] && !this.players[n].isFolded), vh = vn && this.players[vn].hand;
+                                if (vh && vh.length === 2) {
+                                    const m = Hand.solve(p.hand.concat(this.communityCards)), h = Hand.solve(vh.concat(this.communityCards)), ws = Hand.winners([m, h]);
+                                    const potAll = potBefore + p.currentBet, truth = ws.length === 2 ? potAll / 2 : (ws[0] === m ? potAll : -toCall);
+                                    console.log('RVLOG ' + JSON.stringify({ old: _ev.call, sol: Math.round(rr.ev.call), truth: Math.round(truth), pot: potAll, call: toCall, bb: _bbNow, bot: !!this.players[vn].isBot, eq: Math.round(equity * 100), sCall: Math.round(rr.freq * 100) }));
+                                }
+                            } catch (e) {}
+                        }
                         _ev.acts = { fold: 0, call: Math.round(rr.ev.call) };
                         _ev.call = Math.round(rr.ev.call);
                         _sv = { river: true };
