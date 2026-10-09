@@ -730,7 +730,7 @@ const MockDB = {
         const user = await this.getUser(nickname);
         if (isLearn) {
             // 🎓 학습 모드 — 실전 전적과 분리
-            const L = user.learnStats || (user.learnStats = {});
+            const L = this.statBox(user, isLearn);
             L.handsPlayed = (L.handsPlayed||0)+1;
             if (vpip) L.vpipHands = (L.vpipHands||0)+1;
             if (won) L.handsWon = (L.handsWon||0)+1;
@@ -777,7 +777,7 @@ const MockDB = {
         const u = await this.getUser(nickname);
         if (isLearn) {
             // 🎓 학습 모드 — 실전 통계와 분리해 learnStats에 누적
-            const L = u.learnStats || (u.learnStats = {});
+            const L = this.statBox(u, isLearn);
             if (ev.preflopOpp) L.preflopOpps = (L.preflopOpps||0)+1;
             if (ev.seats) { L.seatSum = (L.seatSum||0)+ev.seats; L.seatCnt = (L.seatCnt||0)+1; }
             if (ev.pfr) L.pfrHands = (L.pfrHands||0)+1;
@@ -814,7 +814,7 @@ const MockDB = {
         if (!u) return null;
         const nK = 'lkN_' + kind, bK = 'lkB_' + kind;
         if (isLearn) {
-            const L = u.learnStats || (u.learnStats = {});
+            const L = this.statBox(u, isLearn);
             L[nK] = (L[nK] || 0) + 1; L[bK] = Math.round(((L[bK] || 0) + costBB) * 100) / 100;
             if (rec) L.blunders = Blunder.add(L.blunders, rec);
         } else {
@@ -825,11 +825,28 @@ const MockDB = {
         this.save();
         return rec;
     },
+    // 🗂️ 통계 상자: isLearn 이 'fn' 이면 파이널나인 연습 전용(fnStats), 그 밖의 참이면 학습 모드(learnStats).
+    //    두 상자 모두 본 기록(실력 점수·랭킹)과 섞이지 않는다.
+    statBox(u, isLearn) {
+        const k = isLearn === 'fn' ? 'fnStats' : 'learnStats';
+        return u[k] || (u[k] = {});
+    },
+    // 🏁 [파이널나인 연습] 대회 한 번의 결과(순위)를 남긴다 — 최근 60번
+    recordFnResult(nickname, r) {
+        const u = this.users.get(nickname);
+        if (!u || typeof nickname !== 'string' || nickname.startsWith('🤖')) return;
+        const F = this.statBox(u, 'fn');
+        F.fnGames = (F.fnGames || 0) + 1; F.fnPlaceSum = (F.fnPlaceSum || 0) + r.place;
+        if (r.place <= r.paid) F.fnItm = (F.fnItm || 0) + 1;
+        if (r.place === 1) F.fnWins = (F.fnWins || 0) + 1;
+        u.fnResults = (Array.isArray(u.fnResults) ? u.fnResults : []).concat([r]).slice(-60);
+        this.save();
+    },
     // 📉 EV 손실 집계 — 이름이 ev 로 시작하는 칸에 더한다(일별 기록에도). 판 단위(evLoss·evLossSq·evHands)와 결정 단위(evG_등급·evC_스트리트·evS_스트리트)를 같이 쓴다.
     recordEv(nickname, fields, isLearn) {
         const u = this.users.get(nickname);
         if (!u || typeof nickname !== 'string' || nickname.startsWith('🤖')) return;
-        const box = isLearn ? (u.learnStats || (u.learnStats = {})) : u;
+        const box = isLearn ? this.statBox(u, isLearn) : u;
         const daily = {};
         Object.keys(fields).forEach(k => {
             const v = fields[k];
@@ -852,7 +869,7 @@ const MockDB = {
     recordNet(nickname, netBB, isLearn) {
         const u = this.users.get(nickname);
         if (!u || nickname.startsWith('🤖') || !Number.isFinite(netBB)) return;
-        if (isLearn) { const L = u.learnStats || (u.learnStats = {}); L.netBB = Math.round(((L.netBB || 0) + netBB) * 10) / 10; L.netHands = (L.netHands || 0) + 1; return; }
+        if (isLearn) { const L = this.statBox(u, isLearn); L.netBB = Math.round(((L.netBB || 0) + netBB) * 10) / 10; L.netHands = (L.netHands || 0) + 1; return; }
         u.netBB = Math.round(((u.netBB || 0) + netBB) * 10) / 10; u.netHands = (u.netHands || 0) + 1;
         this._bumpDaily(u, { netBB, netHands: 1 });
     },
@@ -860,14 +877,14 @@ const MockDB = {
     recordDecision(nickname, rec, isLearn) {
         const u = this.users.get(nickname);
         if (!u || nickname.startsWith('🤖')) return;
-        const box = isLearn ? (u.learnStats || (u.learnStats = {})) : u;
+        const box = isLearn ? this.statBox(u, isLearn) : u;
         box.recentDec = (Array.isArray(box.recentDec) ? box.recentDec : []).concat([rec]).slice(-40);
     },
     async recordShowdownStat(nickname, won, isLearn) {
         if (typeof nickname !== 'string' || nickname.startsWith('🤖')) return;
         const u = await this.getUser(nickname);
         if (isLearn) {
-            const L = u.learnStats || (u.learnStats = {});
+            const L = this.statBox(u, isLearn);
             L.wentToShowdown = (L.wentToShowdown||0)+1;
             if (won) L.wonAtShowdown = (L.wonAtShowdown||0)+1;
             this.save();
@@ -3716,11 +3733,11 @@ class GameRoom {
         potResults.forEach(p => p.winners.forEach(w => { wonByNick[w.nick] = (wonByNick[w.nick] || 0) + w.won; }));
         try { this.settleHandResults(); } catch (e) {}
         this.playerOrder.forEach(nick => {
-            MockDB.recordHand(nick, allWinnerIds.has(nick), wonByNick[nick] || 0, this.vpipThisHand && this.vpipThisHand.has(nick), !!this._learnMode);
+            MockDB.recordHand(nick, allWinnerIds.has(nick), wonByNick[nick] || 0, this.vpipThisHand && this.vpipThisHand.has(nick), this.statKind());
             // 📊 쇼다운 도달 통계 (폴드하지 않고 카드를 깐 플레이어)
             const pl = this.players[nick];
             if (pl && !pl.isFolded && !pl.isBot) {
-                MockDB.recordShowdownStat(nick, allWinnerIds.has(nick), !!this._learnMode);
+                MockDB.recordShowdownStat(nick, allWinnerIds.has(nick), this.statKind());
             }
         });
 
@@ -4046,6 +4063,8 @@ class GameRoom {
     // 💥 [리포트] 방금 한 액션이 큰 실수면 상황째로 저장한다 (기준은 학습 조언과 같다)
     // 실력 점수·실수 기록·실제 성적을 쌓는 판인가: 일반 토너먼트 · 캐시 · MTT (+ 학습 모드는 학습 통계로 따로)
     countsForSkill() { return !this._challenge; }
+    // 이 방의 기록이 들어갈 통계 상자: 'fn' 파이널나인 연습 · true 학습 모드 · false 본 기록
+    statKind() { return this._fnMode ? 'fn' : !!this._learnMode; }
     noteBlunder(nick, type, p, advice, pre, beforeBet, beforeHighest) {
         if (!this.countsForSkill()) return;
         const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
@@ -4056,13 +4075,13 @@ class GameRoom {
         if (!el || !el.kind || !(el.lossBB > 0)) return;
         const a = { kind: el.kind, costBB: el.lossBB };
         // 유형별 합계는 전부 세고, 상황째로 보관하는 것은 1bb 이상 잃은 결정만
-        if (el.lossBB < 1) { MockDB.recordBlunder(nick, null, a.kind, a.costBB, !!this._learnMode); return; }
+        if (el.lossBB < 1) { MockDB.recordBlunder(nick, null, a.kind, a.costBB, this.statKind()); return; }
         const key = GtoAdvice.actionKey(advice, type);
         const r1 = x => Math.round(x / bb * 10) / 10;
         const ch = this._challenge;
         const rec = {
-            t: Date.now(), learn: !!this._learnMode, kind: a.kind, costBB: a.costBB,
-            modeLabel: this._learnMode ? '학습' : (ch ? (ch.run ? '증강 컴까기' : '컴까기') : (this.mode === 'cash' ? '캐시' : '토너먼트')),
+            t: Date.now(), learn: this.statKind(), kind: a.kind, costBB: a.costBB,
+            modeLabel: this._fnMode ? '파이널나인 연습' : this._learnMode ? '학습' : (ch ? (ch.run ? '증강 컴까기' : '컴까기') : (this.mode === 'cash' ? '캐시' : '토너먼트')),
             street: advice.street, hand: pre.hand, board: pre.board,
             pos: p.position || '', seats: this.playerOrder.length, opp: pre.opp,
             potBB: r1(pre.pot), toCallBB: r1(toCall), stackBB: r1(pre.chips + beforeBet),
@@ -4072,7 +4091,7 @@ class GameRoom {
             eq: advice.equity, odds: advice.potOdds, eqLabel: advice.equityLabel || '내 승률',
             reason: String(advice.reason || '').slice(0, 260)
         };
-        const saved = MockDB.recordBlunder(nick, rec, a.kind, a.costBB, !!this._learnMode);
+        const saved = MockDB.recordBlunder(nick, rec, a.kind, a.costBB, this.statKind());
         if (saved) (this._handBl || (this._handBl = [])).push({ nick, rec: saved, bb });
     }
     // 🏁 핸드가 끝나 칩 정산이 끝난 직후: 사람마다 그 판의 칩 증감(bb)을 적고, 그 판에 기록된 실수에도 결과를 붙인다.
@@ -4085,7 +4104,7 @@ class GameRoom {
             const pl = this.players[nick], start = this.handStartStacks[nick];
             if (!pl || pl.isBot || typeof start !== 'number' || !this.countsForSkill()) return;
             const net = (pl.chips - start) / bb;
-            MockDB.recordNet(nick, Math.round(net * 10) / 10, !!this._learnMode);
+            MockDB.recordNet(nick, Math.round(net * 10) / 10, this.statKind());
             // 📉 이 판에서 잃은 기대값(결정별 손실의 합) + 🎲 운을 뺀 결과(올인 뒤 남은 카드는 승률만큼 받은 것으로 계산)
             const loss = (this._evHandId === this.handId && this._evHand && this._evHand[nick]) || 0;
             const aq = this._allinEq && this._allinEq.handId === this.handId ? this._allinEq.adj : null;
@@ -4094,7 +4113,7 @@ class GameRoom {
             const seats = Object.keys(this.handStartStacks).length || this.playerOrder.length, sf = EvLoss.seatFactor(seats), lossN = loss * sf;
             const fmt = seats <= 2 ? 'hu' : seats <= 4 ? 'mid' : 'full', pk = Ranges.posKey(pl.position || '') || 'etc';
             MockDB.recordEv(nick, { evLoss: loss, evLossSq: loss * loss, evHands: 1, evNetAdj: Math.round((hasAdj ? aq[nick] / bb : net) * 100) / 100, evAllin: hasAdj ? 1 : 0,
-                evLossN: lossN, evLossNSq: lossN * lossN, evSeats: seats, ['evFh_' + fmt]: 1, ['evFl_' + fmt]: loss, ['evPh_' + pk]: 1, ['evPl_' + pk]: loss }, !!this._learnMode);
+                evLossN: lossN, evLossNSq: lossN * lossN, evSeats: seats, ['evFh_' + fmt]: 1, ['evFl_' + fmt]: loss, ['evPh_' + pk]: 1, ['evPl_' + pk]: loss }, this.statKind());
         });
         this.settleBlunders();
         if (this._mtt) { try { this._mtt.onHandEnd(this); } catch (e) { console.error('[MTT onHandEnd 오류]', e && e.message); } }
@@ -4174,9 +4193,20 @@ class GameRoom {
                     if (this._evHandId !== this.handId) { this._evHandId = this.handId; this._evHand = {}; }
                     this._evHand[nick] = (this._evHand[nick] || 0) + _el.lossBB;
                     const st0 = sa0.advice.street || 'preflop';
-                    MockDB.recordEv(nick, { ['evG_' + _el.grade]: 1, ['evC_' + st0]: 1, ['evS_' + st0]: _el.lossBB }, !!this._learnMode);
+                    MockDB.recordEv(nick, { ['evG_' + _el.grade]: 1, ['evC_' + st0]: 1, ['evS_' + st0]: _el.lossBB }, this.statKind());
+                    // 📏 스택 깊이별(내 스택 bb) · 🏁 대회 단계별 손실 — 대회에서는 "몇 bb 일 때, 어느 단계에서 새나"가 가장 쓸모 있는 피드백이다
+                    {
+                        const myBB = (sa0.pre.chips + beforeBet) / bb0, dk = myBB <= 12 ? 'd12' : myBB <= 25 ? 'd25' : myBB <= 40 ? 'd40' : 'deep';
+                        const f2 = { ['evDn_' + dk]: 1, ['evDl_' + dk]: _el.lossBB };
+                        if (this._mtt) {
+                            const alive = this._mtt.countAlive(), paid = this._mtt.paid || 0, tot = this._mtt.totalEntrants || alive;
+                            const ph = alive <= 2 ? 'hu' : (paid && alive <= paid) ? 'itm' : (paid && alive <= paid + 2) ? 'bubble' : alive <= this._mtt.tableSize ? 'ft' : alive <= tot / 2 ? 'mid' : 'early';
+                            f2['evTn_' + ph] = 1; f2['evTl_' + ph] = _el.lossBB;
+                        }
+                        MockDB.recordEv(nick, f2, this.statKind());
+                    }
                     // 🧮 솔버 일치율: 솔버 조언이 나온 결정 가운데 솔버 범위 안(권장 액션이거나 25% 이상 섞는 액션)으로 친 횟수
-                    if (sa0.advice.solverTable) MockDB.recordEv(nick, { ['evVn_' + st0]: 1, ['evVk_' + st0]: (_el.grade === 'best' || _el.grade === 'good') ? 1 : 0 }, !!this._learnMode);
+                    if (sa0.advice.solverTable) MockDB.recordEv(nick, { ['evVn_' + st0]: 1, ['evVk_' + st0]: (_el.grade === 'best' || _el.grade === 'good') ? 1 : 0 }, this.statKind());
                 }
                 // 📊 상황별 빈도: 이 자리에서 "했나"와 "조언이 권한 빈도"를 같이 쌓는다
                 try {
@@ -4185,7 +4215,7 @@ class GameRoom {
                     const q = this._eqCal;
                     if (q && q.nick === nick && q.hand === this.handId && q.st === st0x(sa0.advice.street)) {
                         const k = q.st + '_' + (q.bot ? 'b' : 'h'), e = q.est - q.tr;
-                        MockDB.recordEv(nick, { ['evQn_' + k]: 1, ['evQe_' + k]: e, ['evQs_' + k]: e * e }, !!this._learnMode);
+                        MockDB.recordEv(nick, { ['evQn_' + k]: 1, ['evQe_' + k]: e, ['evQs_' + k]: e * e }, this.statKind());
                     }
                     this._eqCal = null;
                     const spot = Freqs.spotOf({
@@ -4195,7 +4225,7 @@ class GameRoom {
                         limpers: pre0 ? this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded && (this.players[n].currentBet || 0) === bb0 && !(this.players[n].role && this.players[n].role.includes('BB'))).length : 0,
                         pfAggressor: !pre0 && this.lastAggressorBefore(this.gameStage) === nick, allinIsCall: !!sa0.advice.allinIsCall
                     });
-                    if (spot) MockDB.recordEv(nick, Freqs.fields(spot), !!this._learnMode);
+                    if (spot) MockDB.recordEv(nick, Freqs.fields(spot), this.statKind());
                 } catch (e) {}
             }
         }
@@ -4226,12 +4256,12 @@ class GameRoom {
                         pot: r1(sa.pre.pot), call: r1(Math.max(0, toCall)), act: type, amt: r1(p.currentBet || 0),
                         best: adv.bestAction, bestPct: adv.mix[adv.bestAction] || 0, pct: adv.mix[key] || 0,
                         sc: gto, w: ev.gtoWeight, loss: _el ? _el.lossBB : null, g: _el ? _el.grade : null, why: String(adv.reason || '').slice(0, 160)
-                    }, !!this._learnMode);
+                    }, this.statKind());
                 }
             }
         }
 
-        MockDB.recordActionStats(nick, ev, !!this._learnMode);
+        MockDB.recordActionStats(nick, ev, this.statKind());
     }
 
     // 🎯 단순화된 GTO 근접도: 팟 오즈 대비 승률(에퀴티)로 행동 적정성 평가 (0~100)
@@ -4875,7 +4905,7 @@ class GameRoom {
 
         // 📊 전적 집계 + 📜 핸드 히스토리
         try { this.settleHandResults(); } catch (e) {}
-        this.playerOrder.forEach(n => MockDB.recordHand(n, n === winnerId, n === winnerId ? this.pot : 0, this.vpipThisHand && this.vpipThisHand.has(n), !!this._learnMode));
+        this.playerOrder.forEach(n => MockDB.recordHand(n, n === winnerId, n === winnerId ? this.pot : 0, this.vpipThisHand && this.vpipThisHand.has(n), this.statKind()));
 
         // 🏅 기권승 업적: 허풍선이(폴드 유도 10회 누적) + 고래
         const wu = MockDB.users.get(winnerId);
@@ -5055,6 +5085,11 @@ class MTTManager {
         this.startingChips = settings.startingChips || 5000;
         this.blindUpInterval = settings.blindUpInterval || 300;
         this.name = settings.name || mttId;
+        // 🏁 파이널나인 딥스택 연습: 정원 20 · 전용 블라인드 구조 · 상위 3명 입상 · 기록은 전용 상자(fnStats)에만
+        this.fn = !!settings.fn;
+        this.maxEntrants = settings.maxEntrants || this.tableSize * 6;
+        this.structure = settings.structure || null;
+        this.paid = settings.paid || 0;
         this.entrants = [];        // { nick, socketId, isBot }
         this.tables = [];          // roomId 배열
         this.eliminated = [];      // 탈락 순서(나중일수록 높은 순위) — { nick, place }
@@ -5125,7 +5160,7 @@ class MTTManager {
     broadcastLobby() {
         const payload = {
             mttId: this.mttId, name: this.name, hostNick: this.hostNick,
-            tableSize: this.tableSize, startingChips: this.startingChips,
+            tableSize: this.tableSize, startingChips: this.startingChips, fn: this.fn, maxEntrants: this.maxEntrants,
             entrants: this.entrants.map(e => e.nick),
             started: this.started
         };
@@ -5193,6 +5228,8 @@ class MTTManager {
         });
         room._mtt = this;
         room._mttFreeChips = true;
+        if (this.fn) room._fnMode = true;
+        if (this.structure) room.blindStructure = this.structure.map(x => Object.assign({}, x));
         // 재배치로 만들어진 테이블도 토너먼트의 현재 블라인드 레벨을 그대로 이어받는다
         room.blindLevel = this.blindLevel;
         room.timeRemaining = this.timeRemaining;
@@ -5204,7 +5241,7 @@ class MTTManager {
             const pl = makeFreshPlayer(s.nick, s.socketId, s.isBot, s.chips);
             pl.chips = s.chips;
             room.players[s.nick] = pl;
-            if (s.isBot) room.players[s.nick]._persona = room.assignPersona(s.nick, 'hard');
+            if (s.isBot) room.players[s.nick]._persona = room.assignPersona(s.nick, this.fn ? fnBotLevel(s.nick) : 'hard');
             room.playerOrder.push(s.nick);
             if (s.socketId) {
                 const sock = io.sockets.sockets.get(s.socketId);
@@ -5231,6 +5268,7 @@ class MTTManager {
         if (this.eliminated.find(e => e.nick === nick)) return;
         const place = this.totalEntrants - this.eliminated.length;
         this.eliminated.push({ nick, place });
+        if (this.fn) MockDB.recordFnResult(nick, { t: Date.now(), place, total: this.totalEntrants, paid: this.paid, level: this.blindLevel + 1 });
         if (process.env.DEV_MTTLOG) console.log(`[MTTLOG] out ${place} ${nick} t=${Date.now()} alive=${this.countAlive()} room=${roomId.split('#')[1]}`);
         const room = rooms.get(roomId);
         if (room && room.players[nick] && room.players[nick].socketId) {
@@ -5455,7 +5493,9 @@ class MTTManager {
         if (this._heartbeat) clearInterval(this._heartbeat);
         if (this._blindTimer) { clearInterval(this._blindTimer); this._blindTimer = null; }
         const champion = winner.nick;
-        if (!winner.isBot) MockDB.addMttWin(champion, this.totalEntrants, (this.humanEntrants || 0) >= TOKEN_MIN_HUMANS);
+        // 연습 모드의 우승은 연습 기록에만 남긴다(명예의 전당·토큰과 무관)
+        if (this.fn) { if (!winner.isBot) MockDB.recordFnResult(champion, { t: Date.now(), place: 1, total: this.totalEntrants, paid: this.paid, level: this.blindLevel + 1 }); }
+        else if (!winner.isBot) MockDB.addMttWin(champion, this.totalEntrants, (this.humanEntrants || 0) >= TOKEN_MIN_HUMANS);
 
         // 누락된 탈락자 보완: entrants 중 우승자도, 탈락기록도 없는 사람을 채움
         //   (같은 핸드 동시 탈락 등으로 콜백이 일부 누락된 경우 대비)
@@ -5467,6 +5507,7 @@ class MTTManager {
         missing.forEach(e => {
             const place = this.totalEntrants - this.eliminated.length;
             this.eliminated.push({ nick: e.nick, place });
+            if (this.fn && !e.isBot) MockDB.recordFnResult(e.nick, { t: Date.now(), place, total: this.totalEntrants, paid: this.paid, level: this.blindLevel + 1 });
         });
 
         const ranking = [{ place: 1, nick: champion }].concat(
@@ -5505,6 +5546,20 @@ class MTTManager {
     }
 }
 
+// 🏁 [파이널나인 딥스택 연습] 구조. ⚠️ 실제 매장 구조표를 확인하지 못해 "빠른 펍 대회"를 가정한 값이다 — 구조표를 받으면 이 표만 바꾸면 된다.
+//    시작 30,000칩(150bb) · 레벨 3분 · 레벨 2부터 BB 앤티 · 20명 중 상위 3명 입상. 테이블은 이 게임의 최대인 6인(실제 매장은 9인).
+const FN_MTT = {
+    entrants: 20, tableSize: 6, startingChips: 30000, blindUpInterval: 180, paid: 3,
+    structure: [[100, 200], [200, 400], [300, 600], [400, 800], [500, 1000], [600, 1200], [800, 1600], [1000, 2000], [1500, 3000], [2000, 4000],
+        [3000, 6000], [4000, 8000], [6000, 12000], [8000, 16000], [10000, 20000], [15000, 30000], [20000, 40000], [30000, 60000], [50000, 100000]]
+        .map((x, i) => ({ level: i + 1, sb: x[0], bb: x[1], ante: i === 0 ? 0 : x[1] }))
+};
+// 연습 상대 구성: 실제 펍 대회처럼 잘 치는 사람은 일부고, 많이 참여하는 상대가 섞여 있다 (고수 30% · 중수 45% · 초보 25%, 이름으로 고정)
+function fnBotLevel(nick) {
+    let h = 0; for (let i = 0; i < nick.length; i++) h = (h * 31 + nick.charCodeAt(i)) >>> 0;
+    const x = h % 20;
+    return x < 6 ? 'hard' : x < 15 ? 'normal' : 'easy';
+}
 // 새 플레이어 객체 생성 헬퍼 (MTT 착석용)
 function makeFreshPlayer(nick, socketId, isBot, chips) {
     return {
@@ -6622,6 +6677,47 @@ io.on('connection', (socket) => {
         io.emit('mttList', mttListArray());
     });
 
+    // 🏁 [파이널나인 딥스택 연습] 20인 MTT 를 연다 — 친구들은 MTT 목록에서 들어오고, 시작하면 빈자리는 봇이 채운다
+    socket.on('createFnMtt', () => {
+        if (!socket.nickname || socket.currentRoom || socket._mttId) return;
+        const mttId = 'mtt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+        const name = `🏁 파이널나인 딥스택 연습 (${socket.nickname})`;
+        const mtt = new MTTManager(mttId, socket.nickname, { name, fn: true, tableSize: FN_MTT.tableSize, startingChips: FN_MTT.startingChips,
+            blindUpInterval: FN_MTT.blindUpInterval, maxEntrants: FN_MTT.entrants, structure: FN_MTT.structure, paid: FN_MTT.paid });
+        mtts.set(mttId, mtt);
+        mtt.addEntrant(socket.nickname, socket.id, false);
+        socket._mttId = mttId;
+        leaveLobby(socket);
+        socket.emit('mttCreated', { mttId, name });
+        mtt.broadcastLobby();
+        io.emit('mttList', mttListArray());
+    });
+    // 🏁 [파이널나인 연습 기록] 이 모드에서 친 것만 모은 점수·피드백·대회 결과 + 친구들 비교
+    socket.on('getFnReport', () => {
+        if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
+        const u = MockDB.users.get(socket.nickname), F = u.fnStats || {};
+        const dk = { d12: '12bb 이하', d25: '13~25bb', d40: '26~40bb', deep: '41bb 이상' }, pk = { early: '초반', mid: '중반', ft: '파이널 테이블', bubble: '버블(입상 직전)', itm: '입상권', hu: '마지막 1대1' };
+        const per = (o, keys, n, l) => Object.keys(keys).map(k => ({ id: k, name: keys[k], n: o[n + k] || 0, per: o[n + k] > 0 ? Math.round((o[l + k] || 0) / o[n + k] * 100) / 100 : null })).filter(x => x.n > 0);
+        const leaks = Blunder.KIND_KEYS.map(k => ({ name: Blunder.KINDS[k].name, tip: Blunder.KINDS[k].tip, n: F['lkN_' + k] || 0, bb: Math.round((F['lkB_' + k] || 0) * 10) / 10 })).filter(l => l.n > 0).sort((a, b) => b.bb - a.bb);
+        const sum = x => ({ games: x.fnGames || 0, itm: x.fnItm || 0, wins: x.fnWins || 0, avgPlace: x.fnGames > 0 ? Math.round(x.fnPlaceSum / x.fnGames * 10) / 10 : null });
+        const board = [];
+        MockDB.users.forEach(x => {
+            if (!x || !x.nickname || x.nickname.startsWith('🤖') || x.nickname === ADMIN_NICK || !x.fnStats) return;
+            const ev = evView(x.fnStats), sm = sum(x.fnStats);
+            if (!ev && !sm.games) return;
+            board.push(Object.assign({ nick: x.nickname, me: x.nickname === socket.nickname, score: ev ? ev.score : null, pm: ev ? ev.pm : null, hands: ev ? ev.hands : 0, loss100: ev ? ev.raw100 : null }, sm));
+        });
+        board.sort((a, b) => (b.score == null ? -1 : b.score) - (a.score == null ? -1 : a.score));
+        socket.emit('fnReport', {
+            cfg: { entrants: FN_MTT.entrants, startBB: FN_MTT.startingChips / FN_MTT.structure[0].bb, levelSec: FN_MTT.blindUpInterval, paid: FN_MTT.paid, tableSize: FN_MTT.tableSize },
+            ev: evView(F), summary: sum(F), results: (u.fnResults || []).slice(-20).reverse(),
+            depth: per(F, dk, 'evDn_', 'evDl_'), phases: per(F, pk, 'evTn_', 'evTl_'),
+            freqs: Freqs.summarize(F), leaks, blunders: Blunder.top(F.blunders, 0, 5).map(Blunder.describe),
+            stats: { vpip: F.preflopOpps > 0 ? Math.round((F.vpipHands || 0) / F.preflopOpps * 100) : null, pfr: F.preflopOpps > 0 ? Math.round((F.pfrHands || 0) / F.preflopOpps * 100) : null, hands: F.handsPlayed || 0 },
+            board
+        });
+    });
+
     // 🎨 [상점] 카탈로그 + 내 보유/장착 상태
     function shopPayload(u) {
         const c = normalizeCosmetics(u);
@@ -6888,7 +6984,7 @@ io.on('connection', (socket) => {
         if (!socket.nickname || socket.currentRoom) return;
         const mtt = mtts.get(data && data.mttId);
         if (!mtt || mtt.started) { socket.emit('gameMessage', '🚫 이미 시작했거나 없는 토너먼트입니다.'); return; }
-        if (mtt.entrants.length >= mtt.tableSize * 6) { socket.emit('gameMessage', '🚫 정원이 가득 찼습니다.'); return; }
+        if (mtt.entrants.length >= mtt.maxEntrants) { socket.emit('gameMessage', '🚫 정원이 가득 찼습니다.'); return; }
         if (mtt.addEntrant(socket.nickname, socket.id, false)) {
             socket._mttId = mtt.mttId;
             leaveLobby(socket);
@@ -6901,7 +6997,7 @@ io.on('connection', (socket) => {
     socket.on('addMttBot', () => {
         const mtt = mtts.get(socket._mttId);
         if (!mtt || mtt.hostNick !== socket.nickname || mtt.started) return;
-        if (mtt.entrants.length >= mtt.tableSize * 6) { socket.emit('gameMessage', '🚫 정원이 가득 찼습니다.'); return; }
+        if (mtt.entrants.length >= mtt.maxEntrants) { socket.emit('gameMessage', '🚫 정원이 가득 찼습니다.'); return; }
         mtt.addBot();
         io.emit('mttList', mttListArray());
     });
@@ -6910,6 +7006,8 @@ io.on('connection', (socket) => {
     socket.on('startMtt', () => {
         const mtt = mtts.get(socket._mttId);
         if (!mtt || mtt.hostNick !== socket.nickname || mtt.started) return;
+        // 🏁 파이널나인 연습은 빈자리를 봇으로 채워 항상 20명으로 시작한다
+        if (mtt.fn) { let guard = 0; while (mtt.entrants.length < mtt.maxEntrants && guard++ < 40) mtt.addBot(); }
         if (mtt.entrants.length < 2) { socket.emit('gameMessage', '🚫 최소 2명 필요합니다.'); return; }
         mtt.start();
         io.emit('mttList', mttListArray());

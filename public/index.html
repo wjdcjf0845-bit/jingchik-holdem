@@ -4218,6 +4218,12 @@
         .skf-t { font-size: 11px; font-weight: 800; text-align: right; white-space: nowrap; }
         .skf-tip { grid-column: 1 / -1; font-size: 11.5px; color: #c9d2e6; line-height: 1.5; margin-top: 4px; word-break: keep-all; }
         @media (max-width: 520px) { .skf { grid-template-columns: minmax(84px, 1.2fr) minmax(40px, 1.4fr) 56px 54px; column-gap: 6px; padding: 6px 7px; } .skf-t { font-size: 10px; } }
+        .fn-row { display: grid; grid-template-columns: 1.7fr 1fr; gap: 8px; margin: 0 0 12px; }
+        .fn-btn { font-family: inherit; font-size: 14px; font-weight: 900; color: #fff; padding: 10px 10px 9px; border-radius: 13px; cursor: pointer; text-align: left; line-height: 1.25;
+            background: linear-gradient(180deg, #2b3a5c, #1a2238); border: 1px solid rgba(143,211,255,0.4); }
+        .fn-btn.go { background: linear-gradient(180deg, #7a4a12, #4a2a08); border-color: rgba(255,217,122,0.65); }
+        .fn-btn small { display: block; font-size: 10.5px; font-weight: 600; color: rgba(255,255,255,0.72); margin-top: 3px; word-break: keep-all; }
+        .fn-btn:hover { filter: brightness(1.15); }
         .skb-pm { font-size: 10px; font-weight: 600; opacity: 0.75; margin-left: 2px; }
         .skbs .skb-score { flex-basis: 58px; white-space: nowrap; }
         .skx-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; margin-top: 6px; font-size: 11px; color: #c3cbe0; }
@@ -4482,6 +4488,12 @@
             <button class="rank-btn report" onclick="socket.emit('getSkillBoard')" title="친구들과 실력 비교">📈<span>실력</span></button>
             <button class="rank-btn report" onclick="openSessionReport()" title="내 세션 리포트">📊<span>리포트</span></button>
             <button class="rank-btn help" onclick="openHelp()" title="족보·규칙 도움말">📖<span>도움말</span></button>
+        </div>
+
+        <!-- 🏁 파이널나인 딥스택 연습 (20인 MTT) — 기록은 이 모드 것만 따로 모은다 -->
+        <div class="fn-row">
+            <button type="button" class="fn-btn go" onclick="socket.emit('createFnMtt')">🏁 파이널나인 딥스택 연습 <small>20인 대회 열기 · 친구는 아래 목록에서 참가</small></button>
+            <button type="button" class="fn-btn" onclick="socket.emit('getFnReport')">📋 연습 기록 <small>점수 · 피드백</small></button>
         </div>
 
         <!-- 📈 실력 순위 — 로비에서 바로 보이게 (누르면 자세한 비교) -->
@@ -7857,6 +7869,41 @@
         document.getElementById('mttchamp-modal').style.display = 'flex';
     });
 
+    // ═══════ 🏁 파이널나인 딥스택 연습 기록 — 이 모드에서 친 것만 모은 점수·피드백·대회 결과 ═══════
+    socket.on('fnReport', d => {
+        const list = document.getElementById('skill-list');
+        if (!d || !list) return;
+        const c = d.cfg, sm = d.summary, ev = d.ev;
+        const when = t => { const x = new Date(t); return `${x.getMonth() + 1}/${x.getDate()}`; };
+        const bars = (rows, unit) => { if (!rows.length) return '<div class="bl-none">아직 기록이 없습니다.</div>'; const mx = Math.max(0.01, ...rows.map(r => r.per || 0));
+            return `<div class="skbs">${rows.map(r => `<div class="skb"><span class="skb-name" style="flex-basis:104px;">${r.name}</span><span class="skb-track">${r.per > 0 ? `<i style="width:${Math.max(3, Math.round(r.per / mx * 100))}%; background:#ff8a7d;"></i>` : ''}</span><span class="skb-score" style="flex-basis:58px; font-size:15px; color:#ffb3a8;">−${r.per}</span><span class="skb-trend" style="flex-basis:56px; color:var(--txt-dim);">${r.n}${unit}</span></div>`).join('')}</div>`; };
+        const results = d.results.length ? d.results.map(r => `<div class="bl-leak"><span>${when(r.t)}</span><b style="color:${r.place === 1 ? '#ffe27a' : r.place <= r.paid ? '#4be3a0' : '#dfe6f5'};">${r.place}위 / ${r.total}명${r.place === 1 ? ' 🏆' : r.place <= r.paid ? ' 입상' : ''}</b><i>레벨 ${r.level}에서 ${r.place === 1 ? '우승' : '탈락'}</i></div>`).join('') : '<div class="bl-none">아직 끝낸 대회가 없습니다.</div>';
+        const board = d.board.length ? d.board.map((u, i) => `<div class="skd${u.me ? ' me' : ''}"><b>${i + 1}. ${esc(u.nick)}${u.me ? ' (나)' : ''}</b><span>${u.score != null ? `점수 <b style="color:${skColor(u.score)};">${u.score}</b> ±${u.pm} · 100판당 손실 ${u.loss100}bb` : '점수 집계 전'}</span><span>대회 ${u.games}번 · 입상 ${u.itm}번 · 우승 ${u.wins}번${u.avgPlace != null ? ` · 평균 ${u.avgPlace}위` : ''}</span><small>${u.hands.toLocaleString()}판</small></div>`).join('') : '<div class="bl-none">아직 기록이 없습니다.</div>';
+        list.innerHTML = `
+            <div class="skx-head"><b>🏁 파이널나인 딥스택 연습</b>${ev ? `<span style="color:${skColor(ev.score)};">${ev.score}<small>점 ±${ev.pm}</small></span>` : ''}</div>
+            <div class="gd-text" style="font-size:12px; margin-bottom:8px;">${c.entrants}명 대회 · 시작 ${c.startBB}bb · 레벨 ${Math.round(c.levelSec / 60)}분 · 레벨 2부터 BB 앤티 · 상위 ${c.paid}명 입상. <b>이 모드에서 친 판만</b> 여기에 모이고, 실력 점수·랭킹에는 들어가지 않습니다. 실제 매장 구조표를 확인하지 못해 "빠른 펍 대회"를 가정한 구조이며, 테이블은 최대 ${c.tableSize}인입니다(실제 매장은 9인).</div>
+            <div class="sr-section-title">① 대회 성적</div>
+            <div class="skx-steps">
+                <div><span>나간 대회</span><b>${sm.games}</b><small>입상 ${sm.itm}번${sm.games ? ` (${Math.round(sm.itm / sm.games * 100)}%)` : ''} · 우승 ${sm.wins}번${sm.avgPlace != null ? ` · 평균 순위 ${sm.avgPlace}위` : ''} — 20명 중 3명 입상이라 실력이 같다면 입상은 15%쯤이 평균입니다</small></div>
+                ${ev ? `<div class="tot"><span>연습 점수</span><b>${ev.score} <small style="display:inline; font-size:14px; color:#ffe27a;">±${ev.pm}</small></b><small>${ev.hands.toLocaleString()}판 · 100판당 잃은 기대값 ${ev.raw100}bb (6인 기준 환산 ${ev.loss100}bb). 실력 점수와 같은 계산입니다 — 결정마다 권장 플레이 대비 잃은 기대값.</small></div>` : '<div><span>연습 점수</span><b>–</b><small>대회를 한 번 치면 나옵니다.</small></div>'}
+            </div>
+            <div class="sr-section-title" style="margin-top:14px;">② 최근 대회</div>
+            <div class="bl-leaks">${results}</div>
+            <div class="sr-section-title" style="margin-top:14px;">③ 스택 깊이별 손실 <small style="font-weight:400; color:var(--txt-dim);">(결정 한 번당 bb)</small></div>
+            ${bars(d.depth, '번')}
+            <div class="gd-text" style="font-size:11.5px; margin-top:5px;">빠른 구조의 대회는 대부분 25bb 아래에서 칩니다. 그 줄의 손실이 크면 🧠 GTO 문제의 "숏스택 푸시/폴드 · 올인 받기 · 리쉬브"를 먼저 푸세요.</div>
+            <div class="sr-section-title" style="margin-top:14px;">④ 대회 단계별 손실 <small style="font-weight:400; color:var(--txt-dim);">(결정 한 번당 bb)</small></div>
+            ${bars(d.phases, '번')}
+            ${ev && (ev.positions || []).length ? `<div class="sr-section-title" style="margin-top:14px;">⑤ 자리별 손실 <small style="font-weight:400; color:var(--txt-dim);">(그 자리에 앉은 100판당 bb)</small></div>${bars(ev.positions.map(x => ({ name: x.pos, per: x.per100, n: x.hands })), '판')}` : ''}
+            <div class="sr-section-title" style="margin-top:14px;">⑥ 상황별 빈도 <small style="font-weight:400; color:var(--txt-dim);">(막대 = 내가 한 비율 · 세로선 = 기준)</small></div>
+            <div class="skfs">${skFreqs(d.freqs)}</div>
+            ${blunderHtml({ blunders: d.blunders, leaks: d.leaks, stats: { sampleActions: ev ? ev.decisions : 0 } })}
+            <div class="sr-section-title" style="margin-top:14px;">👥 친구들 (이 모드만)</div>${board}
+            <div class="bl-foot" style="margin-top:8px;">아직 넣지 못한 것: 입상권 근처에서 칩의 값이 달라지는 것(ICM)은 조언·채점에 반영돼 있지 않습니다. 지금 점수는 칩 기준입니다.</div>`;
+        list.scrollTop = 0;
+        document.getElementById('skill-modal').style.display = 'flex';
+    });
+
     // ═══════ 🏆 MTT 생성/참가/대기실 ═══════
     function openMttCreate() { document.getElementById('mttcreate-modal').style.display = 'flex'; }
     function doCreateMtt() {
@@ -7875,7 +7922,9 @@
     socket.on('mttLobby', d => {
         myMtt = d.mttId;
         document.getElementById('mttwait-title').innerText = `🏆 ${d.name}`;
-        document.getElementById('mttwait-info').innerText = `테이블 ${d.tableSize}인 · 시작칩 ${d.startingChips.toLocaleString()} · ${d.entrants.length}명 참가`;
+        document.getElementById('mttwait-info').innerText = d.fn
+            ? `파이널나인 딥스택 연습 · 정원 ${d.maxEntrants}명 (시작하면 빈자리는 봇이 채웁니다) · 시작칩 ${d.startingChips.toLocaleString()} (150bb) · 레벨 3분 · 상위 3명 입상 · 지금 ${d.entrants.length}명 — 이 대회의 기록은 "연습 기록"에만 쌓입니다`
+            : `테이블 ${d.tableSize}인 · 시작칩 ${d.startingChips.toLocaleString()} · ${d.entrants.length}명 참가`;
         const isHost = (d.hostNick === myNickname);
         document.getElementById('mttwait-hostctrl').style.display = isHost ? 'block' : 'none';
         document.getElementById('mttwait-entrants').innerHTML = d.entrants.map(n => `
