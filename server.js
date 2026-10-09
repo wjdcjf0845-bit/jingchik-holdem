@@ -5090,6 +5090,10 @@ class MTTManager {
         this.maxEntrants = settings.maxEntrants || this.tableSize * 6;
         this.structure = settings.structure || null;
         this.paid = settings.paid || 0;
+        this.rebuyMax = settings.rebuys || 0;                 // 한 사람이 다시 들어올 수 있는 횟수
+        this.rebuyUntilLevel = settings.rebuyUntilLevel || 0; // 이 레벨까지만 리바인 가능
+        this.rebuys = {};                                     // nick → 쓴 횟수
+        this.botLevel = {};                                   // 봇 이름 → 난이도
         this.entrants = [];        // { nick, socketId, isBot }
         this.tables = [];          // roomId 배열
         this.eliminated = [];      // 탈락 순서(나중일수록 높은 순위) — { nick, place }
@@ -5161,6 +5165,7 @@ class MTTManager {
         const payload = {
             mttId: this.mttId, name: this.name, hostNick: this.hostNick,
             tableSize: this.tableSize, startingChips: this.startingChips, fn: this.fn, maxEntrants: this.maxEntrants,
+            levelSec: this.blindUpInterval, paid: this.paid, rebuys: this.rebuyMax, rebuyUntilLevel: this.rebuyUntilLevel, startBB: this.structure ? Math.round(this.startingChips / this.structure[0].bb) : null,
             entrants: this.entrants.map(e => e.nick),
             started: this.started
         };
@@ -5241,7 +5246,7 @@ class MTTManager {
             const pl = makeFreshPlayer(s.nick, s.socketId, s.isBot, s.chips);
             pl.chips = s.chips;
             room.players[s.nick] = pl;
-            if (s.isBot) room.players[s.nick]._persona = room.assignPersona(s.nick, this.fn ? fnBotLevel(s.nick) : 'hard');
+            if (s.isBot) room.players[s.nick]._persona = room.assignPersona(s.nick, this.fn ? ((this.botLevel || {})[s.nick] || 'hard') : 'hard');
             room.playerOrder.push(s.nick);
             if (s.socketId) {
                 const sock = io.sockets.sockets.get(s.socketId);
@@ -5289,6 +5294,18 @@ class MTTManager {
         if (this.finished) return;
         const starts = room.handStartStacks || {};
         const recorded = new Set(this.eliminated.map(e => e.nick));
+        // 🔄 [리바인] 칩을 다 잃었는데 리바인이 남아 있고 마감 레벨 전이면, 탈락시키지 않고 시작 칩으로 다시 앉힌다(자동).
+        //    실제 매장은 본인이 정하지만, 연습에서는 거의 모두가 다시 들어오므로 흐름을 끊지 않게 자동으로 한다.
+        if (this.rebuyMax > 0 && this.blindLevel < this.rebuyUntilLevel) {
+            room.playerOrder.forEach(n => {
+                const p = room.players[n];
+                if (!p || p.chips > 0 || recorded.has(n) || (this.rebuys[n] || 0) >= this.rebuyMax) return;
+                this.rebuys[n] = (this.rebuys[n] || 0) + 1;
+                p.chips = this.startingChips; p.isSpectator = false; p.rebuysUsed = this.rebuys[n];
+                io.to(room.roomId).emit('gameMessage', `🔄 ${n} 님 리바인 — ${this.startingChips.toLocaleString()}칩으로 다시 시작합니다 (리바인 ${this.rebuys[n]}/${this.rebuyMax})`);
+                if (p.socketId) io.to(p.socketId).emit('gameMessage', `🔄 리바인했습니다. 남은 리바인 ${this.rebuyMax - this.rebuys[n]}회 · 리바인은 레벨 ${this.rebuyUntilLevel}까지입니다.`);
+            });
+        }
         room.playerOrder
             .filter(n => room.players[n] && room.players[n].chips <= 0 && !recorded.has(n))
             .sort((a, b) => (starts[a] || 0) - (starts[b] || 0))      // 같은 판에서 여럿이 탈락하면 그 판을 더 적은 칩으로 시작한 사람이 더 낮은 순위
@@ -5546,20 +5563,15 @@ class MTTManager {
     }
 }
 
-// 🏁 [파이널나인 딥스택 연습] 구조. ⚠️ 실제 매장 구조표를 확인하지 못해 "빠른 펍 대회"를 가정한 값이다 — 구조표를 받으면 이 표만 바꾸면 된다.
-//    시작 30,000칩(150bb) · 레벨 3분 · 레벨 2부터 BB 앤티 · 20명 중 상위 3명 입상. 테이블은 이 게임의 최대인 6인(실제 매장은 9인).
+// 🏁 [파이널나인 딥스택 연습] 구조 — 운영자가 알려 준 값(2026-10-10): 1레벨 10,000/20,000 · 시작 3,000,000칩(150bb) · 레벨 10분 ·
+//    3레벨(30,000/60,000)부터 BB 앤티 · 리바인 1회. (얼리버드 추가 칩 340만~400만은 넣지 않았다.)
+//    ⚠️ 알려 주지 않은 부분은 가정이다: 4레벨 이후의 블라인드, 리바인 마감(6레벨까지로 둠), 입상 인원(20명 중 3명). 테이블은 이 게임의 최대인 6인(실제 매장은 9인).
 const FN_MTT = {
-    entrants: 20, tableSize: 6, startingChips: 30000, blindUpInterval: 180, paid: 3,
-    structure: [[100, 200], [200, 400], [300, 600], [400, 800], [500, 1000], [600, 1200], [800, 1600], [1000, 2000], [1500, 3000], [2000, 4000],
-        [3000, 6000], [4000, 8000], [6000, 12000], [8000, 16000], [10000, 20000], [15000, 30000], [20000, 40000], [30000, 60000], [50000, 100000]]
-        .map((x, i) => ({ level: i + 1, sb: x[0], bb: x[1], ante: i === 0 ? 0 : x[1] }))
+    entrants: 20, tableSize: 6, startingChips: 3000000, blindUpInterval: 600, fastInterval: 180, paid: 3, rebuys: 1, rebuyUntilLevel: 6, normalBots: 3,
+    structure: [[10000, 20000], [20000, 40000], [30000, 60000], [40000, 80000], [50000, 100000], [60000, 120000], [80000, 160000], [100000, 200000], [150000, 300000], [200000, 400000],
+        [300000, 600000], [400000, 800000], [600000, 1200000], [800000, 1600000], [1000000, 2000000], [1500000, 3000000], [2000000, 4000000], [3000000, 6000000], [5000000, 10000000]]
+        .map((x, i) => ({ level: i + 1, sb: x[0], bb: x[1], ante: i < 2 ? 0 : x[1] }))
 };
-// 연습 상대 구성: 실제 펍 대회처럼 잘 치는 사람은 일부고, 많이 참여하는 상대가 섞여 있다 (고수 30% · 중수 45% · 초보 25%, 이름으로 고정)
-function fnBotLevel(nick) {
-    let h = 0; for (let i = 0; i < nick.length; i++) h = (h * 31 + nick.charCodeAt(i)) >>> 0;
-    const x = h % 20;
-    return x < 6 ? 'hard' : x < 15 ? 'normal' : 'easy';
-}
 // 새 플레이어 객체 생성 헬퍼 (MTT 착석용)
 function makeFreshPlayer(nick, socketId, isBot, chips) {
     return {
@@ -6678,12 +6690,14 @@ io.on('connection', (socket) => {
     });
 
     // 🏁 [파이널나인 딥스택 연습] 20인 MTT 를 연다 — 친구들은 MTT 목록에서 들어오고, 시작하면 빈자리는 봇이 채운다
-    socket.on('createFnMtt', () => {
+    socket.on('createFnMtt', (data) => {
         if (!socket.nickname || socket.currentRoom || socket._mttId) return;
+        const fast = !!(data && data.fast);      // 빠른 진행: 레벨 3분(한 레벨에 치는 판 수가 실제 매장의 10분과 비슷해진다)
         const mttId = 'mtt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
-        const name = `🏁 파이널나인 딥스택 연습 (${socket.nickname})`;
+        const name = `🏁 파이널나인 딥스택 연습${fast ? ' ⚡빠른 진행' : ''} (${socket.nickname})`;
         const mtt = new MTTManager(mttId, socket.nickname, { name, fn: true, tableSize: FN_MTT.tableSize, startingChips: FN_MTT.startingChips,
-            blindUpInterval: FN_MTT.blindUpInterval, maxEntrants: FN_MTT.entrants, structure: FN_MTT.structure, paid: FN_MTT.paid });
+            blindUpInterval: fast ? FN_MTT.fastInterval : FN_MTT.blindUpInterval, maxEntrants: FN_MTT.entrants, structure: FN_MTT.structure, paid: FN_MTT.paid,
+            rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel });
         mtts.set(mttId, mtt);
         mtt.addEntrant(socket.nickname, socket.id, false);
         socket._mttId = mttId;
@@ -6709,7 +6723,8 @@ io.on('connection', (socket) => {
         });
         board.sort((a, b) => (b.score == null ? -1 : b.score) - (a.score == null ? -1 : a.score));
         socket.emit('fnReport', {
-            cfg: { entrants: FN_MTT.entrants, startBB: FN_MTT.startingChips / FN_MTT.structure[0].bb, levelSec: FN_MTT.blindUpInterval, paid: FN_MTT.paid, tableSize: FN_MTT.tableSize },
+            cfg: { entrants: FN_MTT.entrants, startChips: FN_MTT.startingChips, startBB: FN_MTT.startingChips / FN_MTT.structure[0].bb, levelSec: FN_MTT.blindUpInterval, fastSec: FN_MTT.fastInterval,
+                paid: FN_MTT.paid, tableSize: FN_MTT.tableSize, rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel, normalBots: FN_MTT.normalBots, anteLevel: 3 },
             ev: evView(F), summary: sum(F), results: (u.fnResults || []).slice(-20).reverse(),
             depth: per(F, dk, 'evDn_', 'evDl_'), phases: per(F, pk, 'evTn_', 'evTl_'),
             freqs: Freqs.summarize(F), leaks, blunders: Blunder.top(F.blunders, 0, 5).map(Blunder.describe),
@@ -7007,7 +7022,13 @@ io.on('connection', (socket) => {
         const mtt = mtts.get(socket._mttId);
         if (!mtt || mtt.hostNick !== socket.nickname || mtt.started) return;
         // 🏁 파이널나인 연습은 빈자리를 봇으로 채워 항상 20명으로 시작한다
-        if (mtt.fn) { let guard = 0; while (mtt.entrants.length < mtt.maxEntrants && guard++ < 40) mtt.addBot(); }
+        if (mtt.fn) {
+            let guard = 0; while (mtt.entrants.length < mtt.maxEntrants && guard++ < 40) mtt.addBot();
+            // 상대 구성: 봇 가운데 중수 3명, 나머지는 전부 고수 (운영자 지정)
+            const bots = mtt.entrants.filter(e => e.isBot).map(e => e.nick);
+            for (let i = bots.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bots[i], bots[j]] = [bots[j], bots[i]]; }
+            bots.forEach((n, i) => { mtt.botLevel[n] = i < FN_MTT.normalBots ? 'normal' : 'hard'; });
+        }
         if (mtt.entrants.length < 2) { socket.emit('gameMessage', '🚫 최소 2명 필요합니다.'); return; }
         mtt.start();
         io.emit('mttList', mttListArray());

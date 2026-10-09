@@ -4218,7 +4218,8 @@
         .skf-t { font-size: 11px; font-weight: 800; text-align: right; white-space: nowrap; }
         .skf-tip { grid-column: 1 / -1; font-size: 11.5px; color: #c9d2e6; line-height: 1.5; margin-top: 4px; word-break: keep-all; }
         @media (max-width: 520px) { .skf { grid-template-columns: minmax(84px, 1.2fr) minmax(40px, 1.4fr) 56px 54px; column-gap: 6px; padding: 6px 7px; } .skf-t { font-size: 10px; } }
-        .fn-row { display: grid; grid-template-columns: 1.7fr 1fr; gap: 8px; margin: 0 0 12px; }
+        .fn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; }
+        .fn-row .fn-btn.go { grid-column: 1 / -1; }
         .fn-btn { font-family: inherit; font-size: 14px; font-weight: 900; color: #fff; padding: 10px 10px 9px; border-radius: 13px; cursor: pointer; text-align: left; line-height: 1.25;
             background: linear-gradient(180deg, #2b3a5c, #1a2238); border: 1px solid rgba(143,211,255,0.4); }
         .fn-btn.go { background: linear-gradient(180deg, #7a4a12, #4a2a08); border-color: rgba(255,217,122,0.65); }
@@ -4492,7 +4493,8 @@
 
         <!-- 🏁 파이널나인 딥스택 연습 (20인 MTT) — 기록은 이 모드 것만 따로 모은다 -->
         <div class="fn-row">
-            <button type="button" class="fn-btn go" onclick="socket.emit('createFnMtt')">🏁 파이널나인 딥스택 연습 <small>20인 대회 열기 · 친구는 아래 목록에서 참가</small></button>
+            <button type="button" class="fn-btn go" onclick="socket.emit('createFnMtt')">🏁 파이널나인 딥스택 연습 <small>20인 대회 열기 · 레벨 10분 · 친구는 아래 목록에서 참가</small></button>
+            <button type="button" class="fn-btn" onclick="socket.emit('createFnMtt', { fast: true })">⚡ 빠른 진행 <small>같은 구조 · 레벨 3분</small></button>
             <button type="button" class="fn-btn" onclick="socket.emit('getFnReport')">📋 연습 기록 <small>점수 · 피드백</small></button>
         </div>
 
@@ -7881,7 +7883,7 @@
         const board = d.board.length ? d.board.map((u, i) => `<div class="skd${u.me ? ' me' : ''}"><b>${i + 1}. ${esc(u.nick)}${u.me ? ' (나)' : ''}</b><span>${u.score != null ? `점수 <b style="color:${skColor(u.score)};">${u.score}</b> ±${u.pm} · 100판당 손실 ${u.loss100}bb` : '점수 집계 전'}</span><span>대회 ${u.games}번 · 입상 ${u.itm}번 · 우승 ${u.wins}번${u.avgPlace != null ? ` · 평균 ${u.avgPlace}위` : ''}</span><small>${u.hands.toLocaleString()}판</small></div>`).join('') : '<div class="bl-none">아직 기록이 없습니다.</div>';
         list.innerHTML = `
             <div class="skx-head"><b>🏁 파이널나인 딥스택 연습</b>${ev ? `<span style="color:${skColor(ev.score)};">${ev.score}<small>점 ±${ev.pm}</small></span>` : ''}</div>
-            <div class="gd-text" style="font-size:12px; margin-bottom:8px;">${c.entrants}명 대회 · 시작 ${c.startBB}bb · 레벨 ${Math.round(c.levelSec / 60)}분 · 레벨 2부터 BB 앤티 · 상위 ${c.paid}명 입상. <b>이 모드에서 친 판만</b> 여기에 모이고, 실력 점수·랭킹에는 들어가지 않습니다. 실제 매장 구조표를 확인하지 못해 "빠른 펍 대회"를 가정한 구조이며, 테이블은 최대 ${c.tableSize}인입니다(실제 매장은 9인).</div>
+            <div class="gd-text" style="font-size:12px; margin-bottom:8px;">${c.entrants}명 대회 · 시작 ${c.startChips.toLocaleString()}칩(${c.startBB}bb, 1레벨 10,000/20,000) · 레벨 ${Math.round(c.levelSec / 60)}분(빠른 진행은 ${Math.round(c.fastSec / 60)}분) · ${c.anteLevel}레벨부터 BB 앤티 · 리바인 ${c.rebuys}회(레벨 ${c.rebuyUntilLevel}까지) · 상대는 중수 ${c.normalBots}명에 나머지 고수 · 상위 ${c.paid}명 입상. <b>이 모드에서 친 판만</b> 여기에 모이고, 실력 점수·랭킹에는 들어가지 않습니다. 4레벨 이후의 블라인드와 리바인 마감 · 입상 인원은 가정한 값이고, 테이블은 최대 ${c.tableSize}인입니다(실제 매장은 9인).</div>
             <div class="sr-section-title">① 대회 성적</div>
             <div class="skx-steps">
                 <div><span>나간 대회</span><b>${sm.games}</b><small>입상 ${sm.itm}번${sm.games ? ` (${Math.round(sm.itm / sm.games * 100)}%)` : ''} · 우승 ${sm.wins}번${sm.avgPlace != null ? ` · 평균 순위 ${sm.avgPlace}위` : ''} — 20명 중 3명 입상이라 실력이 같다면 입상은 15%쯤이 평균입니다</small></div>
@@ -7923,7 +7925,7 @@
         myMtt = d.mttId;
         document.getElementById('mttwait-title').innerText = `🏆 ${d.name}`;
         document.getElementById('mttwait-info').innerText = d.fn
-            ? `파이널나인 딥스택 연습 · 정원 ${d.maxEntrants}명 (시작하면 빈자리는 봇이 채웁니다) · 시작칩 ${d.startingChips.toLocaleString()} (150bb) · 레벨 3분 · 상위 3명 입상 · 지금 ${d.entrants.length}명 — 이 대회의 기록은 "연습 기록"에만 쌓입니다`
+            ? `파이널나인 딥스택 연습 · 정원 ${d.maxEntrants}명 (시작하면 빈자리는 봇이 채웁니다 — 중수 3명, 나머지 고수) · 시작칩 ${d.startingChips.toLocaleString()} (${d.startBB}bb) · 레벨 ${Math.round(d.levelSec / 60)}분 · 3레벨부터 BB 앤티 · 리바인 ${d.rebuys}회(레벨 ${d.rebuyUntilLevel}까지, 자동) · 상위 ${d.paid}명 입상 · 지금 ${d.entrants.length}명 — 이 대회의 기록은 "연습 기록"에만 쌓입니다`
             : `테이블 ${d.tableSize}인 · 시작칩 ${d.startingChips.toLocaleString()} · ${d.entrants.length}명 참가`;
         const isHost = (d.hostNick === myNickname);
         document.getElementById('mttwait-hostctrl').style.display = isHost ? 'block' : 'none';
