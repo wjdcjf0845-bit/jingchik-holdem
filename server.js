@@ -5563,11 +5563,12 @@ class MTTManager {
     }
 }
 
-// 🏁 [파이널나인 딥스택 연습] 구조 — 운영자가 알려 준 값(2026-10-10): 1레벨 10,000/20,000 · 시작 3,000,000칩(150bb) · 레벨 10분 ·
+// 🏁 [파이널나인 딥스택 연습] 구조 — 운영자가 알려 준 값(2026-10-10): 1레벨 10,000/20,000 · 시작 3,000,000칩(150bb) · 레벨 10분(앱에서는 3분으로 진행) ·
 //    3레벨(30,000/60,000)부터 BB 앤티 · 리바인 1회. (얼리버드 추가 칩 340만~400만은 넣지 않았다.)
 //    ⚠️ 알려 주지 않은 부분은 가정이다: 4레벨 이후의 블라인드, 리바인 마감(6레벨까지로 둠), 입상 인원(20명 중 3명). 테이블은 이 게임의 최대인 6인(실제 매장은 9인).
 const FN_MTT = {
-    entrants: 20, tableSize: 6, startingChips: 3000000, blindUpInterval: 600, fastInterval: 180, paid: 3, rebuys: 1, rebuyUntilLevel: 6, normalBots: 3,
+    // 레벨은 3분: 실제 매장은 10분이지만 앱은 판이 서너 배 빨리 돌아서, 한 레벨에 치는 판 수를 실제와 비슷하게 맞춘 값이다(운영자 결정 — 10분 진행은 없앰)
+    entrants: 20, tableSize: 6, startingChips: 3000000, blindUpInterval: 180, paid: 3, rebuys: 1, rebuyUntilLevel: 6, normalBots: 3,
     structure: [[10000, 20000], [20000, 40000], [30000, 60000], [40000, 80000], [50000, 100000], [60000, 120000], [80000, 160000], [100000, 200000], [150000, 300000], [200000, 400000],
         [300000, 600000], [400000, 800000], [600000, 1200000], [800000, 1600000], [1000000, 2000000], [1500000, 3000000], [2000000, 4000000], [3000000, 6000000], [5000000, 10000000]]
         .map((x, i) => ({ level: i + 1, sb: x[0], bb: x[1], ante: i < 2 ? 0 : x[1] }))
@@ -6692,11 +6693,11 @@ io.on('connection', (socket) => {
     // 🏁 [파이널나인 딥스택 연습] 20인 MTT 를 연다 — 친구들은 MTT 목록에서 들어오고, 시작하면 빈자리는 봇이 채운다
     socket.on('createFnMtt', (data) => {
         if (!socket.nickname || socket.currentRoom || socket._mttId) return;
-        const fast = !!(data && data.fast);      // 빠른 진행: 레벨 3분(한 레벨에 치는 판 수가 실제 매장의 10분과 비슷해진다)
+
         const mttId = 'mtt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
-        const name = `🏁 파이널나인 딥스택 연습${fast ? ' ⚡빠른 진행' : ''} (${socket.nickname})`;
+        const name = `🏁 파이널나인 딥스택 연습 (${socket.nickname})`;
         const mtt = new MTTManager(mttId, socket.nickname, { name, fn: true, tableSize: FN_MTT.tableSize, startingChips: FN_MTT.startingChips,
-            blindUpInterval: fast ? FN_MTT.fastInterval : FN_MTT.blindUpInterval, maxEntrants: FN_MTT.entrants, structure: FN_MTT.structure, paid: FN_MTT.paid,
+            blindUpInterval: FN_MTT.blindUpInterval, maxEntrants: FN_MTT.entrants, structure: FN_MTT.structure, paid: FN_MTT.paid,
             rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel });
         mtts.set(mttId, mtt);
         mtt.addEntrant(socket.nickname, socket.id, false);
@@ -6723,7 +6724,7 @@ io.on('connection', (socket) => {
         });
         board.sort((a, b) => (b.score == null ? -1 : b.score) - (a.score == null ? -1 : a.score));
         socket.emit('fnReport', {
-            cfg: { entrants: FN_MTT.entrants, startChips: FN_MTT.startingChips, startBB: FN_MTT.startingChips / FN_MTT.structure[0].bb, levelSec: FN_MTT.blindUpInterval, fastSec: FN_MTT.fastInterval,
+            cfg: { entrants: FN_MTT.entrants, startChips: FN_MTT.startingChips, startBB: FN_MTT.startingChips / FN_MTT.structure[0].bb, levelSec: FN_MTT.blindUpInterval,
                 paid: FN_MTT.paid, tableSize: FN_MTT.tableSize, rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel, normalBots: FN_MTT.normalBots, anteLevel: 3 },
             ev: evView(F), summary: sum(F), results: (u.fnResults || []).slice(-20).reverse(),
             depth: per(F, dk, 'evDn_', 'evDl_'), phases: per(F, pk, 'evTn_', 'evTl_'),
