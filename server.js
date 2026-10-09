@@ -114,6 +114,9 @@ const EvLoss = require('./lib/evloss');         // 📉 결정마다 잃은 기�
 const Freqs = require('./lib/freqs');           // 📊 상황별 빈도(오픈·방어·3벳·c벳…)를 기준과 비교
 const VRange = require('./lib/vrange');         // 🔍 상대의 프리플랍 행동 → 들고 있을 만한 패의 무게
 const FlopSolve = require('./lib/flopsolve');   // 🧮 솔버로 미리 풀어 둔 플랍 전략 조회
+// 고수 봇의 블라인드 방어에 범위표를 쓸지. 📊 맞대결 실측(2026-10-09, 100bb 하드 봇 5명, 각 약 3만 핸드, BOT_AB6):
+//   범위표 봇 +27.2 vs 예전 봇 −0.6 bb/100, 우승 50:39. 플랍을 솔버 자료로 치기 전에는 넓은 방어가 −9.9 vs +37.1 로 해로웠다(위 botDecide 주석).
+const BOT_CHART_DEFAULT = true;
 const GtoAdvice = require('./lib/gtoadvice');   // 🎓 학습모드 조언 — 상대 수·포지션·스택 깊이별
 const Quiz = require('./lib/gtoquiz');          // 🧠 GTO 문제 학습
 // 칭호는 화면에 그대로 찍히는 문구라 id 대신 문구를 내려보낸다 (클라이언트에 카탈로그 사본을 두지 않으려고)
@@ -1620,6 +1623,7 @@ class GameRoom {
                     _opnPos = _o ? (this.players[_o].position || '') : '';
                 }
                 const _study = _v4 && !!_opnPos && (isBB || p.position === 'SB');      // 블라인드 방어에만 적용(콜드콜 자리는 예전 기준)
+                let _chartPick = null;
                 let rt = preflopRangeTier(code, p.position || '', facingRaise,
                     { numActive: _numActive, threeBetPlus: _threeBetPlus, headsUp: _huBot, closing: _huBot && !!isBB });
                 // 📊 [맞대결 실측 — 2026-10-06, 100bb 하드 봇 5명, 각 약 3만 핸드]
@@ -1631,6 +1635,17 @@ class GameRoom {
                     const rtNew = preflopRangeTier(code, p.position || '', facingRaise, { numActive: _numActive, threeBetPlus: _threeBetPlus, openerPos: _opnPos, closing: !!isBB });
                     if (rtNew.tier === 'raise' && process.env.BOT_V4MODE !== 'full') rt = rtNew;
                     else if (process.env.BOT_V4MODE === 'full') rt = rtNew;
+                    // 📊 [범위표 — 측정 스위치 BOT_AB6] 단일 오픈을 받는 블라인드: lib/ranges.js 의 빈도대로 3벳·콜·폴드를 고른다(가격 보정 포함).
+                    //    플랍을 솔버 자료로 치게 된 뒤라 넓은 방어가 이제는 성립하는지 다시 잰다.
+                    if (!_threeBetPlus && this.botV6(nick)) {
+                        const rtC = preflopRangeTier(code, p.position || '', true, { chart: true, raises: 1, openerPos: _opnPos, closing: !!isBB, potOdds });
+                        if (rtC.freq) {
+                            const x = Math.random() * 100;
+                            const t = x < rtC.freq.raise ? 'raise' : x < rtC.freq.raise + rtC.freq.call ? 'call' : 'fold';
+                            rt = { tier: t, label: t, score: rtC.score };
+                            _chartPick = t;
+                        }
+                    }
                 }
                 if (_huBot && !facingRaise && rt.tier !== 'raise' && rt.score > Quiz.HU_OPEN_SCORE) rt = { tier: 'raise', label: '오픈 레이즈', score: rt.score };
 
@@ -1699,11 +1714,11 @@ class GameRoom {
                         if (!(isBB && toCall <= bb * 0.5) && r < 0.88 * skill + 0.1) return { type: 'fold' };
                         equity *= 0.78;
                     } else if (rt.tier === 'raise') {
-                        if (_singleRaise && r < 0.55 * skill + 0.15) return threeBetTo(); // 밸류 3벳
+                        if (_singleRaise && (_chartPick === 'raise' || r < 0.55 * skill + 0.15)) return threeBetTo(); // 밸류 3벳 (범위표로 고른 3벳은 그대로 친다)
                         equity = Math.min(1, equity * 1.10);
                     } else if (_singleRaise && _late && r < 0.13 * skill) {
                         return threeBetTo(); // 🃏 블러프 3벳 — 늦은 포지션 마지널 일부를 섞어 레인지를 숨긴다
-                    } else if (_study && process.env.BOT_V4MODE === 'full' && rt.tier === 'call' && _rc <= 1 && toCall <= bb * 3.5 && toCall < p.chips * 0.25 && r < 0.9 * skill + 0.08) {
+                    } else if (_study && (process.env.BOT_V4MODE === 'full' || _chartPick === 'call') && rt.tier === 'call' && _rc <= 1 && toCall <= bb * 3.5 && toCall < p.chips * 0.25 && r < 0.9 * skill + 0.08) {
                         return { type: 'call' };   // 기준표상 방어할 패 — 아래의 일반 승률 계산에 맡기면 넓은 방어 범위의 아래쪽을 다시 접어 버린다
                     }
                     // rt.tier === 'call' 이면 통과 (아래 로직에서 콜/가끔 3벳)
@@ -1760,6 +1775,37 @@ class GameRoom {
             const { frac } = pickBetFraction({ street, board, sizeBase: persona.sizeBase });
             return Math.max(bb, Math.round(totalPot * frac * (mult || 1)));
         };
+
+        // 🧮 [솔버 조회 — 고수 봇] 미리 풀어 둔 플랍 상황(오픈 → BB 콜로 둘만 남음)이면 솔버의 빈도대로 고른다.
+        //    학습 조언과 같은 자료(lib/solverdata.json). 전부 콜하는 상대를 응징하는 중(station)에는 쓰지 않는다 — 그건 솔버 밖의 익스플로잇이다.
+        if (persona.proStrategy && street === 2 && !station && p.hand && p.hand.length === 2 && this.botV5(nick)) {
+            try {
+                const _o = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded);
+                if (_o.length === 1) {
+                    const _v = this.players[_o[0]];
+                    const _eff = Math.min(p.chips + p.currentBet, _v.chips + (_v.currentBet || 0)) / bb;
+                    const _ss = this.solverSpot(nick, toCall, totalPot - p.currentBet, _eff);
+                    const _sr = _ss ? FlopSolve.lookup({ spot: _ss.spot, node: _ss.node, hand: p.hand, board: this.communityCards }) : null;
+                    if (_sr && _sr.dist <= 6) {
+                        const f = _sr.freqs, x = Math.random() * (f.reduce((a, c) => a + c, 0) || 1);
+                        const allIn = p.currentBet + p.chips;
+                        if (toCall === 0) {
+                            if (x < f[0]) return { type: 'check' };
+                            const small = f.length === 3 ? x < f[0] + f[1] : true;
+                            const target = Math.min(allIn, this.currentHighestBet + Math.max(bb, Math.round(totalPot * (small ? 0.33 : 0.75))));
+                            p._plan = { betStreet: street, type: classifyBetPlan({ equity, board }), eqAtBet: equity };
+                            return { type: 'raise', amount: target };
+                        }
+                        if (x < f[0]) return { type: 'fold' };
+                        if (x < f[0] + f[1] || p.chips <= toCall) return { type: 'call' };
+                        // 레이즈: 솔버 트리와 같은 크기(콜한 뒤 팟의 절반만큼 더)
+                        const target = Math.min(allIn, Math.round(this.currentHighestBet + 0.5 * (totalPot + toCall)));
+                        if (target >= this.currentHighestBet + this.lastFullRaiseAmount || target >= allIn) return { type: 'raise', amount: target };
+                        return { type: 'call' };
+                    }
+                }
+            } catch (e) {}
+        }
 
         // ─── 체크 가능 상황 (콜 비용 0) ───
         if (toCall === 0) {
@@ -2045,6 +2091,22 @@ class GameRoom {
         return ab === '2' ? !bit : bit;
     }
 
+    // 🔬 프리플랍 범위표(블라인드 방어)를 고수 봇에 쓰는 것의 측정 스위치. 측정 결과에 따라 BOT_CHART_DEFAULT 로 운영 기본값을 정한다.
+    botV6(nick) {
+        const ab = process.env.BOT_AB6;
+        if (!ab) return BOT_CHART_DEFAULT;
+        const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
+        return ab === '2' ? !bit : bit;
+    }
+    // 🔬 솔버 플랍 자료를 고수 봇에 쓰는 것의 측정 스위치. 운영에선 항상 켜짐.
+    botV5(nick) {
+        const ab = process.env.BOT_AB5;
+        if (ab === 'off') return false;
+        if (!ab) return true;
+        const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
+        return ab === '2' ? !bit : bit;
+    }
+
     botV2(nick) {
         const ab = process.env.BOT_AB;
         if (!ab) return true;
@@ -2165,30 +2227,43 @@ class GameRoom {
     //    예전엔 "지금 이 순간 상대 범위를 이기는 비율"에 아무 패 상대 승률을 조금 섞었다. 그 계산은 드로우를 거의 0으로 쳐서,
     //    턴의 플러시 드로우(9아웃, 실제 약 18~20%)가 15%로 나왔다. 여기서는 상대 범위의 패 하나하나와 끝까지 가 본다.
     //    상대 범위 = 지금 보드에서 강한 순 상위 top(벳 크기·스트리트에 따라) + 그 밖의 패 일부(블러프·드로우).
-    // 🧮 지금이 솔버로 풀어 둔 상황인가 → { spot, node } 또는 null.
-    //    풀어 둔 것: 플랍 · 둘만 남음 · 단일 레이즈 팟(오픈 → BB 콜) · 오픈한 사람이 포지션을 가진 경우 · 유효 스택 40bb 이상
+    // 🧮 지금이 솔버로 풀어 둔 상황인가 → { spot, node } 또는 null. (풀어 둔 상황 목록: tools/solver/spots.js)
+    //    공통 조건: 플랍 · 둘만 남음 · 둘 다 올인 아님.
+    //    · 단일 레이즈 팟(오픈 → BB 콜): 뒷자리(btn) · 앞자리(utg) · 헤즈업(hu), 스택 깊이별(100 / 40 / 25bb)
+    //    · 블라인드 대결(sbb): SB 오픈 → BB 콜 — 오픈한 SB 가 먼저 행동한다
+    //    · 3벳 팟: 3벳한 쪽이 먼저 행동(tbo) · 나중에 행동(tbi) · 헤즈업(hutb)
     solverSpot(nick, toCall, potBefore, effBB) {
-        if (process.env.NO_SOLVER || this.gameStage !== 2 || this.communityCards.length !== 3 || effBB < 40) return null;
+        if (process.env.NO_SOLVER || this.gameStage !== 2 || this.communityCards.length !== 3 || effBB < 18) return null;
         const live = this.playerOrder.filter(n => this.players[n] && !this.players[n].isFolded);
         if (live.length !== 2 || !live.includes(nick)) return null;
         const vill = live.find(n => n !== nick), log = this.actionLog || [];
-        const pre = log.filter(a => a.street === 1), raisers = pre.filter(a => a.type === 'raise' || a.type === 'allin');
-        if (raisers.length !== 1) return null;
-        const opener = raisers[0].nick;
-        if (opener !== nick && opener !== vill) return null;
-        const caller = opener === nick ? vill : nick;
+        if (this.players[nick].isAllIn || this.players[vill].isAllIn) return null;
+        const raisers = log.filter(a => a.street === 1 && (a.type === 'raise' || a.type === 'allin')).map(a => a.nick);
+        if (!raisers.length || raisers.length > 2 || raisers.some(n => n !== nick && n !== vill)) return null;
         const role = n => (this.players[n].role || ''), hu = this.playerOrder.length === 2;
-        if (!role(caller).includes('BB') || this.players[caller].isAllIn || this.players[opener].isAllIn) return null;
-        if (!hu && /SB|BB/.test(role(opener))) return null;                    // SB 오픈(포지션 없는 오픈)은 풀어 두지 않았다
-        const op = this.players[opener].position || '';
-        const spot = hu ? 'hu' : (op.indexOf('UTG') === 0 || op === 'HJ' || op === 'LJ' || op === 'MP') ? 'utg' : 'btn';
+        const depth = effBB >= 70 ? '' : effBB >= 32 ? '40' : '25';
+        const oopNick = this.isInPosition(nick) ? vill : nick;        // 플랍에서 먼저 행동하는 사람
+        let spot = null;
+        if (raisers.length === 1) {
+            const opener = raisers[0], caller = opener === nick ? vill : nick;
+            if (!role(caller).includes('BB')) return null;
+            if (hu) spot = 'hu' + depth;
+            else if (role(opener).includes('SB')) spot = depth === '' ? 'sbb' : null;
+            else if (role(opener).includes('BB')) return null;
+            else { const op = this.players[opener].position || ''; spot = ((op.indexOf('UTG') === 0 || op === 'HJ' || op === 'LJ' || op === 'MP') ? 'utg' : 'btn') + depth; }
+        } else {
+            if (raisers[0] === raisers[1] || depth !== '') return null;     // 3벳 팟은 깊은 스택만 풀어 두었다
+            const threeBettor = raisers[1];
+            spot = hu ? (threeBettor === oopNick ? 'hutb' : null) : (threeBettor === oopNick ? 'tbo' : 'tbi');
+        }
+        if (!spot) return null;
         const fl = log.filter(a => a.street === 2).map(a => (a.nick === nick ? 'H' : 'V') + (a.type === 'check' ? 'x' : (a.type === 'raise' || a.type === 'allin') ? 'b' : a.type === 'call' ? 'c' : 'f')).join(' ');
         const big = toCall > 0 && toCall / Math.max(1, potBefore - toCall) > 0.5;
         let node = null;
-        if (nick === caller) {                     // 나는 BB(먼저 행동)
+        if (nick === oopNick) {                    // 내가 먼저 행동
             if (fl === '' && toCall === 0) node = 'oop_root';
             else if (fl === 'Hx Vb') node = big ? 'oop_vs_b' : 'oop_vs_s';
-        } else {                                   // 나는 오픈한 사람(나중에 행동)
+        } else {                                   // 내가 나중에 행동
             if (fl === 'Vx' && toCall === 0) node = 'ip_cbet';
             else if (fl === 'Vb') node = big ? 'ip_vs_b' : 'ip_vs_s';
             else if (fl === 'Vx Hb Vb') node = 'ip_xr';

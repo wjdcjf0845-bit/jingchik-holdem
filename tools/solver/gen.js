@@ -1,19 +1,10 @@
-// 솔버 입력 만들기: node scratch/solver_gen.js <btn|utg|hu> <보드 "Ks,7d,2c"> <출력 json(상대 경로)> [반복]
-//   단일 레이즈 팟(오픈 2.5bb → BB 콜, 100bb). 범위는 이 게임의 범위표 그대로(lib/ranges.js · lib/preflop.js).
-const PF = require('../../lib/preflop'), R = require('../../lib/ranges');
+// 솔버 입력 만들기: node tools/solver/gen.js <상황> <보드 "Ks,7d,2c"> <출력 json(솔버 폴더 기준 상대 경로)> [반복]
+//   상황 목록은 spots.js. 벳 크기: 플랍 33%·75%, 턴·리버 66%, 레이즈 50%, 올인 문턱 0.67
+const { SPOTS, rangeStr } = require('./spots');
 const [spot, board, out, iters] = process.argv.slice(2);
-const w = (c, f) => f >= 100 ? c : `${c}:${(f / 100).toFixed(2)}`;
-let ip, oop, pot = 5.5;
-if (spot === 'hu') {
-  ip = R.ALL.filter(c => PF.handRangeScore(c) > 35).join(',');
-  oop = R.ALL.map(c => { const f = R.lookup({ headsUp: true, heroPos: 'BB' }, c); return f.call > 0 ? w(c, f.call) : null; }).filter(Boolean).join(',');
-  pot = 5;
-} else {
-  const op = spot === 'utg' ? 'UTG' : 'BTN';
-  ip = R.ALL.filter(c => PF.isInOpenRange(c, op)).join(',');
-  oop = R.ALL.map(c => { const f = R.lookup({ heroPos: 'BB', openerPos: op }, c); return f.call > 0 ? w(c, f.call) : null; }).filter(Boolean).join(',');
-}
-const L = [`set_pot ${pot}`, `set_effective_stack 97.5`, `set_board ${board}`, `set_range_ip ${ip}`, `set_range_oop ${oop}`];
+const S = SPOTS[spot];
+if (!S) { console.error('모르는 상황: ' + spot + ' (' + Object.keys(SPOTS).join(', ') + ')'); process.exit(1); }
+const L = [`set_pot ${S.pot}`, `set_effective_stack ${S.stack}`, `set_board ${board}`, `set_range_ip ${rangeStr(S.ip)}`, `set_range_oop ${rangeStr(S.oop)}`];
 for (const who of ['oop', 'ip']) {
   L.push(`set_bet_sizes ${who},flop,bet,33,75`, `set_bet_sizes ${who},flop,raise,50`);
   L.push(`set_bet_sizes ${who},turn,bet,66`, `set_bet_sizes ${who},turn,raise,50`);

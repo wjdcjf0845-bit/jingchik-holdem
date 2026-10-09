@@ -1,11 +1,10 @@
 // 솔버 출력(Desktop/PokeSolver/work/out/*.json) → lib/solverdata.json
 //   노드마다 "패 종류별 평균 빈도(%)"만 남긴다. 무게는 그 패가 처음 범위에 든 비중.
 const fs = require('fs'), path = require('path');
-const PF = require('../../lib/preflop'), R = require('../../lib/ranges'), FS = require('../../lib/flopsolve');
+const PF = require('../../lib/preflop'), FS = require('../../lib/flopsolve');
 const DIR = process.argv[2];
 const comboCode = k => PF.handToCode([k.slice(0, 2), k.slice(2, 4)]);
-const wIp = () => 1;
-const wOop = spot => code => { const f = spot === 'hu' ? R.lookup({ headsUp: true, heroPos: 'BB' }, code) : R.lookup({ heroPos: 'BB', openerPos: spot === 'utg' ? 'UTG' : 'BTN' }, code); return f ? f.call / 100 : 0; };
+const { SPOTS } = require('./spots');
 function agg(node, board, weightOf, mapActs) {
     if (!node || !node.strategy) return null;
     const acts = node.strategy.actions, S = node.strategy.strategy, out = {};
@@ -33,8 +32,9 @@ const data = {}; const summary = [];
 fs.readdirSync(DIR).filter(f => f.endsWith('.json')).forEach(f => {
     const [spot, bkey] = f.replace('.json', '').split('_');
     const board = FS.parseBoardKey(bkey), root = JSON.parse(fs.readFileSync(path.join(DIR, f), 'utf8'));
-    const wo = wOop(spot), o = {};
-    o.oop_root = agg(root, board, wo, betMap2);
+    if (!SPOTS[spot]) return;
+    const wo = SPOTS[spot].oop, wIp = SPOTS[spot].ip, o = {};
+    o.oop_root = agg(root, board, wo, betMap3);
     const ipNode = root.childrens.CHECK;
     o.ip_cbet = agg(ipNode, board, wIp, betMap3);
     const kb = betKids(ipNode);
@@ -45,7 +45,7 @@ fs.readdirSync(DIR).filter(f => f.endsWith('.json')).forEach(f => {
     if (db[1]) o.ip_vs_b = agg(root.childrens[db[1]], board, wIp, vsMap);
     Object.keys(o).forEach(k => { if (!o[k]) delete o[k]; });
     (data[spot] = data[spot] || {})[bkey] = o;
-    summary.push(`${spot} ${bkey}  OOP 돈크 ${o.oop_root['*'][1]}% | IP c벳 ${o.ip_cbet['*'][1] + o.ip_cbet['*'][2]}% (작게 ${o.ip_cbet['*'][1]} · 크게 ${o.ip_cbet['*'][2]}) | OOP vs 작은 벳: 폴드 ${o.oop_vs_s['*'][0]} 콜 ${o.oop_vs_s['*'][1]} 레이즈 ${o.oop_vs_s['*'][2]}`);
+    summary.push(`${spot} ${bkey}  OOP 첫 벳 ${o.oop_root['*'][1] + o.oop_root['*'][2]}% | IP c벳 ${o.ip_cbet['*'][1] + o.ip_cbet['*'][2]}% (작게 ${o.ip_cbet['*'][1]} · 크게 ${o.ip_cbet['*'][2]}) | OOP vs 작은 벳: 폴드 ${o.oop_vs_s['*'][0]} 콜 ${o.oop_vs_s['*'][1]} 레이즈 ${o.oop_vs_s['*'][2]}`);
 });
 fs.writeFileSync(path.join(__dirname, '../../lib/solverdata.json'), JSON.stringify(data));
 console.log(summary.join('\n')); console.log('boards', summary.length, 'bytes', fs.statSync(path.join(__dirname, '../../lib/solverdata.json')).size);

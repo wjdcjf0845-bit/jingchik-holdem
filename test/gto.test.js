@@ -73,8 +73,8 @@ test('조언 모양: 믹스 합은 100, 권장 액션은 믹스 안에 있다 (�
 
 // ══════════════ 문제 학습 ══════════════
 
-test('분야 9개, 분야마다 문제가 만들어지고 정답이 보기 안에 있다', () => {
-    assert.strictEqual(Q.CAT_IDS.length, 9);
+test('분야 10개, 분야마다 문제가 만들어지고 정답이 보기 안에 있다', () => {
+    assert.strictEqual(Q.CAT_IDS.length, 10);
     const rng = lcg(11);
     Q.CAT_IDS.forEach(cat => {
         for (let i = 0; i < 300; i++) {
@@ -401,4 +401,21 @@ test('방어 폭은 가격에 따라 달라진다: 작은 오픈엔 넓게, 큰 
     assert.ok(bb(2 / 6.5) >= 33 && bb(2 / 6.5) <= 40, '6인 BB vs BTN 3bb: ' + bb(2 / 6.5));
     // 가격을 안 주면(봇 · 예전 호출) 기준표 그대로
     assert.strictEqual(Math.round(bb(0)), Math.round(bb(1.5 / 5.5)));
+});
+
+test('솔버 문제: 정답은 솔버 자료의 그 패 종류에서 80%(벳·체크) / 75%(받기) 이상인 액션이다', () => {
+    const FS = require('../lib/flopsolve'), D = require('../lib/solverdata.json');
+    const rng = lcg(5);
+    for (let i = 0; i < 200; i++) {
+        const q = Q.generate('solver', rng);
+        assert.strictEqual(q.cat, 'solver');
+        assert.strictEqual(q.board.length, 3);
+        assert.ok(!q.hand.some(c => q.board.includes(c)), '내 패와 보드가 겹침');
+        const spot = q.tags[0].startsWith('헤즈업') ? 'hu' : (q.tags[2].startsWith('UTG') ? 'utg' : 'btn');
+        const ip = q.choices.length === 2;
+        const node = ip ? 'ip_cbet' : (q.prompt.includes('3/4') ? 'oop_vs_b' : 'oop_vs_s');
+        const row = D[spot][q.board.join('')][node][FS.bucket(q.hand, q.board).key];
+        if (ip) assert.ok((q.answer === 'bet' ? row[1] + row[2] : row[0]) >= 80, q.prompt);
+        else assert.ok(row[{ fold: 0, call: 1, raise: 2 }[q.answer]] >= 75, q.prompt);
+    }
 });
