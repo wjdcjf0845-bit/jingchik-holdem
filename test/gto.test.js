@@ -404,7 +404,7 @@ test('방어 폭은 가격에 따라 달라진다: 작은 오픈엔 넓게, 큰 
 });
 
 test('솔버 문제: 정답은 솔버 자료의 그 패 종류에서 80%(벳·체크) / 75%(받기) 이상인 액션이다', () => {
-    const FS = require('../lib/flopsolve'), D = require('../lib/solverdata.json');
+    const FS = require('../lib/flopsolve'), D = FS.load();
     const rng = lcg(5);
     for (let i = 0; i < 200; i++) {
         const q = Q.generate('solver', rng);

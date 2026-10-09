@@ -117,7 +117,10 @@ const FlopSolve = require('./lib/flopsolve');   // 🧮 솔버로 미리 풀어 
 // 고수 봇의 블라인드 방어에 범위표를 쓸지. 📊 맞대결 실측(2026-10-09, 100bb 하드 봇 5명, 각 약 3만 핸드, BOT_AB6):
 //   범위표 봇 +27.2 vs 예전 봇 −0.6 bb/100, 우승 50:39. 플랍을 솔버 자료로 치기 전에는 넓은 방어가 −9.9 vs +37.1 로 해로웠다(위 botDecide 주석).
 const BOT_CHART_DEFAULT = true;
-const BOT_TURN_DEFAULT = false;                 // 고수 봇이 턴에도 솔버 자료를 쓸지 — 맞대결 측정 전이라 꺼 둔다(botV7)
+// 고수 봇이 턴에도 솔버 자료를 쓸지. 📊 맞대결 실측(2026-10-09, BOT_AB7, 각 약 3만 핸드): 턴 자료 봇 −0.3 vs 안 쓰는 봇 +26.0 bb/100, 우승 44:56 → 끈다.
+//   봇의 리버가 솔버의 턴 계획(강한 패를 체크하고 리버에 받아내기 등)을 이어받지 못해서로 보인다. 조언을 리버까지 따르는 가상 플레이어는 턴 자료로 +56 vs +11 이었다.
+//   플랍 자료(새 상황 포함, BOT_AB5)는 +34.2 vs −9.3, 우승 60:36 으로 뚜렷이 나아 운영에 쓴다.
+const BOT_TURN_DEFAULT = false;
 const GtoAdvice = require('./lib/gtoadvice');   // 🎓 학습모드 조언 — 상대 수·포지션·스택 깊이별
 const Quiz = require('./lib/gtoquiz');          // 🧠 GTO 문제 학습
 // 칭호는 화면에 그대로 찍히는 문구라 id 대신 문구를 내려보낸다 (클라이언트에 카탈로그 사본을 두지 않으려고)
@@ -4092,7 +4095,7 @@ class GameRoom {
                     putIn: Math.max(0, (p.currentBet || 0) - beforeBet), street: sa0.advice.street, equity: (sa0.advice.equity || 0) / 100, opponents: sa0.pre.opp });
                 if (_el) {
                     this._evLast = { nick, res: _el };
-                    if (process.env.DEV_EVLOG) console.log('EVLOG ' + JSON.stringify({ n: nick, seats: this.playerOrder.length, pos: p.position || '', st: sa0.advice.street, type, best: sa0.advice.bestAction, call: toCall / bb0, pot: sa0.pre.pot / bb0, ev: sa0.advice.ev, h: p.hand.join(''), l: _el.lossBB, k: _el.kind }));
+                    if (process.env.DEV_EVLOG) console.log('EVLOG ' + JSON.stringify({ n: nick, seats: this.playerOrder.length, pos: p.position || '', st: sa0.advice.street, type, best: sa0.advice.bestAction, call: toCall / bb0, pot: sa0.pre.pot / bb0, ev: sa0.advice.ev, h: p.hand.join(''), b: this.communityCards.join(''), eq: sa0.advice.equity, mix: sa0.advice.mix, sv: (sa0.advice.notes || []).some(n => n.indexOf('솔버') >= 0), l: _el.lossBB, k: _el.kind }));
                     if (this._evHandId !== this.handId) { this._evHandId = this.handId; this._evHand = {}; }
                     this._evHand[nick] = (this._evHand[nick] || 0) + _el.lossBB;
                     const st0 = sa0.advice.street || 'preflop';
