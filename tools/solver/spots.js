@@ -9,11 +9,13 @@ const bbCall = op => f({ heroPos: 'BB', openerPos: op }, 'call');
 const huBBCall = f({ headsUp: true, heroPos: 'BB' }, 'call');
 // 단일 레이즈 팟(오픈 → BB 콜): 깊이별. 얕은 스택 전용 범위표는 없어 100bb 범위를 그대로 쓴다(근사).
 const srp = (ip, oop, pot) => depth => ({ ip, oop, pot, stack: Math.round((depth - (pot - 0.5) / 2) * 10) / 10 });
-const SRP = { btn: srp(open('BTN'), bbCall('BTN'), 5.5), utg: srp(open('UTG'), bbCall('UTG'), 5.5), hu: srp(huOpen, huBBCall, 5) };
+const SRP = { btn: srp(open('BTN'), bbCall('BTN'), 5.5), co: srp(open('CO'), bbCall('CO'), 5.5), utg: srp(open('UTG'), bbCall('UTG'), 5.5), hu: srp(huOpen, huBBCall, 5) };
 const SPOTS = {};
 Object.keys(SRP).forEach(k => { SPOTS[k] = SRP[k](100); SPOTS[k + '40'] = SRP[k](40); SPOTS[k + '25'] = SRP[k](25); });
 // 블라인드 대결: SB 3bb 오픈 → BB 콜. 오픈한 SB 가 먼저 행동한다(포지션 없음).
 SPOTS.sbb = { oop: open('SB'), ip: bbCall('SB'), pot: 6, stack: 97 };
+SPOTS.sbb40 = { oop: open('SB'), ip: bbCall('SB'), pot: 6, stack: 37 };
+SPOTS.sbb25 = { oop: open('SB'), ip: bbCall('SB'), pot: 6, stack: 22 };
 // 3벳 팟
 //   tbo: 블라인드가 버튼 오픈에 3벳(11bb) → 버튼 콜. 3벳한 쪽이 먼저 행동.
 SPOTS.tbo = { oop: f({ heroPos: 'BB', openerPos: 'BTN' }, 'raise'), ip: mul(open('BTN'), f({ heroPos: 'BTN', raises: 2, iRaised: true, inPosition: true }, 'call')), pot: 22.5, stack: 89 };

@@ -117,6 +117,7 @@ const FlopSolve = require('./lib/flopsolve');   // 🧮 솔버로 미리 풀어 
 // 고수 봇의 블라인드 방어에 범위표를 쓸지. 📊 맞대결 실측(2026-10-09, 100bb 하드 봇 5명, 각 약 3만 핸드, BOT_AB6):
 //   범위표 봇 +27.2 vs 예전 봇 −0.6 bb/100, 우승 50:39. 플랍을 솔버 자료로 치기 전에는 넓은 방어가 −9.9 vs +37.1 로 해로웠다(위 botDecide 주석).
 const BOT_CHART_DEFAULT = true;
+const BOT_TURN_DEFAULT = false;                 // 고수 봇이 턴에도 솔버 자료를 쓸지 — 맞대결 측정 전이라 꺼 둔다(botV7)
 const GtoAdvice = require('./lib/gtoadvice');   // 🎓 학습모드 조언 — 상대 수·포지션·스택 깊이별
 const Quiz = require('./lib/gtoquiz');          // 🧠 GTO 문제 학습
 // 칭호는 화면에 그대로 찍히는 문구라 id 대신 문구를 내려보낸다 (클라이언트에 카탈로그 사본을 두지 않으려고)
@@ -354,6 +355,25 @@ const MockDB = {
     STATS_EPOCH: '2026-10-09',    // 실력 점수를 "권장과 일치한 비율"에서 "잃은 기대값(EV 손실)"으로 바꾸면서 새로 시작
     STAT_FIELDS: ['handsPlayed', 'handsWon', 'vpipHands', 'preflopOpps', 'pfrHands', 'threeBetCount', 'threeBetOpps', 'aggrBets', 'aggrCalls',
         'foldToBet', 'faceBet', 'wentToShowdown', 'wonAtShowdown', 'gtoScoreSum', 'gtoScoreCount', 'gtoW', 'seatSum', 'seatCnt', 'netBB', 'netHands'],
+    // 🪑 인원 보정 값(evLossN)이 생기기 전에 쌓인 기록을 한 번 맞춰 준다 — 평균 인원으로 환산해 채운다(판별 인원은 남아 있지 않아 근사).
+    migrateEvNorm() {
+        let n = 0;
+        const fix = (t, avgSeats) => {
+            if (!t || !(t.evHands > 0) || t.evLossN != null) return;
+            const k = Math.max(2, Math.min(6, avgSeats || 6)) / 6;
+            t.evLossN = Math.round((t.evLoss || 0) * k * 1e4) / 1e4; t.evLossNSq = Math.round((t.evLossSq || 0) * k * k * 1e4) / 1e4;
+            t.evSeats = Math.round((avgSeats || 6) * t.evHands); n++;
+        };
+        this.users.forEach(u => {
+            if (!u || !u.nickname) return;
+            const avg = t => (t && t.seatCnt > 0 ? t.seatSum / t.seatCnt : (u.seatCnt > 0 ? u.seatSum / u.seatCnt : 6));
+            fix(u, avg(u));
+            Object.values(u.dailyLog || {}).forEach(d => fix(d, avg(d)));
+            fix(u.learnStats, avg(u.learnStats));
+        });
+        if (n) { console.log(`🪑 인원 보정: 기록 ${n}묶음을 6인 기준으로 환산해 채움`); this.save(); }
+        return n;
+    },
     applyStatsEpoch() {
         let n = 0;
         this.users.forEach(u => {
@@ -394,7 +414,7 @@ const MockDB = {
                 console.log(`🌐 원격 전적 DB 로드(Turso): ${this.users.size}명 — 원격이 기준으로 적용됨`);
                 // 원격 기준 데이터를 로컬 파일에도 반영 (아래 flush가 다시 원격 푸시하지만 내용 동일 — 무해)
                 this._remoteLoadOk = true;
-                this.applyStatsEpoch();
+                this.applyStatsEpoch(); this.migrateEvNorm();
                 this.flush();
             } else {
                 // 최초 연결: 원격이 빔 → 로컬 데이터로 시드
@@ -1778,21 +1798,20 @@ class GameRoom {
 
         // 🧮 [솔버 조회 — 고수 봇] 미리 풀어 둔 플랍 상황(오픈 → BB 콜로 둘만 남음)이면 솔버의 빈도대로 고른다.
         //    학습 조언과 같은 자료(lib/solverdata.json). 전부 콜하는 상대를 응징하는 중(station)에는 쓰지 않는다 — 그건 솔버 밖의 익스플로잇이다.
-        if (persona.proStrategy && street === 2 && !station && p.hand && p.hand.length === 2 && this.botV5(nick)) {
+        if (persona.proStrategy && (street === 2 || (street === 3 && this.botV7(nick))) && !station && p.hand && p.hand.length === 2 && this.botV5(nick)) {
             try {
                 const _o = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded);
                 if (_o.length === 1) {
                     const _v = this.players[_o[0]];
                     const _eff = Math.min(p.chips + p.currentBet, _v.chips + (_v.currentBet || 0)) / bb;
-                    const _ss = this.solverSpot(nick, toCall, totalPot - p.currentBet, _eff);
-                    const _sr = _ss ? FlopSolve.lookup({ spot: _ss.spot, node: _ss.node, hand: p.hand, board: this.communityCards }) : null;
-                    if (_sr && _sr.dist <= 6) {
+                    const _sr = this.solverLookup(nick, toCall, totalPot - p.currentBet, _eff);
+                    if (_sr) {
                         const f = _sr.freqs, x = Math.random() * (f.reduce((a, c) => a + c, 0) || 1);
                         const allIn = p.currentBet + p.chips;
                         if (toCall === 0) {
                             if (x < f[0]) return { type: 'check' };
                             const small = f.length === 3 ? x < f[0] + f[1] : true;
-                            const target = Math.min(allIn, this.currentHighestBet + Math.max(bb, Math.round(totalPot * (small ? 0.33 : 0.75))));
+                            const target = Math.min(allIn, this.currentHighestBet + Math.max(bb, Math.round(totalPot * (_sr.turnClass ? 0.66 : small ? 0.33 : 0.75))));
                             p._plan = { betStreet: street, type: classifyBetPlan({ equity, board }), eqAtBet: equity };
                             return { type: 'raise', amount: target };
                         }
@@ -2098,6 +2117,13 @@ class GameRoom {
         const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
         return ab === '2' ? !bit : bit;
     }
+    // 🔬 솔버 턴 자료를 고수 봇에 쓰는 것의 측정 스위치(BOT_AB7). 측정 결과로 BOT_TURN_DEFAULT 를 정한다.
+    botV7(nick) {
+        const ab = process.env.BOT_AB7;
+        if (!ab) return BOT_TURN_DEFAULT;
+        const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
+        return ab === '2' ? !bit : bit;
+    }
     // 🔬 솔버 플랍 자료를 고수 봇에 쓰는 것의 측정 스위치. 운영에선 항상 켜짐.
     botV5(nick) {
         const ab = process.env.BOT_AB5;
@@ -2233,7 +2259,9 @@ class GameRoom {
     //    · 블라인드 대결(sbb): SB 오픈 → BB 콜 — 오픈한 SB 가 먼저 행동한다
     //    · 3벳 팟: 3벳한 쪽이 먼저 행동(tbo) · 나중에 행동(tbi) · 헤즈업(hutb)
     solverSpot(nick, toCall, potBefore, effBB) {
-        if (process.env.NO_SOLVER || this.gameStage !== 2 || this.communityCards.length !== 3 || effBB < 18) return null;
+        const stg = this.gameStage;
+        if (process.env.NO_SOLVER || (stg !== 2 && stg !== 3) || this.communityCards.length !== stg + 1 || effBB < 18) return null;
+        if (stg === 3 && process.env.NO_SOLVER_TURN) return null;
         const live = this.playerOrder.filter(n => this.players[n] && !this.players[n].isFolded);
         if (live.length !== 2 || !live.includes(nick)) return null;
         const vill = live.find(n => n !== nick), log = this.actionLog || [];
@@ -2248,18 +2276,35 @@ class GameRoom {
             const opener = raisers[0], caller = opener === nick ? vill : nick;
             if (!role(caller).includes('BB')) return null;
             if (hu) spot = 'hu' + depth;
-            else if (role(opener).includes('SB')) spot = depth === '' ? 'sbb' : null;
+            else if (role(opener).includes('SB')) spot = 'sbb' + depth;
             else if (role(opener).includes('BB')) return null;
-            else { const op = this.players[opener].position || ''; spot = ((op.indexOf('UTG') === 0 || op === 'HJ' || op === 'LJ' || op === 'MP') ? 'utg' : 'btn') + depth; }
+            else { const op = this.players[opener].position || ''; spot = ((op.indexOf('UTG') === 0 || op === 'HJ' || op === 'LJ' || op === 'MP') ? 'utg' : op === 'CO' ? 'co' : 'btn') + depth; }
         } else {
             if (raisers[0] === raisers[1] || depth !== '') return null;     // 3벳 팟은 깊은 스택만 풀어 두었다
             const threeBettor = raisers[1];
             spot = hu ? (threeBettor === oopNick ? 'hutb' : null) : (threeBettor === oopNick ? 'tbo' : 'tbi');
         }
         if (!spot) return null;
-        const fl = log.filter(a => a.street === 2).map(a => (a.nick === nick ? 'H' : 'V') + (a.type === 'check' ? 'x' : (a.type === 'raise' || a.type === 'allin') ? 'b' : a.type === 'call' ? 'c' : 'f')).join(' ');
+        const seq = st => log.filter(a => a.street === st).map(a => (a.nick === nick ? 'H' : 'V') + (a.type === 'check' ? 'x' : (a.type === 'raise' || a.type === 'allin') ? 'b' : a.type === 'call' ? 'c' : 'f')).join(' ');
+        const fl = seq(2);
         const big = toCall > 0 && toCall / Math.max(1, potBefore - toCall) > 0.5;
         let node = null;
+        if (stg === 3) {
+            // 턴: 플랍이 "체크-체크" 또는 "체크-벳-콜"로 지나간 판만 풀어 두었다
+            const me = nick === oopNick ? 'O' : 'I';
+            const rel = fl.split(' ').map(x => (x[0] === 'H' ? me : (me === 'O' ? 'I' : 'O')) + x[1]).join(' ');
+            let line = null;
+            if (rel === 'Ox Ix') line = 'xx';
+            else if (rel === 'Ox Ib Oc') {
+                const b = log.filter(a => a.street === 2)[1];
+                line = b && b.amount / Math.max(1, (b.pot || 0) - b.amount) > 0.5 ? 'xbc_b' : 'xbc_s';
+            }
+            if (!line) return null;
+            const tl = seq(3);
+            if (nick === oopNick) { if (tl === '' && toCall === 0) node = 't_oop'; else if (tl === 'Hx Vb') node = 't_oop_vs'; }
+            else { if (tl === 'Vx' && toCall === 0) node = 't_ip'; else if (tl === 'Vb') node = 't_ip_vs'; }
+            return node ? { spot, node, line, turn: true } : null;
+        }
         if (nick === oopNick) {                    // 내가 먼저 행동
             if (fl === '' && toCall === 0) node = 'oop_root';
             else if (fl === 'Hx Vb') node = big ? 'oop_vs_b' : 'oop_vs_s';
@@ -2269,6 +2314,14 @@ class GameRoom {
             else if (fl === 'Vx Hb Vb') node = 'ip_xr';
         }
         return node ? { spot, node } : null;
+    }
+    // 🧮 풀어 둔 상황이면 솔버 자료에서 이 패의 빈도를 찾아 온다(플랍·턴). 없으면 null.
+    solverLookup(nick, toCall, potBefore, effBB) {
+        const p = this.players[nick], ss = this.solverSpot(nick, toCall, potBefore, effBB);
+        if (!ss || !p || !p.hand || p.hand.length !== 2) return null;
+        const r = ss.turn ? FlopSolve.lookupTurn({ spot: ss.spot, line: ss.line, node: ss.node, hand: p.hand, board: this.communityCards })
+            : FlopSolve.lookup({ spot: ss.spot, node: ss.node, hand: p.hand, board: this.communityCards });
+        return r && r.dist <= 6 ? r : null;
     }
     // 🔍 상대(v)가 이번 판 프리플랍에 한 행동으로 본 범위 — 패 코드 → 무게(0~1). 기록이 없으면 null.
     villainRangeWeights(v) {
@@ -3959,7 +4012,11 @@ class GameRoom {
             const loss = (this._evHandId === this.handId && this._evHand && this._evHand[nick]) || 0;
             const aq = this._allinEq && this._allinEq.handId === this.handId ? this._allinEq.adj : null;
             const hasAdj = !!(aq && typeof aq[nick] === 'number');
-            MockDB.recordEv(nick, { evLoss: loss, evLossSq: loss * loss, evHands: 1, evNetAdj: Math.round((hasAdj ? aq[nick] / bb : net) * 100) / 100, evAllin: hasAdj ? 1 : 0 }, !!this._learnMode);
+            // 🪑 인원 보정(6인 기준 환산) · 인원 구간별 · 자리별 손실도 같이 쌓는다
+            const seats = Object.keys(this.handStartStacks).length || this.playerOrder.length, sf = EvLoss.seatFactor(seats), lossN = loss * sf;
+            const fmt = seats <= 2 ? 'hu' : seats <= 4 ? 'mid' : 'full', pk = Ranges.posKey(pl.position || '') || 'etc';
+            MockDB.recordEv(nick, { evLoss: loss, evLossSq: loss * loss, evHands: 1, evNetAdj: Math.round((hasAdj ? aq[nick] / bb : net) * 100) / 100, evAllin: hasAdj ? 1 : 0,
+                evLossN: lossN, evLossNSq: lossN * lossN, evSeats: seats, ['evFh_' + fmt]: 1, ['evFl_' + fmt]: loss, ['evPh_' + pk]: 1, ['evPl_' + pk]: loss }, !!this._learnMode);
         });
         this.settleBlunders();
         if (this._mtt) { try { this._mtt.onHandEnd(this); } catch (e) { console.error('[MTT onHandEnd 오류]', e && e.message); } }
@@ -4451,17 +4508,17 @@ class GameRoom {
             // 🧮 [솔버 조회] 미리 풀어 둔 상황이면 솔버의 빈도를 쓴다(비슷한 대표 보드 · 같은 종류의 패 기준)
             let _sv = null;
             try {
-                const ss = this.solverSpot(nick, toCall, potBefore, effBB);
-                const r = ss ? FlopSolve.lookup({ spot: ss.spot, node: ss.node, hand: p.hand, board: this.communityCards }) : null;
-                if (r && r.dist <= 6) {
+                const r = this.solverLookup(nick, toCall, potBefore, effBB);
+                if (r) {
                     const f = r.freqs, ko = FlopSolve.bucketKo(r.bucket);
                     const cards = FlopSolve.parseBoardKey(r.board).map(c => c[0] + ({ s: '♠', h: '♥', d: '♦', c: '♣' })[c[1]]).join('');
-                    const src = `솔버 계산(${r.spotName} · 비슷한 보드 ${cards} 기준)`;
+                    const src = r.turnClass ? `솔버 계산(${r.spotName} · 비슷한 플랍 ${cards} · ${FlopSolve.TURN_KO[r.turnClass]} · 플랍은 ${r.line === 'xx' ? '둘 다 체크' : '체크-벳-콜'})`
+                        : `솔버 계산(${r.spotName} · 비슷한 보드 ${cards} 기준)`;
                     if (toCall === 0) {
                         const bet = f.length === 3 ? f[1] + f[2] : f[1];
                         mix = { check: f[0], bet };
                         bestAction = bet > f[0] ? 'bet' : 'check';
-                        _sv = { big: f.length === 3 && f[2] > f[1] };
+                        _sv = { big: f.length === 3 && f[2] > f[1], turn: !!r.turnClass };
                         reason = `${src}: 이 자리에서 "${ko}" 종류의 패는 체크 ${f[0]}% · 벳 ${bet}%${f.length === 3 && bet > 0 ? ` (작게 ${f[1]}% · 크게 ${f[2]}%)` : ''}로 칩니다.${Math.min(f[0], bet) >= 25 ? ' 섞어 치는 자리라 어느 쪽도 실수가 아닙니다.' : ''}`;
                     } else {
                         mix = { fold: f[0], call: f[1], raise: f[2] };
@@ -4473,7 +4530,9 @@ class GameRoom {
                 }
             } catch (e) {}
             const _tx = this.analyzeBoardTexture() || {};
-            if (_sv && bestAction === 'bet') {
+            if (_sv && bestAction === 'bet' && _sv.turn) {
+                sizeHint = `팟의 2/3 ≈ ${Math.round(potBefore * 0.66).toLocaleString()} (솔버 계산에 쓴 크기)`;
+            } else if (_sv && bestAction === 'bet') {
                 sizeHint = _sv.big ? `팟의 3/4 ≈ ${Math.round(potBefore * 0.75).toLocaleString()} (솔버가 이 종류의 패에 주로 쓰는 크기)` : `팟의 1/3 ≈ ${Math.round(potBefore * 0.33).toLocaleString()} (솔버가 이 종류의 패에 주로 쓰는 크기)`;
             } else if ((mix.bet || 0) > 0 && bestAction === 'bet') {
                 sizeHint = GtoAdvice.betSize({ opponents, wet: !!_tx.wet, dry: !!_tx.dry, spr: _spr, pot: potBefore, thin: !!pa.thin, range: !!pa.rangeBet }).text;
@@ -4794,7 +4853,11 @@ function evView(a) {
     const streets = ['preflop', 'flop', 'turn', 'river'].map(st => ({ st, n: a['evC_' + st] || 0, loss: Math.round((a['evS_' + st] || 0) * 10) / 10,
         per100: Math.round((a['evS_' + st] || 0) / ix.hands * 1000) / 10 }));
     const n = ix.hands;
-    return Object.assign({}, ix, { decisions: dec, grades, streets,
+    const FMT = { hu: '헤즈업', mid: '3~4인', full: '5~6인' };
+    const formats = Object.keys(FMT).map(k => ({ id: k, name: FMT[k], hands: a['evFh_' + k] || 0, per100: a['evFh_' + k] > 0 ? Math.round((a['evFl_' + k] || 0) / a['evFh_' + k] * 1000) / 10 : null,
+        base: k === 'hu' ? 75 : k === 'mid' ? 43 : 27 })).filter(x => x.hands > 0);      // base: 그 인원에서 전부 접는 사람이 잃는 양(150 ÷ 인원) 어림
+    const positions = ['UTG', 'HJ', 'CO', 'BTN', 'SB', 'BB'].map(p => ({ pos: p, hands: a['evPh_' + p] || 0, per100: a['evPh_' + p] > 0 ? Math.round((a['evPl_' + p] || 0) / a['evPh_' + p] * 1000) / 10 : null })).filter(x => x.hands > 0);
+    return Object.assign({}, ix, { decisions: dec, grades, streets, formats, positions,
         net100: (a.netHands || 0) >= 30 ? Math.round((a.netBB || 0) / a.netHands * 100) : null,
         adj100: n >= 30 && typeof a.evNetAdj === 'number' ? Math.round(a.evNetAdj / n * 100) : null,
         allins: a.evAllin || 0 });
@@ -6013,7 +6076,7 @@ io.on('connection', (socket) => {
                 hands: ev.hands, decisions: ev.decisions,   // 점수에 들어가는 판 수(토너먼트·캐시·MTT)
                 gto: ev.score, pm: ev.pm, lo: ev.lo, hi: ev.hi, raw: si.raw,      // gto = 실력 점수(100판당 EV 손실에서 환산) ± 오차 · raw = 권장과 일치한 정도(참고)
                 trend: (ix7 && ixPrev && ix7.hands >= 30 && ixPrev.hands >= 30) ? (ix7.score - ixPrev.score) : null,
-                loss100: ev.loss100, se100: ev.se100, grades: ev.grades,
+                loss100: ev.loss100, raw100: ev.raw100, seats: ev.seats, se100: ev.se100, grades: ev.grades,
                 top,
                 vpip: a30.preflopOpps > 0 ? Math.round(a30.vpipHands / a30.preflopOpps * 100) : null,
                 pfr: a30.preflopOpps > 0 ? Math.round(a30.pfrHands / a30.preflopOpps * 100) : null,
@@ -6051,7 +6114,8 @@ io.on('connection', (socket) => {
         const leaks = Blunder.KIND_KEYS.map(k => ({ name: Blunder.KINDS[k].name, tip: Blunder.KINDS[k].tip, n: a['lkN_' + k] || 0, bb: Math.round((a['lkB_' + k] || 0) * 10) / 10 })).filter(l => l.n > 0).sort((x, y) => y.bb - x.bb);
         socket.emit('skillDetail', {
             nick, me, hands: ev.hands, decisions: ev.decisions, easy: a.gqEasy || 0,
-            score: ev.score, pm: ev.pm, lo: ev.lo, hi: ev.hi, raw: si.raw, loss100: ev.loss100, se100: ev.se100, L0: EvLoss.L0,
+            score: ev.score, pm: ev.pm, lo: ev.lo, hi: ev.hi, raw: si.raw, loss100: ev.loss100, raw100: ev.raw100, seats: ev.seats, se100: ev.se100, L0: EvLoss.L0,
+            formats: ev.formats, positions: ev.positions,
             grades: ev.grades, evStreets: ev.streets, net100: ev.net100, adj100: ev.adj100, allins: ev.allins,
             freqs: Freqs.summarize(a), freqMin: Freqs.MIN,
             buckets: { best: a.gqN_best || 0, ok: a.gqN_ok || 0, weak: a.gqN_weak || 0, bad: a.gqN_bad || 0 },
@@ -7106,7 +7170,7 @@ const PORT = process.env.PORT || 3000;
 //    (재배포 직후 빈 로컬 상태로 로그인 받다가 원격 데이터로 뒤늦게 덮어쓰는 레이스 방지)
 //    원격 미설정이면 initRemote()는 즉시 반환 — 기존 동작 그대로.
 MockDB.initRemote().catch(e => console.error('🌐 원격 초기화 오류:', e && e.message)).finally(() => {
-    try { MockDB.applyStatsEpoch(); } catch (e) { console.error('통계 기점 적용 오류:', e && e.message); }
+    try { MockDB.applyStatsEpoch(); MockDB.migrateEvNorm(); } catch (e) { console.error('통계 기점 적용 오류:', e && e.message); }
     server.listen(PORT, () => {
         console.log(`✅ [Master Server] 치명 버그 수정 + 보안 패치 + 방 정리 시스템 적용 완료! (포트 ${PORT})`);
     });

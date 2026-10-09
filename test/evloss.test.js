@@ -80,3 +80,12 @@ test('집계: 판 수가 늘면 오차(±)가 줄고, 구간은 점수를 감싼
     assert.ok(a.lo <= a.score && a.score <= a.hi);
     assert.strictEqual(E.index({ evHands: 0 }), null);
 });
+
+test('인원 보정: 6인 기준으로 환산한 손실(evLossN)이 있으면 그것으로 점수를 내고, 실제 손실도 같이 돌려준다', () => {
+    assert.strictEqual(E.seatFactor(6), 1); assert.strictEqual(E.seatFactor(2), 2 / 6); assert.strictEqual(E.seatFactor(9), 1); assert.strictEqual(E.seatFactor(1), 2 / 6);
+    // 헤즈업에서 전부 접는 사람: 100판당 75bb → 6인 기준 25bb → 50점
+    const hu = E.index({ evHands: 100, evLoss: 75, evLossSq: 75, evLossN: 25, evLossNSq: 25 / 3, evSeats: 200 });
+    assert.strictEqual(hu.score, 50); assert.strictEqual(hu.loss100, 25); assert.strictEqual(hu.raw100, 75); assert.strictEqual(hu.seats, 2);
+    // 보정 값이 없는 옛 기록은 실제 손실 그대로
+    assert.strictEqual(E.index({ evHands: 100, evLoss: 75, evLossSq: 75 }).score, 25);
+});
