@@ -113,6 +113,7 @@ const Ranges = require('./lib/ranges');         // 📊 프리플랍 범위표(�
 const EvLoss = require('./lib/evloss');         // 📉 결정마다 잃은 기대값(bb) — 실력 점수의 단위
 const Freqs = require('./lib/freqs');           // 📊 상황별 빈도(오픈·방어·3벳·c벳…)를 기준과 비교
 const VRange = require('./lib/vrange');         // 🔍 상대의 프리플랍 행동 → 들고 있을 만한 패의 무게
+const FlopSolve = require('./lib/flopsolve');   // 🧮 솔버로 미리 풀어 둔 플랍 전략 조회
 const GtoAdvice = require('./lib/gtoadvice');   // 🎓 학습모드 조언 — 상대 수·포지션·스택 깊이별
 const Quiz = require('./lib/gtoquiz');          // 🧠 GTO 문제 학습
 // 칭호는 화면에 그대로 찍히는 문구라 id 대신 문구를 내려보낸다 (클라이언트에 카탈로그 사본을 두지 않으려고)
@@ -2164,6 +2165,36 @@ class GameRoom {
     //    예전엔 "지금 이 순간 상대 범위를 이기는 비율"에 아무 패 상대 승률을 조금 섞었다. 그 계산은 드로우를 거의 0으로 쳐서,
     //    턴의 플러시 드로우(9아웃, 실제 약 18~20%)가 15%로 나왔다. 여기서는 상대 범위의 패 하나하나와 끝까지 가 본다.
     //    상대 범위 = 지금 보드에서 강한 순 상위 top(벳 크기·스트리트에 따라) + 그 밖의 패 일부(블러프·드로우).
+    // 🧮 지금이 솔버로 풀어 둔 상황인가 → { spot, node } 또는 null.
+    //    풀어 둔 것: 플랍 · 둘만 남음 · 단일 레이즈 팟(오픈 → BB 콜) · 오픈한 사람이 포지션을 가진 경우 · 유효 스택 40bb 이상
+    solverSpot(nick, toCall, potBefore, effBB) {
+        if (process.env.NO_SOLVER || this.gameStage !== 2 || this.communityCards.length !== 3 || effBB < 40) return null;
+        const live = this.playerOrder.filter(n => this.players[n] && !this.players[n].isFolded);
+        if (live.length !== 2 || !live.includes(nick)) return null;
+        const vill = live.find(n => n !== nick), log = this.actionLog || [];
+        const pre = log.filter(a => a.street === 1), raisers = pre.filter(a => a.type === 'raise' || a.type === 'allin');
+        if (raisers.length !== 1) return null;
+        const opener = raisers[0].nick;
+        if (opener !== nick && opener !== vill) return null;
+        const caller = opener === nick ? vill : nick;
+        const role = n => (this.players[n].role || ''), hu = this.playerOrder.length === 2;
+        if (!role(caller).includes('BB') || this.players[caller].isAllIn || this.players[opener].isAllIn) return null;
+        if (!hu && /SB|BB/.test(role(opener))) return null;                    // SB 오픈(포지션 없는 오픈)은 풀어 두지 않았다
+        const op = this.players[opener].position || '';
+        const spot = hu ? 'hu' : (op.indexOf('UTG') === 0 || op === 'HJ' || op === 'LJ' || op === 'MP') ? 'utg' : 'btn';
+        const fl = log.filter(a => a.street === 2).map(a => (a.nick === nick ? 'H' : 'V') + (a.type === 'check' ? 'x' : (a.type === 'raise' || a.type === 'allin') ? 'b' : a.type === 'call' ? 'c' : 'f')).join(' ');
+        const big = toCall > 0 && toCall / Math.max(1, potBefore - toCall) > 0.5;
+        let node = null;
+        if (nick === caller) {                     // 나는 BB(먼저 행동)
+            if (fl === '' && toCall === 0) node = 'oop_root';
+            else if (fl === 'Hx Vb') node = big ? 'oop_vs_b' : 'oop_vs_s';
+        } else {                                   // 나는 오픈한 사람(나중에 행동)
+            if (fl === 'Vx' && toCall === 0) node = 'ip_cbet';
+            else if (fl === 'Vb') node = big ? 'ip_vs_b' : 'ip_vs_s';
+            else if (fl === 'Vx Hb Vb') node = 'ip_xr';
+        }
+        return node ? { spot, node } : null;
+    }
     // 🔍 상대(v)가 이번 판 프리플랍에 한 행동으로 본 범위 — 패 코드 → 무게(0~1). 기록이 없으면 null.
     villainRangeWeights(v) {
         const pl = this.players[v];
@@ -4342,8 +4373,34 @@ class GameRoom {
             if (toCall > 0) _ev.call = Math.round(equity * (street === 'flop' ? 0.8 : street === 'turn' ? 0.9 : 1) * (potBefore + p.currentBet + toCall) - toCall);
             tier = pa.tier; tierLabel = pa.tierLabel; tierColor = pa.tierColor;   // 등급도 "한 명 상대 환산"으로
             if (rawEquity != null) notes.push(_vRangeW != null && _vRangeW < 90 ? `상대 범위 반영 (프리플랍 약 ${_vRangeW}% → 그중 벳하는 쪽)` : '상대 벳 범위 반영');
+            // 🧮 [솔버 조회] 미리 풀어 둔 상황이면 솔버의 빈도를 쓴다(비슷한 대표 보드 · 같은 종류의 패 기준)
+            let _sv = null;
+            try {
+                const ss = this.solverSpot(nick, toCall, potBefore, effBB);
+                const r = ss ? FlopSolve.lookup({ spot: ss.spot, node: ss.node, hand: p.hand, board: this.communityCards }) : null;
+                if (r && r.dist <= 6) {
+                    const f = r.freqs, ko = FlopSolve.bucketKo(r.bucket);
+                    const cards = FlopSolve.parseBoardKey(r.board).map(c => c[0] + ({ s: '♠', h: '♥', d: '♦', c: '♣' })[c[1]]).join('');
+                    const src = `솔버 계산(${r.spotName} · 비슷한 보드 ${cards} 기준)`;
+                    if (toCall === 0) {
+                        const bet = f.length === 3 ? f[1] + f[2] : f[1];
+                        mix = { check: f[0], bet };
+                        bestAction = bet > f[0] ? 'bet' : 'check';
+                        _sv = { big: f.length === 3 && f[2] > f[1] };
+                        reason = `${src}: 이 자리에서 "${ko}" 종류의 패는 체크 ${f[0]}% · 벳 ${bet}%${f.length === 3 && bet > 0 ? ` (작게 ${f[1]}% · 크게 ${f[2]}%)` : ''}로 칩니다.${Math.min(f[0], bet) >= 25 ? ' 섞어 치는 자리라 어느 쪽도 실수가 아닙니다.' : ''}`;
+                    } else {
+                        mix = { fold: f[0], call: f[1], raise: f[2] };
+                        bestAction = f[2] >= f[1] && f[2] >= f[0] ? 'raise' : (f[1] >= f[0] ? 'call' : 'fold');
+                        _sv = {};
+                        reason = `${src}: 이 벳을 받은 "${ko}" 종류의 패는 폴드 ${f[0]}% · 콜 ${f[1]}% · 레이즈 ${f[2]}%로 칩니다.`;
+                    }
+                    notes.push('🧮 솔버 계산');
+                }
+            } catch (e) {}
             const _tx = this.analyzeBoardTexture() || {};
-            if ((mix.bet || 0) > 0 && bestAction === 'bet') {
+            if (_sv && bestAction === 'bet') {
+                sizeHint = _sv.big ? `팟의 3/4 ≈ ${Math.round(potBefore * 0.75).toLocaleString()} (솔버가 이 종류의 패에 주로 쓰는 크기)` : `팟의 1/3 ≈ ${Math.round(potBefore * 0.33).toLocaleString()} (솔버가 이 종류의 패에 주로 쓰는 크기)`;
+            } else if ((mix.bet || 0) > 0 && bestAction === 'bet') {
                 sizeHint = GtoAdvice.betSize({ opponents, wet: !!_tx.wet, dry: !!_tx.dry, spr: _spr, pot: potBefore, thin: !!pa.thin, range: !!pa.rangeBet }).text;
             } else if (bestAction === 'raise') {
                 const to = Math.min(p.currentBet + p.chips, this.currentHighestBet * 3);
