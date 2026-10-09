@@ -403,19 +403,24 @@ test('방어 폭은 가격에 따라 달라진다: 작은 오픈엔 넓게, 큰 
     assert.strictEqual(Math.round(bb(0)), Math.round(bb(1.5 / 5.5)));
 });
 
-test('솔버 문제: 정답은 솔버 자료의 그 패 종류에서 80%(벳·체크) / 75%(받기) 이상인 액션이다', () => {
+test('솔버 문제(플랍 · 턴 · 블라인드 대결 · 3벳 팟): 정답은 솔버 자료에서 그 패 종류가 80%(벳·체크·턴) / 75%(플랍 받기) 이상 고르는 액션이다', () => {
     const FS = require('../lib/flopsolve'), D = FS.load();
-    const rng = lcg(5);
-    for (let i = 0; i < 200; i++) {
-        const q = Q.generate('solver', rng);
+    const rng = lcg(5), seen = {};
+    for (let i = 0; i < 400; i++) {
+        const q = Q.generate('solver', rng), m = q.sv;
         assert.strictEqual(q.cat, 'solver');
-        assert.strictEqual(q.board.length, 3);
-        assert.ok(!q.hand.some(c => q.board.includes(c)), '내 패와 보드가 겹침');
-        const spot = q.tags[0].startsWith('헤즈업') ? 'hu' : (q.tags[2].startsWith('UTG') ? 'utg' : 'btn');
-        const ip = q.choices.length === 2;
-        const node = ip ? 'ip_cbet' : (q.prompt.includes('3/4') ? 'oop_vs_b' : 'oop_vs_s');
-        const row = D[spot][q.board.join('')][node][FS.bucket(q.hand, q.board).key];
-        if (ip) assert.ok((q.answer === 'bet' ? row[1] + row[2] : row[0]) >= 80, q.prompt);
-        else assert.ok(row[{ fold: 0, call: 1, raise: 2 }[q.answer]] >= 75, q.prompt);
+        assert.ok(m && D[m.spot] && D[m.spot][m.bkey], '출처 표시가 없음');
+        assert.strictEqual(q.board.length, m.line ? 4 : 3);
+        assert.strictEqual(new Set(q.hand.concat(q.board)).size, q.hand.length + q.board.length, '카드가 겹침: ' + q.prompt);
+        const N = m.line ? D[m.spot][m.bkey].turn[m.line][m.cls][m.node] : D[m.spot][m.bkey][m.node];
+        const row = N[FS.bucket(q.hand, q.board).key];
+        assert.ok(row, q.prompt);
+        const two = q.choices.length === 2;
+        const got = two ? (q.answer === 'check' ? row[0] : row.slice(1, -1).reduce((a, b) => a + b, 0)) : row[{ fold: 0, call: 1, raise: 2 }[q.answer]];
+        assert.ok(got >= (m.line || two ? 80 : 75), `${got}% — ${q.prompt}`);
+        seen[m.line ? 'turn' : m.spot] = 1;
     }
+    ['turn', 'hu', 'sbb', 'tbo'].forEach(k => assert.ok(seen[k], k + ' 문제가 한 번도 안 나옴'));
+    // 출처 표시(sv)는 화면으로 내보내지 않는다
+    assert.strictEqual(Q.publicView(Q.generate('solver', rng)).sv, undefined);
 });

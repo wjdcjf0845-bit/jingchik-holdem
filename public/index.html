@@ -882,6 +882,19 @@
         .gto-best-label { font-size:10px; color:var(--txt-dim); font-weight:800; }
         .gto-best-action { font-size:14px; font-weight:900; }
         .gto-reason { font-size:11px; color:var(--txt); line-height:1.4; flex:1; opacity:0.9; }
+        .svt { margin-top: 6px; }
+        .svt-toggle { width: 100%; text-align: left; font-size: 11px; font-weight: 800; color: #9fd4ff; background: rgba(47,125,246,0.14); border: 1px solid rgba(47,125,246,0.35); border-radius: 8px; padding: 5px 8px; cursor: pointer; display: flex; justify-content: space-between; gap: 6px; }
+        .svt-body { display: none; margin-top: 5px; }
+        .svt.open .svt-body { display: block; }
+        .svt-legend { display: flex; gap: 10px; font-size: 10px; color: #c3cbe0; margin-bottom: 4px; }
+        .svt-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; }
+        .svt-row { display: grid; grid-template-columns: minmax(84px, 38%) 1fr; align-items: center; column-gap: 6px; padding: 2px 4px; border-radius: 6px; }
+        .svt-row.me { background: rgba(255,226,122,0.16); outline: 1px solid rgba(255,226,122,0.5); }
+        .svt-row.sub .svt-n { padding-left: 8px; color: #ffe27a; }
+        .svt-n { font-size: 10.5px; color: #dfe6f5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .svt-bar { display: flex; height: 13px; border-radius: 4px; overflow: hidden; background: rgba(255,255,255,0.06); }
+        .svt-bar i { font-style: normal; font-size: 9px; font-weight: 900; color: #06121f; display: flex; align-items: center; justify-content: center; min-width: 2px; }
+        .svt-foot { font-size: 9.5px; color: var(--txt-dim); line-height: 1.45; margin-top: 5px; word-break: keep-all; }
         .gto-mix { display:flex; flex-direction:column; gap:5px; }
         .gto-mix-row { display:flex; align-items:center; gap:8px; }
         .gto-mix-label { font-size:11px; font-weight:800; min-width:42px; }
@@ -7750,6 +7763,8 @@
             <div class="sr-section-title" style="margin-top:14px;">② 결정 ${tot.toLocaleString()}번의 등급</div>
             <div class="skx-dist">${GK.map(seg).join('')}</div>
             <div class="skx-legend">${GK.map(k => `<span><i style="background:${SK_GRADE[k][1]};"></i>${SK_GRADE[k][0]} · ${gHint[k]} · ${G[k] || 0}번</span>`).join('')}</div>
+            ${(d.solver || []).length ? (() => { const n = d.solver.reduce((a, x) => a + x.n, 0), ok = d.solver.reduce((a, x) => a + x.ok, 0), ko = { flop: '플랍', turn: '턴' };
+                return `<div class="gd-text" style="font-size:12px; margin-top:8px; background:rgba(47,125,246,0.12); border:1px solid rgba(47,125,246,0.3); border-radius:10px; padding:7px 10px;">🧮 <b>솔버 일치율 ${Math.round(ok / n * 100)}%</b> — 솔버 조언이 나온 결정 ${n.toLocaleString()}번 중 ${ok.toLocaleString()}번을 솔버 범위 안(권장 액션이거나 25% 이상 섞는 액션)으로 쳤습니다. ${d.solver.map(x => `${ko[x.st]} ${Math.round(x.ok / x.n * 100)}% (${x.n}번)`).join(' · ')}</div>`; })() : ''}
             <div class="sr-section-title" style="margin-top:14px;">③ 어느 스트리트에서 잃었나 <small style="font-weight:400; color:var(--txt-dim);">(100판당 bb)</small></div>
             <div class="skbs">${streets}</div>
             ${(d.positions || []).length ? `<div class="sr-section-title" style="margin-top:14px;">③-2 어느 자리에서 잃었나 <small style="font-weight:400; color:var(--txt-dim);">(그 자리에 앉은 100판당 bb)</small></div>
@@ -8470,12 +8485,28 @@
             </div>
             ${a.sizeHint ? `<div class="gto-size">📐 권장 크기 <b>${esc(a.sizeHint)}</b></div>` : ''}
             <div class="gto-mix">${mixRows}</div>
+            ${svTableHtml(a.solverTable)}
             </div>
         `;
         panel.style.display = 'block';
         if (_gtoCollapsed) panel.classList.add('collapsed');
         else panel.classList.remove('collapsed');
     });
+    // 📋 솔버 표 — 이 자리에서 패 종류마다 솔버가 어떻게 치는지(막대 = 빈도). 내 패가 속한 줄을 강조한다.
+    let _svOpen = false;
+    function svTableHtml(t) {
+        if (!t || !t.rows || !t.rows.length) return '';
+        const col = t.acts.length === 3 && t.acts[0] === '폴드' ? ['#5b6478', '#3cc878', '#eb6054'] : t.acts.length === 3 ? ['#5b6478', '#3cc878', '#eb6054'] : ['#5b6478', '#3cc878'];
+        const rows = t.rows.map(r => { const tot = Math.max(1, r.f.reduce((x, y) => x + y, 0));
+            return `<div class="svt-row${r.me ? ' me' : ''}${r.sub ? ' sub' : ''}"><span class="svt-n">${esc(r.name)}</span><span class="svt-bar">${r.f.map((v, i) => v > 0 ? `<i style="flex:${v} 1 0; background:${col[i]};" title="${t.acts[i]} ${v}%">${v / tot >= 0.18 ? v : ''}</i>` : '').join('')}</span></div>`; }).join('');
+        return `<div class="svt${_svOpen ? ' open' : ''}">
+            <button type="button" class="svt-toggle" onclick="_svOpen = !_svOpen; this.parentNode.classList.toggle('open', _svOpen);">📋 솔버 표 — 패 종류별로 어떻게 치나 <b>${_svOpen ? '▲' : '▼'}</b></button>
+            <div class="svt-body">
+                <div class="svt-legend">${t.acts.map((x, i) => `<span><i style="background:${col[i]}"></i>${x}</span>`).join('')}</div>
+                ${rows}
+                <div class="svt-foot">${esc(t.title)}. 숫자는 그 종류의 패가 그 액션을 고르는 비율(%)이고, 밝은 줄이 내 패입니다.</div>
+            </div></div>`;
+    }
     // 📱 모바일(≤480px)은 기본 접힘 — 펼친 패널이 보드/좌석/팟을 가리는 문제 방지 (탭하면 펼침)
     let _gtoCollapsed = window.innerWidth <= 480;
     function toggleGtoPanel() {

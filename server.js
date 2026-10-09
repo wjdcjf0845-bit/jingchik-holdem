@@ -114,6 +114,8 @@ const EvLoss = require('./lib/evloss');         // 📉 결정마다 잃은 기�
 const Freqs = require('./lib/freqs');           // 📊 상황별 빈도(오픈·방어·3벳·c벳…)를 기준과 비교
 const VRange = require('./lib/vrange');         // 🔍 상대의 프리플랍 행동 → 들고 있을 만한 패의 무게
 const FlopSolve = require('./lib/flopsolve');   // 🧮 솔버로 미리 풀어 둔 플랍 전략 조회
+const RiverSolve = require('./lib/riversolve'); // 🌊 리버를 범위 대 범위로 그 자리에서 푼다
+const RangeTrack = require('./lib/rangetrack'); // 🧭 리버까지 쳐 온 행동으로 양쪽 범위를 만든다
 // 고수 봇의 블라인드 방어에 범위표를 쓸지. 📊 맞대결 실측(2026-10-09, 100bb 하드 봇 5명, 각 약 3만 핸드, BOT_AB6):
 //   범위표 봇 +27.2 vs 예전 봇 −0.6 bb/100, 우승 50:39. 플랍을 솔버 자료로 치기 전에는 넓은 방어가 −9.9 vs +37.1 로 해로웠다(위 botDecide 주석).
 const BOT_CHART_DEFAULT = true;
@@ -121,6 +123,7 @@ const BOT_CHART_DEFAULT = true;
 //   봇의 리버가 솔버의 턴 계획(강한 패를 체크하고 리버에 받아내기 등)을 이어받지 못해서로 보인다. 조언을 리버까지 따르는 가상 플레이어는 턴 자료로 +56 vs +11 이었다.
 //   플랍 자료(새 상황 포함, BOT_AB5)는 +34.2 vs −9.3, 우승 60:36 으로 뚜렷이 나아 운영에 쓴다.
 const BOT_TURN_DEFAULT = false;
+const BOT_RIVER_DEFAULT = false;                // 고수 봇이 리버 계산을 쓸지 — 맞대결 측정 전(botV9)
 const GtoAdvice = require('./lib/gtoadvice');   // 🎓 학습모드 조언 — 상대 수·포지션·스택 깊이별
 const Quiz = require('./lib/gtoquiz');          // 🧠 GTO 문제 학습
 // 칭호는 화면에 그대로 찍히는 문구라 id 대신 문구를 내려보낸다 (클라이언트에 카탈로그 사본을 두지 않으려고)
@@ -1807,7 +1810,9 @@ class GameRoom {
                 if (_o.length === 1) {
                     const _v = this.players[_o[0]];
                     const _eff = Math.min(p.chips + p.currentBet, _v.chips + (_v.currentBet || 0)) / bb;
-                    const _sr = this.solverLookup(nick, toCall, totalPot - p.currentBet, _eff);
+                    // BOT_AB8(측정용): 절반의 봇은 처음 풀었던 22보드만 쓴다 — 보드를 늘린 효과를 잰다
+                    const _ab8 = process.env.BOT_AB8, _bit8 = ((this.hashNick(nick) >> 4) & 1) === 1;
+                    const _sr = this.solverLookup(nick, toCall, totalPot - p.currentBet, _eff, !!_ab8 && (_ab8 === '2' ? _bit8 : !_bit8));
                     if (_sr) {
                         const f = _sr.freqs, x = Math.random() * (f.reduce((a, c) => a + c, 0) || 1);
                         const allIn = p.currentBet + p.chips;
@@ -1825,6 +1830,22 @@ class GameRoom {
                         if (target >= this.currentHighestBet + this.lastFullRaiseAmount || target >= allIn) return { type: 'raise', amount: target };
                         return { type: 'call' };
                     }
+                }
+            } catch (e) {}
+        }
+
+        // 🌊 [리버 계산 — 고수 봇, 측정 스위치 BOT_AB9] 둘만 남은 리버는 범위 대 범위로 푼 빈도대로 친다.
+        //    아주 강한 패로 벳을 받은 자리(레이즈할 패)는 계산 나무에 레이즈가 없어 예전 로직에 맡긴다.
+        if (persona.proStrategy && street === 4 && !station && this.botV9(nick) && !(toCall > 0 && equity > 0.88)) {
+            try {
+                const rr = this.riverAdvice(nick, toCall);
+                if (rr) {
+                    const x = Math.random();
+                    if (!rr.facing) {
+                        if (x >= rr.freq) return { type: 'check' };
+                        return { type: 'raise', amount: Math.min(p.currentBet + p.chips, this.currentHighestBet + Math.max(bb, Math.round(rr.bet))) };
+                    }
+                    return x < rr.freq ? { type: 'call' } : { type: 'fold' };
                 }
             } catch (e) {}
         }
@@ -2120,6 +2141,13 @@ class GameRoom {
         const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
         return ab === '2' ? !bit : bit;
     }
+    // 🔬 리버 계산을 고수 봇에 쓰는 것의 측정 스위치(BOT_AB9). 측정 결과로 BOT_RIVER_DEFAULT 를 정한다.
+    botV9(nick) {
+        const ab = process.env.BOT_AB9;
+        if (!ab) return BOT_RIVER_DEFAULT;
+        const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
+        return ab === '2' ? !bit : bit;
+    }
     // 🔬 솔버 턴 자료를 고수 봇에 쓰는 것의 측정 스위치(BOT_AB7). 측정 결과로 BOT_TURN_DEFAULT 를 정한다.
     botV7(nick) {
         const ab = process.env.BOT_AB7;
@@ -2318,12 +2346,59 @@ class GameRoom {
         }
         return node ? { spot, node } : null;
     }
+    // 🌊 [리버 계산] 둘만 남은 리버에서 양쪽 범위를 만들어 그 자리에서 푼다 → 내 패의 빈도와 액션별 기대값(칩).
+    //    범위 = 프리플랍 행동으로 낸 무게 × 플랍·턴에 한 행동마다 "그 종류의 패가 그렇게 칠 확률"(lib/rangetrack.js).
+    //    다루는 자리: 내가 먼저(체크/벳) · 상대 체크 뒤(체크/벳) · 벳 받기(폴드/콜). 레이즈가 낀 리버는 다루지 않는다.
+    riverAdvice(nick, toCall) {
+        // 📊 실측(2026-10-10): 켜도 나아지지 않았다 — 조언대로 치는 가상 플레이어(헤즈업, 각 약 7,600판) 켬 +12 vs 끔 +25 bb/100(오차 ±14),
+        //    봇 맞대결(BOT_AB9, 각 약 2.9만 핸드) +1.3 vs +22.8, 우승 38:53. 계산 자체는 교과서 문제를 정확히 풀지만(test/riversolve.test.js)
+        //    넣어 주는 양쪽 범위가 추정이라 실전에서 예전 근사를 이기지 못한다. 그래서 기본은 꺼 둔다(RIVER_SOLVER=1 로 켜서 다시 잴 수 있다).
+        if (process.env.RIVER_SOLVER !== '1' || this.gameStage !== 4 || this.communityCards.length !== 5) return null;
+        const p = this.players[nick];
+        const live = this.playerOrder.filter(n => this.players[n] && !this.players[n].isFolded);
+        if (!p || !p.hand || p.hand.length !== 2 || live.length !== 2 || !live.includes(nick)) return null;
+        const vill = live.find(n => n !== nick), v = this.players[vill];
+        if (p.isAllIn || v.isAllIn || !(this.pot > 0)) return null;
+        const key = this.advKey(nick);
+        if (this._riverCache && this._riverCache.key === key && this._riverCache.nick === nick) return this._riverCache.res;
+        const oopNick = this.isInPosition(nick) ? vill : nick, meO = nick === oopNick;
+        const log = this.actionLog || [];
+        const seqOf = st => log.filter(a => a.street === st && (a.nick === nick || a.nick === vill) && ['check', 'call', 'raise', 'allin', 'fold'].includes(a.type)).map(a => {
+            const bet = a.type === 'raise' || a.type === 'allin';
+            return { who: a.nick === oopNick ? 'O' : 'I', type: a.type === 'check' ? 'x' : bet ? 'b' : a.type === 'call' ? 'c' : 'f', frac: bet ? a.amount / Math.max(1, (a.pot || 0) - a.amount) : 0 };
+        });
+        const rv = seqOf(4).map(a => a.who + a.type).join(' ');
+        let node = null;
+        if (meO) { if (rv === '' && toCall === 0) node = 'N0'; else if (rv === 'Ox Ib' && toCall > 0) node = 'N3'; }
+        else { if (rv === 'Ox' && toCall === 0) node = 'N1'; else if (rv === 'Ob' && toCall > 0) node = 'N2'; }
+        if (!node) return null;
+        const fl = RangeTrack.actsOfStreet('flop', seqOf(2)), tn = RangeTrack.actsOfStreet('turn', seqOf(3));
+        const side = n => (n === oopNick ? 'O' : 'I');
+        const rangeOf = (n, mine) => RangeTrack.build({ board: this.communityCards, dead: mine ? [] : p.hand, pre: this.villainRangeWeights(n) || null,
+            acts: fl[side(n)].concat(tn[side(n)]), keep: mine ? p.hand : null, max: 80 }, handToCode);
+        const mineR = rangeOf(nick, true), villR = rangeOf(vill, false);
+        if (mineR.length < 5 || villR.length < 5) return null;
+        const P = this.pot, stack = Math.min(p.chips + (p.currentBet || 0), v.chips + (v.currentBet || 0));
+        const sol = RiverSolve.solve({ board: this.communityCards, pot: P, stack, bet: toCall > 0 ? toCall : undefined, oop: meO ? mineR : villR, ip: meO ? villR : mineR, iters: 220 });
+        if (!sol) return null;
+        const mineS = meO ? sol.oop : sol.ip, villS = meO ? sol.ip : sol.oop;
+        const e = mineS.find(x => (x.hand[0] === p.hand[0] && x.hand[1] === p.hand[1]) || (x.hand[0] === p.hand[1] && x.hand[1] === p.hand[0]));
+        if (!e) return null;
+        const avg = (xs, f) => xs.reduce((s, x) => s + x.w * f(x), 0);
+        const res = { node, bet: sol.bet, pot: P, facing: toCall > 0,
+            freq: toCall > 0 ? e.sCall : e.sBet,                                           // 적극 쪽(콜 또는 벳) 빈도
+            ev: toCall > 0 ? { fold: 0, call: e.evCall } : { check: e.evCheck, bet: e.evBet },
+            rangeFreq: toCall > 0 ? avg(mineS, x => x.sCall) : avg(mineS, x => x.sBet),      // 내 범위 전체가 그 액션을 고르는 비율
+            villBetFreq: avg(villS, x => x.sBet), nMine: mineR.length, nVill: villR.length };
+        this._riverCache = { key, nick, res };
+        return res;
+    }
     // 🧮 풀어 둔 상황이면 솔버 자료에서 이 패의 빈도를 찾아 온다(플랍·턴). 없으면 null.
-    solverLookup(nick, toCall, potBefore, effBB) {
+    solverLookup(nick, toCall, potBefore, effBB, baseOnly) {
         const p = this.players[nick], ss = this.solverSpot(nick, toCall, potBefore, effBB);
         if (!ss || !p || !p.hand || p.hand.length !== 2) return null;
         const r = ss.turn ? FlopSolve.lookupTurn({ spot: ss.spot, line: ss.line, node: ss.node, hand: p.hand, board: this.communityCards })
-            : FlopSolve.lookup({ spot: ss.spot, node: ss.node, hand: p.hand, board: this.communityCards });
+            : FlopSolve.lookup({ spot: ss.spot, node: ss.node, hand: p.hand, board: this.communityCards, baseOnly: !!baseOnly });
         return r && r.dist <= 6 ? r : null;
     }
     // 🔍 상대(v)가 이번 판 프리플랍에 한 행동으로 본 범위 — 패 코드 → 무게(0~1). 기록이 없으면 null.
@@ -4100,6 +4175,8 @@ class GameRoom {
                     this._evHand[nick] = (this._evHand[nick] || 0) + _el.lossBB;
                     const st0 = sa0.advice.street || 'preflop';
                     MockDB.recordEv(nick, { ['evG_' + _el.grade]: 1, ['evC_' + st0]: 1, ['evS_' + st0]: _el.lossBB }, !!this._learnMode);
+                    // 🧮 솔버 일치율: 솔버 조언이 나온 결정 가운데 솔버 범위 안(권장 액션이거나 25% 이상 섞는 액션)으로 친 횟수
+                    if (sa0.advice.solverTable) MockDB.recordEv(nick, { ['evVn_' + st0]: 1, ['evVk_' + st0]: (_el.grade === 'best' || _el.grade === 'good') ? 1 : 0 }, !!this._learnMode);
                 }
                 // 📊 상황별 빈도: 이 자리에서 "했나"와 "조언이 권한 빈도"를 같이 쌓는다
                 try {
@@ -4200,6 +4277,7 @@ class GameRoom {
         let sizeHint = '', rawEquity = null, equityLabel = '내 승률';
         const _ev = {};          // 📉 액션별 기대값(칩) — EV 손실 계산용 (lib/evloss.js)
         let _vRangeW = null;     // 🔍 벳한 상대의 프리플랍 범위 폭(%)
+        let _svTable = null;     // 📋 솔버 표(패 종류별 빈도)
         const _bbNow = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
         const _liveOpp = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded);
         const _stk = n => this.players[n].chips + (this.players[n].currentBet || 0);
@@ -4530,10 +4608,41 @@ class GameRoom {
                         reason = `${src}: 이 벳을 받은 "${ko}" 종류의 패는 폴드 ${f[0]}% · 콜 ${f[1]}% · 레이즈 ${f[2]}%로 칩니다.`;
                     }
                     notes.push('🧮 솔버 계산');
+                    // 📋 학습 화면용: 이 자리에서 패 종류마다 솔버가 어떻게 치는지 한 장의 표로
+                    _svTable = { title: src, acts: toCall === 0 ? (f.length === 3 ? ['체크', '작게 벳', '크게 벳'] : ['체크', '벳']) : ['폴드', '콜', '레이즈'], rows: r.table || [] };
+                }
+            } catch (e) {}
+            // 🌊 [리버 계산] 둘만 남은 리버는 양쪽 범위를 만들어 그 자리에서 푼 값을 쓴다
+            try {
+                const rr = street === 'river' ? this.riverAdvice(nick, toCall) : null;
+                if (rr) {
+                    const pc = x => Math.round(x * 100), bbv = x => Math.round(x / _bbNow * 10) / 10;
+                    if (!rr.facing) {
+                        const bet = pc(rr.freq);
+                        mix = { check: 100 - bet, bet };
+                        bestAction = rr.ev.bet > rr.ev.check ? 'bet' : 'check';
+                        if (Math.abs(rr.ev.bet - rr.ev.check) < 0.02 * rr.pot) bestAction = bet >= 50 ? 'bet' : 'check';     // 값이 거의 같으면 빈도가 높은 쪽을 권한다
+                        _ev.acts = { check: Math.round(rr.ev.check), bet: Math.round(rr.ev.bet) };
+                        _sv = { river: true, bet: rr.bet };
+                        reason = `리버 계산(범위 대 범위): 이 패는 체크 ${100 - bet}% · 벳 ${bet}%가 균형입니다. 기대값은 체크 ${bbv(rr.ev.check)}bb · 벳 ${bbv(rr.ev.bet)}bb. 내 범위 전체로는 ${pc(rr.rangeFreq)}% 벳하는 자리입니다.${Math.abs(rr.ev.bet - rr.ev.check) < 0.02 * rr.pot ? ' 두 값이 거의 같아 어느 쪽도 실수가 아닙니다.' : ''}`;
+                    } else {
+                        const strongRaise = (pa.mix.raise || 0) >= 30 ? Math.min(60, pa.mix.raise) : 0;      // 아주 강한 패의 레이즈는 예전 기준을 그대로 살린다(계산 나무에 레이즈가 없다)
+                        const call = pc(rr.freq), k = (100 - strongRaise) / 100;
+                        mix = strongRaise ? { fold: Math.round((100 - call) * k), call: Math.round(call * k), raise: strongRaise } : { fold: 100 - call, call };
+                        bestAction = strongRaise >= 50 ? 'raise' : (rr.ev.call > 0 ? 'call' : 'fold');
+                        if (!strongRaise && Math.abs(rr.ev.call) < 0.02 * (rr.pot + toCall)) bestAction = call >= 50 ? 'call' : 'fold';
+                        _ev.acts = { fold: 0, call: Math.round(rr.ev.call) };
+                        _ev.call = Math.round(rr.ev.call);
+                        _sv = { river: true };
+                        reason = `리버 계산(범위 대 범위): 이 벳에 이 패는 콜 ${call}% · 폴드 ${100 - call}%가 균형입니다. 콜의 기대값은 ${rr.ev.call >= 0 ? '+' : ''}${bbv(rr.ev.call)}bb(폴드는 0). 내 범위 전체로는 ${pc(rr.rangeFreq)}%를 콜해야 상대가 아무 패로나 벳해서 이득 보지 못합니다.${strongRaise ? ' 아주 강한 패라 레이즈도 좋습니다.' : ''}`;
+                    }
+                    notes.push('🌊 리버 계산');
                 }
             } catch (e) {}
             const _tx = this.analyzeBoardTexture() || {};
-            if (_sv && bestAction === 'bet' && _sv.turn) {
+            if (_sv && bestAction === 'bet' && _sv.river) {
+                sizeHint = `팟의 2/3 ≈ ${Math.round(_sv.bet).toLocaleString()} (계산에 쓴 크기)`;
+            } else if (_sv && bestAction === 'bet' && _sv.turn) {
                 sizeHint = `팟의 2/3 ≈ ${Math.round(potBefore * 0.66).toLocaleString()} (솔버 계산에 쓴 크기)`;
             } else if (_sv && bestAction === 'bet') {
                 sizeHint = _sv.big ? `팟의 3/4 ≈ ${Math.round(potBefore * 0.75).toLocaleString()} (솔버가 이 종류의 패에 주로 쓰는 크기)` : `팟의 1/3 ≈ ${Math.round(potBefore * 0.33).toLocaleString()} (솔버가 이 종류의 패에 주로 쓰는 크기)`;
@@ -4555,7 +4664,7 @@ class GameRoom {
             notes, sizeHint, equityLabel,
             allinIsCall: _fullCall > 0 && _fullCall >= p.chips,   // 콜이 곧 올인인 자리 — '올인' 버튼을 눌러도 콜로 채점한다
             rawEquity: rawEquity == null ? null : Math.round(rawEquity * 100),
-            posInfo, ev: _ev,
+            posInfo, ev: _ev, solverTable: _svTable,
             handStr: p.hand.join(' ')
         };
     }
@@ -4860,7 +4969,8 @@ function evView(a) {
     const formats = Object.keys(FMT).map(k => ({ id: k, name: FMT[k], hands: a['evFh_' + k] || 0, per100: a['evFh_' + k] > 0 ? Math.round((a['evFl_' + k] || 0) / a['evFh_' + k] * 1000) / 10 : null,
         base: k === 'hu' ? 75 : k === 'mid' ? 43 : 27 })).filter(x => x.hands > 0);      // base: 그 인원에서 전부 접는 사람이 잃는 양(150 ÷ 인원) 어림
     const positions = ['UTG', 'HJ', 'CO', 'BTN', 'SB', 'BB'].map(p => ({ pos: p, hands: a['evPh_' + p] || 0, per100: a['evPh_' + p] > 0 ? Math.round((a['evPl_' + p] || 0) / a['evPh_' + p] * 1000) / 10 : null })).filter(x => x.hands > 0);
-    return Object.assign({}, ix, { decisions: dec, grades, streets, formats, positions,
+    const solver = ['flop', 'turn'].map(st => ({ st, n: a['evVn_' + st] || 0, ok: a['evVk_' + st] || 0 })).filter(x => x.n > 0);
+    return Object.assign({}, ix, { decisions: dec, grades, streets, formats, positions, solver,
         net100: (a.netHands || 0) >= 30 ? Math.round((a.netBB || 0) / a.netHands * 100) : null,
         adj100: n >= 30 && typeof a.evNetAdj === 'number' ? Math.round(a.evNetAdj / n * 100) : null,
         allins: a.evAllin || 0 });
@@ -6118,7 +6228,7 @@ io.on('connection', (socket) => {
         socket.emit('skillDetail', {
             nick, me, hands: ev.hands, decisions: ev.decisions, easy: a.gqEasy || 0,
             score: ev.score, pm: ev.pm, lo: ev.lo, hi: ev.hi, raw: si.raw, loss100: ev.loss100, raw100: ev.raw100, seats: ev.seats, se100: ev.se100, L0: EvLoss.L0,
-            formats: ev.formats, positions: ev.positions,
+            formats: ev.formats, positions: ev.positions, solver: ev.solver,
             grades: ev.grades, evStreets: ev.streets, net100: ev.net100, adj100: ev.adj100, allins: ev.allins,
             freqs: Freqs.summarize(a), freqMin: Freqs.MIN,
             buckets: { best: a.gqN_best || 0, ok: a.gqN_ok || 0, weak: a.gqN_weak || 0, bad: a.gqN_bad || 0 },
