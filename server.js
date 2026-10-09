@@ -2376,7 +2376,7 @@ class GameRoom {
         // 📊 실측(2026-10-10): 켜도 나아지지 않았다 — 조언대로 치는 가상 플레이어(헤즈업, 각 약 7,600판) 켬 +12 vs 끔 +25 bb/100(오차 ±14),
         //    봇 맞대결(BOT_AB9, 각 약 2.9만 핸드) +1.3 vs +22.8, 우승 38:53. 계산 자체는 교과서 문제를 정확히 풀지만(test/riversolve.test.js)
         //    넣어 주는 양쪽 범위가 추정이라 실전에서 예전 근사를 이기지 못한다. 그래서 기본은 꺼 둔다(RIVER_SOLVER=1 로 켜서 다시 잴 수 있다).
-        if (process.env.RIVER_SOLVER !== '1' || this.gameStage !== 4 || this.communityCards.length !== 5) return null;
+        if ((process.env.RIVER_SOLVER !== '1' && !process.env.DEV_RLOG) || this.gameStage !== 4 || this.communityCards.length !== 5) return null;
         const p = this.players[nick];
         const live = this.playerOrder.filter(n => this.players[n] && !this.players[n].isFolded);
         if (!p || !p.hand || p.hand.length !== 2 || live.length !== 2 || !live.includes(nick)) return null;
@@ -2399,6 +2399,23 @@ class GameRoom {
         const side = n => (n === oopNick ? 'O' : 'I');
         const rangeOf = (n, mine) => RangeTrack.build({ board: this.communityCards, dead: mine ? [] : p.hand, pre: this.villainRangeWeights(n) || null,
             acts: fl[side(n)].concat(tn[side(n)]), keep: mine ? p.hand : null, max: 80 }, handToCode);
+        // 🔬 [검증용 · DEV_RLOG] 범위 추정이 맞는가: 상대의 실제 패에 준 확률을 "아무 패"·"프리플랍만"·"플랍·턴 행동까지" 세 가지로 견준다
+        if (process.env.DEV_RLOG && (v.hand || []).length === 2) {
+            try {
+                const pre = this.villainRangeWeights(vill) || null, acts = fl[side(vill)].concat(tn[side(vill)]);
+                const full = RangeTrack.build({ board: this.communityCards, dead: p.hand, pre, acts, max: 2000 }, handToCode);
+                const preOnly = RangeTrack.build({ board: this.communityCards, dead: p.hand, pre, acts: [], max: 2000 }, handToCode);
+                const is = h => (h[0] === v.hand[0] && h[1] === v.hand[1]) || (h[0] === v.hand[1] && h[1] === v.hand[0]);
+                const pOf = r => { const e = r.find(x => is(x.hand)); return e ? e.w : 1e-5; };
+                const bbR = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb, stackR = Math.min(p.chips + (p.currentBet || 0), v.chips + (v.currentBet || 0));
+                const pl0 = (this.actionLog || []).filter(x => x.street === 1), rs = pl0.filter(x => x.type === 'raise' || x.type === 'allin').map(x => x.nick);
+                console.log('RLOG ' + JSON.stringify({ bot: !!v.isBot, lvl: v.isBot ? (v.difficulty || '') : '', n: full.length, u: 1 / 990, pre: pOf(preOnly), full: pOf(full),
+                    acts: acts.map(a => a.street[0] + (a.oop ? 'O' : 'I') + (a.facing || '-') + a.act).join(' '), node,
+                    vh: v.hand, hh: p.hand, bd: this.communityCards, A: acts, hu: this.playerOrder.length === 2, vPos: v.position || '', vBB: !!(v.role && v.role.includes('BB')), hBB: !!(p.role && p.role.includes('BB')),
+                    opener: rs[0] === vill ? 'v' : rs[0] === nick ? 'h' : 'x', raises: rs.length, openerPos: rs[0] && this.players[rs[0]] ? (this.players[rs[0]].position || '') : '',
+                    line: VRange.lineFromLog(pl0, vill, bbR, n => (this.players[n] && this.players[n].position) || ''), vInPos: this.isInPosition(vill), effBB: Math.round(stackR / bbR) }));
+            } catch (e) {}
+        }
         const mineR = rangeOf(nick, true), villR = rangeOf(vill, false);
         if (mineR.length < 5 || villR.length < 5) return null;
         const P = this.pot, stack = Math.min(p.chips + (p.currentBet || 0), v.chips + (v.currentBet || 0));
