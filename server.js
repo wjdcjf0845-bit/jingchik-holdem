@@ -5693,9 +5693,10 @@ class MTTManager {
 //    ⚠️ 알려 주지 않은 부분은 가정이다: 4레벨 이후의 블라인드, 리바인 마감(6레벨까지로 둠), 입상 인원(20명 중 3명). 테이블은 이 게임의 최대인 6인(실제 매장은 9인).
 const FN_MTT = {
     // 레벨은 3분: 실제 매장은 10분이지만 앱은 판이 서너 배 빨리 돌아서, 한 레벨에 치는 판 수를 실제와 비슷하게 맞춘 값이다(운영자 결정 — 10분 진행은 없앰)
-    entrants: 20, tableSize: 6, startingChips: 3000000, blindUpInterval: 180, paid: 3, rebuys: 1, rebuyUntilLevel: 6, normalBots: 3,
-    structure: [[10000, 20000], [20000, 40000], [30000, 60000], [40000, 80000], [50000, 100000], [60000, 120000], [80000, 160000], [100000, 200000], [150000, 300000], [200000, 400000],
-        [300000, 600000], [400000, 800000], [600000, 1200000], [800000, 1600000], [1000000, 2000000], [1500000, 3000000], [2000000, 4000000], [3000000, 6000000], [5000000, 10000000]]
+    // 칩 단위는 실제 매장(1레벨 10,000/20,000 · 300만 칩)의 100분의 1 로 줄였다 — 숫자가 너무 커서 적응이 안 된다는 운영자 요청. bb 로 보면 똑같다(150bb 시작).
+    entrants: 20, tableSize: 6, startingChips: 30000, blindUpInterval: 180, paid: 3, rebuys: 1, rebuyUntilLevel: 6, normalBots: 3,
+    structure: [[100, 200], [200, 400], [300, 600], [400, 800], [500, 1000], [600, 1200], [800, 1600], [1000, 2000], [1500, 3000], [2000, 4000],
+        [3000, 6000], [4000, 8000], [6000, 12000], [8000, 16000], [10000, 20000], [15000, 30000], [20000, 40000], [30000, 60000], [50000, 100000]]
         .map((x, i) => ({ level: i + 1, sb: x[0], bb: x[1], ante: i < 2 ? 0 : x[1] }))
 };
 // 새 플레이어 객체 생성 헬퍼 (MTT 착석용)
@@ -6850,7 +6851,7 @@ io.on('connection', (socket) => {
         board.sort((a, b) => (b.score == null ? -1 : b.score) - (a.score == null ? -1 : a.score));
         socket.emit('fnReport', {
             cfg: { entrants: FN_MTT.entrants, startChips: FN_MTT.startingChips, startBB: FN_MTT.startingChips / FN_MTT.structure[0].bb, levelSec: FN_MTT.blindUpInterval,
-                paid: FN_MTT.paid, tableSize: FN_MTT.tableSize, rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel, normalBots: FN_MTT.normalBots, anteLevel: 3 },
+                lv1: FN_MTT.structure[0].sb + '/' + FN_MTT.structure[0].bb, paid: FN_MTT.paid, tableSize: FN_MTT.tableSize, rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel, normalBots: FN_MTT.normalBots, anteLevel: 3 },
             ev: evView(F), summary: sum(F), results: (u.fnResults || []).slice(-20).reverse(),
             depth: per(F, dk, 'evDn_', 'evDl_'), phases: per(F, pk, 'evTn_', 'evTl_'),
             freqs: Freqs.summarize(F), leaks, blunders: Blunder.top(F.blunders, 0, 5).map(Blunder.describe),
