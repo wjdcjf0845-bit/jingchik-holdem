@@ -6010,7 +6010,7 @@
             _endVoteSig = sig;
             const iVote = v.voters.includes(myNickname), agreed = v.yes.includes(myNickname);
             bar.innerHTML = `<div class="ev-title">🗳️ ${esc(v.proposer)} 님이 토너먼트를 지금 끝내자고 합니다</div>`
-                + `<div class="ev-sub">칩 비율대로 상금 분배 · 동의 ${v.yes.length}/${v.voters.length} · <span class="ev-sec"></span>초</div>`
+                + `<div class="ev-sub">${v.mtt ? '남은 칩 순서대로 순위 확정 · 사람만 투표' : '칩 비율대로 상금 분배'} · 동의 ${v.yes.length}/${v.voters.length} · <span class="ev-sec"></span>초</div>`
                 + (iVote && !agreed
                     ? `<div class="ev-actions"><button class="ev-yes" onclick="voteEnd(true)">찬성</button><button class="ev-no" onclick="voteEnd(false)">반대</button></div>`
                     : `<div class="ev-sub">${agreed ? '✅ 찬성했습니다 — 다른 참가자를 기다리는 중' : '투표권 없음 (관전·탈락)'}</div>`);
@@ -6033,7 +6033,7 @@
             <div class="result-pot-card leave-card">
                 <div class="rw-sub">토너먼트 진행 중입니다</div>
                 <div class="leave-choice">
-                    <button class="lc-vote" onclick="proposeEndVote()">🗳️ 모두 동의로 끝내기<small>전원 찬성하면 지금 칩 비율대로 상금을 나눕니다</small></button>
+                    <button class="lc-vote" onclick="proposeEndVote()">🗳️ 모두 동의로 끝내기<small>${window._inMtt ? '사람 전원이 찬성하면 지금 끝내고, 남은 칩 순서대로 순위를 정합니다 (봇은 투표하지 않습니다)' : '전원 찬성하면 지금 칩 비율대로 상금을 나눕니다'}</small></button>
                     <button onclick="hideResultModal()">계속하기</button>
                     <button class="lc-quit" onclick="hideResultModal(); socket.emit('leaveRoom');">나가기 (기권)</button>
                 </div>
@@ -7938,6 +7938,7 @@
         showCenterMessage(`🏆 ${d.name} 시작!\n행운을 빕니다!`);
     });
     socket.on('mttSeated', d => {
+        window._inMtt = true;
         // 테이블 착석 — 게임 화면으로 전환
         document.body.classList.remove('learn-mode');
         document.getElementById('mttwait-modal').style.display = 'none';
@@ -7980,6 +7981,7 @@
         const bar = document.getElementById('mtt-status-bar');
         if (bar) bar.style.display = 'none';
         const isMe = d.champion === myNickname;
+        window._inMtt = false;
         let rankHtml = d.ranking.map(r => `<div class="rw-rank${r.nick === myNickname ? ' me' : ''}"><span>${r.place}위</span><span>${esc(r.nick)}</span></div>`).join('');
         // 결과 모달 + 로비 복귀 버튼
         const modal = document.getElementById('result-modal');
@@ -7988,7 +7990,7 @@
             body.innerHTML = `
                 <div class="result-pot-card rw-card">
                     <div class="rw-trophy">${isMe ? '🎉' : '🏆'}</div>
-                    <div class="rw-name">${isMe ? 'MTT 우승!' : `${esc(d.champion)} 우승`}</div>
+                    <div class="rw-name">${d.agreed ? '🤝 합의 종료 — 칩 순서대로 순위 확정' : (isMe ? 'MTT 우승!' : `${esc(d.champion)} 우승`)}</div>
                     <div class="rw-chips">${d.totalEntrants}명 참가 멀티테이블 토너먼트</div>
                     <div class="rw-ranking">${rankHtml}</div>
                     <button class="btn-close-modal" onclick="mttBackToLobby()" style="width:100%;">🏛️ 로비로 돌아가기</button>

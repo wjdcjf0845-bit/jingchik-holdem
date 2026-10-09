@@ -133,7 +133,8 @@ test('포지션 오픈 문제: 정답은 오픈 차트와 일치한다', () => {
     for (let i = 0; i < 300; i++) {
         const q = Q.generate('open', rng);
         const pos = q.tags[2].replace('내 자리 ', '');
-        assert.strictEqual(q.answer === 'raise', PF.isInOpenRange(PF.handToCode(q.hand), pos), q.prompt);
+        const f = require('../lib/ranges').openFreq(pos, PF.handToCode(q.hand));      // 솔버 자료의 오픈 빈도
+        assert.ok(q.answer === 'raise' ? f >= 85 : f <= 15, `${f}% — ${q.prompt}`);
     }
 });
 

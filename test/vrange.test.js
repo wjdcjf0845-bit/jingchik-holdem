@@ -23,13 +23,13 @@ test('UTG 오픈 범위에는 72o 가 거의 없고 AA 는 그대로 — 버튼 
     assert.ok(V.widthOf(utg) < 25 && V.widthOf(btn) > 40 && V.widthOf(btn) < 55, `${V.widthOf(utg)} ${V.widthOf(btn)}`);
 });
 
-test('BB 콜 범위에는 3벳했을 AA 가 적고 수딧 커넥터가 많다 / 3벳 범위는 그 반대', () => {
+test('BB 콜 범위에는 3벳했을 AA 가 적고 약한 수딧 패가 많다 / 3벳 범위는 그 반대', () => {
     const call = V.weightFn({ pos: 'BB', acts: [{ kind: 'call', raisesBefore: 1, openerPos: 'BTN' }] });
     const three = V.weightFn({ pos: 'BB', acts: [{ kind: 'raise', raisesBefore: 1, openerPos: 'BTN' }] });
     assert.strictEqual(call('AA'), V.FLOOR); assert.strictEqual(three('AA'), 1);
-    assert.strictEqual(call('86s'), 1); assert.strictEqual(three('86s'), V.FLOOR);
+    assert.strictEqual(call('Q2s'), 1); assert.strictEqual(three('Q2s'), V.FLOOR);
     assert.ok(three('A5s') > 0.9);
-    assert.ok(V.widthOf(three) < 20);
+    assert.ok(V.widthOf(three) < 25);
 });
 
 test('오픈하고 3벳에 콜한 줄: 두 범위의 겹침 — AA(4벳했을 패)와 72o 가 모두 빠진다', () => {

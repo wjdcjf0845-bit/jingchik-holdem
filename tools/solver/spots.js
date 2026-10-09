@@ -1,7 +1,8 @@
 // 솔버로 푸는 상황 목록 — 양쪽 범위(패 코드 → 무게 0~1)와 팟·남은 스택(bb).
-//   범위는 이 게임의 범위표(lib/ranges.js · lib/preflop.js)에서 그대로 만든다. gen.js(입력 만들기)와 extract.js(결과 뽑기)가 같이 쓴다.
+//   범위는 이 게임의 범위표(lib/ranges.js — 솔버 프리플랍 자료 + BB 콜의 레이크 보정, 헤즈업은 손으로 적은 표)에서 그대로 만든다. gen.js(입력 만들기)와 extract.js(결과 뽑기)가 같이 쓴다.
 const PF = require('../../lib/preflop'), R = require('../../lib/ranges');
-const open = pos => c => (PF.isInOpenRange(c, pos) ? 1 : 0);
+// 먼저 여는 범위: 솔버 프리플랍 자료의 오픈 빈도(lib/preflopdata.json.gz). 자료가 없으면 예전 오픈 차트.
+const open = pos => c => { const r = R.openFreq(pos, c); return r == null ? (PF.isInOpenRange(c, pos) ? 1 : 0) : r / 100; };
 const huOpen = c => (PF.handRangeScore(c) > 35 ? 1 : 0);
 const f = (ctx, k) => c => { const x = R.lookup(ctx, c); return x ? x[k] / 100 : 0; };
 const mul = (a, b) => c => a(c) * b(c);
@@ -18,9 +19,9 @@ SPOTS.sbb40 = { oop: open('SB'), ip: bbCall('SB'), pot: 6, stack: 37 };
 SPOTS.sbb25 = { oop: open('SB'), ip: bbCall('SB'), pot: 6, stack: 22 };
 // 3벳 팟
 //   tbo: 블라인드가 버튼 오픈에 3벳(11bb) → 버튼 콜. 3벳한 쪽이 먼저 행동.
-SPOTS.tbo = { oop: f({ heroPos: 'BB', openerPos: 'BTN' }, 'raise'), ip: mul(open('BTN'), f({ heroPos: 'BTN', raises: 2, iRaised: true, inPosition: true }, 'call')), pot: 22.5, stack: 89 };
-//   tbi: 버튼이 CO 오픈에 3벳(7.5bb) → CO 콜. 3벳한 쪽이 나중에 행동.
-SPOTS.tbi = { ip: f({ heroPos: 'BTN', openerPos: 'CO' }, 'raise'), oop: mul(open('CO'), f({ heroPos: 'CO', raises: 2, iRaised: true, inPosition: false }, 'call')), pot: 16.5, stack: 92.5 };
+SPOTS.tbo = { oop: f({ heroPos: 'BB', openerPos: 'BTN' }, 'raise'), ip: mul(open('BTN'), f({ heroPos: 'BTN', raises: 2, iRaised: true, inPosition: true, threeBettorPos: 'BB' }, 'call')), pot: 22.5, stack: 89 };
+//   tbi: 버튼이 CO 오픈에 3벳(8.5bb) → CO 콜. 3벳한 쪽이 나중에 행동.
+SPOTS.tbi = { ip: f({ heroPos: 'BTN', openerPos: 'CO' }, 'raise'), oop: mul(open('CO'), f({ heroPos: 'CO', raises: 2, iRaised: true, inPosition: false, threeBettorPos: 'BTN' }, 'call')), pot: 18.5, stack: 91.5 };
 //   hutb: 헤즈업 BB 3벳(9bb) → 버튼 콜.
 SPOTS.hutb = { oop: f({ headsUp: true, heroPos: 'BB' }, 'raise'), ip: mul(huOpen, f({ headsUp: true, raises: 2, iRaised: true }, 'call')), pot: 18, stack: 91 };
 

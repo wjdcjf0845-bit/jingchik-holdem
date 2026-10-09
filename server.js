@@ -1690,6 +1690,12 @@ class GameRoom {
                         }
                     }
                 }
+                // 📊 [먼저 여는 범위 — 고수 봇] 솔버 프리플랍 자료의 오픈 빈도대로 연다(UTG~SB). 측정 스위치는 블라인드 방어 범위표와 같다(botV6).
+                if (!facingRaise && persona.proStrategy && !_huBot && !isBB && toCall > 0 && this.botV6(nick)) {
+                    const _of = Ranges.openFreq(p.position || '', code);
+                    const _limped = this.playerOrder.some(n => n !== nick && this.players[n] && !this.players[n].isFolded && (this.players[n].currentBet || 0) === bb && !(this.players[n].role && /SB|BB/.test(this.players[n].role)));
+                    if (_of != null && !_limped) { const t = Math.random() * 100 < _of ? 'raise' : 'fold'; rt = { tier: t, label: t === 'raise' ? '오픈 레이즈' : '폴드', score: rt.score }; }
+                }
                 if (_huBot && !facingRaise && rt.tier !== 'raise' && rt.score > Quiz.HU_OPEN_SCORE) rt = { tier: 'raise', label: '오픈 레이즈', score: rt.score };
 
                 // 🤖 [반복 올인 대응 — 초보·중수] 이 방에서 올인을 남발한 사람의 올인은 "그 사람이 실제로 미는 빈도"로 받는다.
@@ -2903,7 +2909,7 @@ class GameRoom {
         //    (실측: 스트리트 1~3 진행 중에 결과 없이 handId가 바뀜 — 그 판의 블라인드·베팅 칩은 소멸)
         if (this.gameStage >= 1 && this.gameStage <= 4) return;
         // 🏆 [MTT] 테이블을 합쳐야 할 때(파이널 테이블 구성 등)는 새 판을 돌리지 않고 기다린다 — 매니저가 합친 뒤 다시 시작시킨다
-        if (this._mtt && this._mtt.hold && !this._mtt.finished) return;
+        if (this._mtt && (this._mtt.hold || this._mtt._endAgreed) && !this._mtt.finished) return;
         // 🤖 [컴까기] 끝난 도전방은 더 딜하지 않는다. 사람이 칩을 다 잃었으면 봇끼리 계속 칠 이유가 없으니 바로 실패 처리.
         if (this._challenge) {
             if (this._challenge.done || this._challenge.waiting) return;
@@ -3785,6 +3791,8 @@ class GameRoom {
     //  모두 동의하면 토너먼트를 도중에 끝내고 상금풀을 칩 비율대로 나눈다(lib/chop.js).
     //  대상: 단일 테이블 토너먼트 진행 중 — MTT(매니저가 우승 처리)·캐시(원래 자유 퇴장)·학습모드 제외.
     endVoteEligible() {
+        // 🏆 MTT(파이널나인 연습 포함)는 매니저가 전 테이블의 사람들 표를 모은다
+        if (this._mtt) return this._mtt.started && !this._mtt.finished && !this._mtt._endAgreed;
         return this.mode === 'tournament' && this.tournamentStarted && !this._mtt && !this._mttFreeChips && !this._learnMode;
     }
 
@@ -3801,6 +3809,7 @@ class GameRoom {
     }
 
     endVoteSnapshot() {
+        if (this._mtt) return this._mtt.endVoteSnapshot();
         const v = this._endVote;
         if (!v) return { active: false };
         return { active: true, proposer: v.proposer, voters: [...v.voters], yes: [...v.yes], deadline: v.deadline };
@@ -3814,6 +3823,7 @@ class GameRoom {
     proposeEndVote(nick) {
         const me = this.players[nick];
         const tell = msg => { if (me && me.socketId) io.to(me.socketId).emit('gameMessage', msg); };
+        if (this._mtt) return this._mtt.proposeEndVote(nick, tell);
         if (!this.endVoteEligible()) return tell('🗳️ 진행 중인 토너먼트에서만 종료 투표를 할 수 있습니다.');
         if (this._endAgreed) return tell('🗳️ 이미 종료가 합의됐습니다. 곧 정산합니다.');
         if (this._endVote) return tell('🗳️ 이미 종료 투표가 진행 중입니다.');
@@ -3828,6 +3838,7 @@ class GameRoom {
     }
 
     castEndVote(nick, agree) {
+        if (this._mtt) return this._mtt.castEndVote(nick, agree);
         const v = this._endVote;
         if (!v || !v.voters.has(nick) || v.yes.has(nick)) return;
         if (!agree) return this.finishEndVote(false, `${nick} 님 반대`);
@@ -4333,7 +4344,21 @@ class GameRoom {
             const _huTable = this.playerOrder.length === 2;
             // 📊 범위표(lib/ranges.js)에 넘길 것: 레이즈가 몇 번 나왔나 · 내가 이미 올렸나(= 내 오픈에 3벳이 온 것) · 올린 사람보다 내가 뒤인가
             const _iRaised = (this.actionLog || []).some(a => a.nick === nick && (a.board || []).length === 0 && (a.type === 'raise' || a.type === 'allin'));
-            const _ctx = { numActive: opponents + 1, threeBetPlus: (this.raiseCountThisStreet || 0) >= 2,
+            // 📊 솔버 프리플랍 자료의 열쇠: 지금까지의 행동(자리:R 레이즈 · C 콜 · F 들어왔다가 접음)>내 자리
+            let _seqKey = null;
+            if (!_huTable && facingRaise) {
+                const _dp = n => Ranges.dataPos((this.players[n] || {}).position || '');
+                let _hi = bb; const _tok = [], _in = new Set();
+                (this.actionLog || []).filter(a => a.street === 1).forEach(a => {
+                    if (a.type === 'sb' || a.type === 'bb' || a.type === 'ante' || a.type === 'check') return;
+                    const ps = _dp(a.nick);
+                    if ((a.type === 'raise' || a.type === 'allin') && a.amount > _hi) { _tok.push(ps + ':R'); _hi = a.amount; _in.add(a.nick); }
+                    else if (a.type === 'call' || a.type === 'allin') { _tok.push(ps + ':C'); _in.add(a.nick); }
+                    else if (a.type === 'fold' && _in.has(a.nick)) _tok.push(ps + ':F');
+                });
+                _seqKey = _tok.join(',') + '>' + _dp(nick);
+            }
+            const _ctx = { seq: _seqKey, numActive: opponents + 1, threeBetPlus: (this.raiseCountThisStreet || 0) >= 2,
                 headsUp: _huTable, openerPos: _opnPos, closing: !!isBB, potOdds: facingRaise ? potOdds : 0,   // potOdds: 오픈 크기·앤티에 따라 방어 폭이 달라진다
                 chart: true, raises: this.raiseCountThisStreet || 1, iRaised: _iRaised, inPosition: this.isInPosition(nick) };
             const rt = preflopRangeTier(code, p.position || '', facingRaise, _ctx);
@@ -4428,10 +4453,10 @@ class GameRoom {
                 posInfo.chart.push = { range: ShortStack.pushPct(effBB, _bh), behind: _bh };
             }
             // 📊 레이즈를 받은 자리면 그 상황의 범위표 한 장을 같이 보낸다(패마다 [레이즈 %, 콜 %])
-            if (facingRaise && rt.freq && !_special) {
+            if (rt.freq && !_special && (facingRaise || rt.open)) {
                 const cells = {}; let wr = 0, wc = 0;
                 Ranges.ALL.forEach(c => {
-                    const f = (preflopRangeTier(c, p.position || '', true, _ctx).freq) || null;
+                    const f = (preflopRangeTier(c, p.position || '', facingRaise, _ctx).freq) || null;
                     if (!f) return;
                     if (f.raise || f.call) cells[c] = [f.raise, f.call];
                     wr += f.raise / 100 * Ranges.combos(c); wc += f.call / 100 * Ranges.combos(c);
@@ -4446,7 +4471,15 @@ class GameRoom {
                 const late = (p.position === 'BTN' || p.position === 'CO' || p.position === 'SB');
                 // 모두 접고 SB 가 BB 한 명만 상대하는 자리(6인 테이블의 블라인드 대결). 헤즈업 테이블은 아래에서 따로 넓게 연다.
                 const _sbVsBb = !_huTable && opponents === 1 && !!(p.role && p.role.includes('SB'));
-                if (opponents === 1 && !canCheck && rt.tier !== 'raise' && rt.score > Quiz.HU_OPEN_SCORE) {
+                if (rt.freq && rt.open && !canCheck && opponents >= 2) {
+                    // 📊 먼저 여는 자리: 솔버 자료의 오픈 빈도
+                    const f = rt.freq;
+                    mix = { fold: f.fold, raise: f.raise };
+                    bestAction = f.raise >= 50 ? 'raise' : 'fold';
+                    reason = f.raise >= 85 ? `${p.position || ''} 오픈 범위에 드는 핸드(${code}) — 오픈 레이즈가 정석입니다. (솔버: 오픈 ${f.raise}%)`
+                        : f.raise <= 15 ? `${p.position || ''} 오픈 범위 밖(${code}) — 폴드가 정석입니다.${f.raise > 0 ? ` (솔버도 ${f.raise}%만 엽니다)` : ''}`
+                        : `${code}는 ${p.position || ''}에서 섞어 여는 패입니다 — 솔버는 ${f.raise}%만 엽니다. 어느 쪽도 실수가 아닙니다.`;
+                } else if (opponents === 1 && !canCheck && rt.tier !== 'raise' && rt.score > Quiz.HU_OPEN_SCORE) {
                     // 헤즈업 버튼(SB)은 6인 버튼 차트보다 훨씬 넓게 연다
                     mix = { fold: 15, raise: 85 };
                     bestAction = 'raise'; reason = `헤즈업 버튼 — 상대가 한 명뿐이고 플랍 뒤에도 포지션이 내 것이라 전체 패의 4분의 3쯤을 엽니다. ${code}는 6인 테이블에선 접을 패지만 여기선 오픈.`;
@@ -5310,10 +5343,101 @@ class MTTManager {
             .filter(n => room.players[n] && room.players[n].chips <= 0 && !recorded.has(n))
             .sort((a, b) => (starts[a] || 0) - (starts[b] || 0))      // 같은 판에서 여럿이 탈락하면 그 판을 더 적은 칩으로 시작한 사람이 더 낮은 순위
             .forEach(n => this.onPlayerEliminated(room.roomId, n));
+        if (this._endVote) this.checkEndVote();                       // 투표 중 탈락한 사람을 투표자에서 뺀다
+        if (this._endAgreed) { setTimeout(() => this.tryAgreedFinish(), DEV_FAST ? 100 : 2500); return; }
         this.updateHold();
         // 결과를 볼 시간(3초)이 지나자마자 한 번 점검해서 바로 합친다 (4초 하트비트를 기다리지 않는다)
         if (this.hold) setTimeout(() => this.tick(), DEV_FAST ? 150 : 3100);
     }
+    // ═══ 🗳️ [MTT 합의 종료] 봇이 아닌 사람들끼리 전원 동의하면 지금 끝낸다 ═══
+    //   투표자: 모든 테이블에서 칩이 남아 있고 접속 중인 사람(봇은 투표하지 않는다). 사람이 한 명뿐이면 그 사람의 제안만으로 끝난다.
+    //   끝낼 때: 남은 사람은 칩이 많은 순서대로 순위를 받고, 이미 탈락한 사람의 순위는 그대로다. 돌고 있는 판은 끝까지 친 뒤에 끝낸다.
+    endVoteVoters() {
+        const out = [];
+        this.tables.forEach(rid => { const r = rooms.get(rid); if (r) r.playerOrder.forEach(n => { const p = r.players[n]; if (p && !p.isBot && !p.isDisconnected && (p.chips > 0 || (r.gameStage >= 1 && r.gameStage <= 4 && p.isAllIn && !p.isFolded)) && !out.includes(n)) out.push(n); }); });
+        return out;
+    }
+    endVoteSnapshot() {
+        const v = this._endVote;
+        if (!v) return { active: false };
+        return { active: true, mtt: true, proposer: v.proposer, voters: [...v.voters], yes: [...v.yes], deadline: v.deadline };
+    }
+    _say(msg) { this.tables.forEach(rid => io.to(rid).emit('gameMessage', msg)); }
+    proposeEndVote(nick, tell) {
+        if (!this.started || this.finished) return tell('🗳️ 진행 중인 토너먼트에서만 종료 투표를 할 수 있습니다.');
+        if (this._endAgreed) return tell('🗳️ 이미 종료가 합의됐습니다. 곧 마칩니다.');
+        if (this._endVote) return tell('🗳️ 이미 종료 투표가 진행 중입니다.');
+        const voters = this.endVoteVoters();
+        if (!voters.includes(nick)) return tell('🗳️ 칩이 남아 있는 참가자만 제안할 수 있습니다.');
+        if (Date.now() < (this._endVoteCooldownUntil || 0)) return tell('🗳️ 방금 부결됐습니다. 잠시 후 다시 제안해 주세요.');
+        this._endVote = { proposer: nick, voters: new Set(voters), yes: new Set([nick]), deadline: Date.now() + END_VOTE_MS, timer: null };
+        this._endVote.timer = setTimeout(() => this.finishEndVote(false, '시간 초과'), END_VOTE_MS);
+        this._say(`🗳️ ${nick} 님이 토너먼트를 지금 끝내자고 제안했습니다 (남은 칩 순서대로 순위 확정 · 사람 ${voters.length}명 전원 동의 필요).`);
+        this.checkEndVote();
+    }
+    castEndVote(nick, agree) {
+        const v = this._endVote;
+        if (!v || !v.voters.has(nick) || v.yes.has(nick)) return;
+        if (!agree) return this.finishEndVote(false, `${nick} 님 반대`);
+        v.yes.add(nick);
+        this.checkEndVote();
+    }
+    checkEndVote() {
+        const v = this._endVote;
+        if (!v) return;
+        // 투표 중에 탈락하거나 나간 사람은 뺀다
+        const still = new Set(this.endVoteVoters());
+        [...v.voters].forEach(n => { if (!still.has(n)) { v.voters.delete(n); v.yes.delete(n); } });
+        if (v.voters.size === 0) return this.finishEndVote(false, '투표자 없음');
+        if (v.yes.size >= v.voters.size) return this.finishEndVote(true);
+        const snap = this.endVoteSnapshot();
+        this.tables.forEach(rid => io.to(rid).emit('endVote', snap));
+    }
+    finishEndVote(passed, reason) {
+        if (!this._endVote) return;
+        if (this._endVote.timer) clearTimeout(this._endVote.timer);
+        this._endVote = null;
+        this.tables.forEach(rid => io.to(rid).emit('endVote', { active: false }));
+        if (!passed) {
+            this._endVoteCooldownUntil = Date.now() + 15000;
+            this._say(`🗳️ 종료 투표 부결 (${reason}) — 토너먼트를 계속합니다.`);
+            return;
+        }
+        this._endAgreed = true;
+        this._say('🤝 사람 전원 동의! 진행 중인 판이 끝나면 남은 칩 순서대로 순위를 정하고 토너먼트를 마칩니다.');
+        this.tryAgreedFinish();
+    }
+    tryAgreedFinish() {
+        if (!this._endAgreed || this.finished) return;
+        const busy = this.tables.some(rid => { const r = rooms.get(rid); return r && r.gameStage >= 1 && r.gameStage <= 4; });
+        if (busy) return;
+        this.finished = true;
+        if (this._heartbeat) clearInterval(this._heartbeat);
+        if (this._blindTimer) { clearInterval(this._blindTimer); this._blindTimer = null; }
+        const alive = this.livePlayers().sort((a, b) => b.chips - a.chips);
+        const recorded = new Set(this.eliminated.map(e => e.nick));
+        alive.forEach(a => recorded.add(a.nick));
+        // 기록이 빠진 사람(같은 판에 여럿이 탈락한 직후 등)은 남은 사람 바로 아래 순위로 채운다
+        const missing = this.entrants.filter(e => !recorded.has(e.nick));
+        const ranking = alive.map((a, i) => ({ place: i + 1, nick: a.nick, chips: a.chips }))
+            .concat(missing.map((e, i) => ({ place: alive.length + i + 1, nick: e.nick })))
+            .concat(this.eliminated.slice().sort((a, b) => a.place - b.place).map(e => ({ place: e.place, nick: e.nick })));
+        if (this.fn) {
+            alive.forEach((a, i) => { if (!a.isBot) MockDB.recordFnResult(a.nick, { t: Date.now(), place: i + 1, total: this.totalEntrants, paid: this.paid, level: this.blindLevel + 1, agreed: true }); });
+            missing.forEach((e, i) => { if (!e.isBot) MockDB.recordFnResult(e.nick, { t: Date.now(), place: alive.length + i + 1, total: this.totalEntrants, paid: this.paid, level: this.blindLevel + 1, agreed: true }); });
+        }
+        const champion = alive.length ? alive[0].nick : (ranking[0] && ranking[0].nick);
+        if (process.env.DEV_MTTLOG) console.log(`[MTTLOG] agreed-finish ${JSON.stringify(ranking.slice(0, 8).map(r => r.place + ':' + r.nick))}`);
+        this.tables.forEach(rid => {
+            io.to(rid).emit('mttFinished', { champion, totalEntrants: this.totalEntrants, ranking, agreed: true });
+            io.to(rid).emit('gameMessage', `🤝 합의 종료 — 남은 ${alive.length}명은 칩 순서대로 순위가 정해졌습니다 (1위 ${champion}).`);
+        });
+        setTimeout(() => {
+            this.tables.forEach(rid => { if (rooms.has(rid)) destroyRoom(rid); });
+            mtts.delete(this.mttId);
+        }, 8000);
+    }
+
     // 지금 테이블을 합쳐야 하는 상태인가 (파이널 테이블 구성 · 테이블 수 과다 · 한 명만 남은 테이블)
     updateHold() {
         const info = this.tables.map(rid => rooms.get(rid)).filter(Boolean)
@@ -5372,6 +5496,7 @@ class MTTManager {
     }
 
     _tickInner() {
+        if (this._endAgreed) { this.tryAgreedFinish(); return; }
         // 1) 빈 테이블 제거
         this.tables.forEach(rid => {
             const r = rooms.get(rid);
