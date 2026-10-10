@@ -107,8 +107,11 @@ if (process.argv[2] === '--one') {
         }
         (data[r.spot] = data[r.spot] || {})[r.bkey] = r.o; count[r.spot] = (count[r.spot] || 0) + 1;
     }));
-    const outFile = process.env.OUT || path.join(__dirname, '../../lib/solverdata.json.gz');
-    fs.writeFileSync(outFile, require('zlib').gzipSync(Buffer.from(JSON.stringify(data)), { level: 9 }));
+    // 한 줄에 "상황<탭>보드<탭>JSON" — 서버가 조회되는 보드만 풀어 쓰도록(메모리 절약, lib/flopsolve.js 의 load)
+    const outFile = process.env.OUT || path.join(__dirname, '../../lib/solverdata.ndjson.gz');
+    const lines = [];
+    Object.keys(data).forEach(sp => Object.keys(data[sp]).forEach(bk => lines.push(sp + '\t' + bk + '\t' + JSON.stringify(data[sp][bk]))));
+    fs.writeFileSync(outFile, require('zlib').gzipSync(Buffer.from(lines.join('\n'), 'latin1'), { level: 9 }));
     Object.keys(count).forEach(sp => { const all = Object.values(data[sp]).map(o => o.ip_cbet['*']); const m = i => Math.round(all.reduce((s2, x) => s2 + x[i], 0) / all.length);
         console.log(`${sp.padEnd(6)} 보드 ${String(count[sp]).padStart(3)}  나중에 행동하는 쪽 벳 평균 ${m(1) + m(2)}% (작게 ${m(1)} · 크게 ${m(2)})`); });
     console.log('합계', Object.values(count).reduce((a, b) => a + b, 0), '상황 ·', Math.round(fs.statSync(outFile).size / 1024), 'KB');

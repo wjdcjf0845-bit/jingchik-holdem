@@ -1,13 +1,13 @@
 # 솔버 자료 만들기 (플랍 · 턴)
 
-`lib/solverdata.json.gz` 은 공개 솔버 [TexasSolver](https://github.com/bupticybee/TexasSolver) v0.2.0 (콘솔판)으로 푼 결과에서 뽑은 것입니다.
+`lib/solverdata.ndjson.gz` 은 공개 솔버 [TexasSolver](https://github.com/bupticybee/TexasSolver) v0.2.0 (콘솔판)으로 푼 결과에서 뽑은 것입니다.
 솔버 실행 파일은 이 저장소에 없습니다 — 따로 내려받아 저장소 밖에 두고 씁니다.
 
 - `spots.js` — 푸는 상황 목록(양쪽 범위 · 팟 · 남은 스택). 범위는 `lib/ranges.js` · `lib/preflop.js` 의 범위표에서 만든다.
 - `boards.js` — 대표 플랍 고르기. 1,755종 가운데 이미 고른 것과 가장 먼 것을 하나씩 더한다(게임이 "비슷한 보드"를 찾는 것과 같은 거리).
 - `gen.js <상황> "Ks,7d,2c" out.json [반복 120] [덤프 라운드 2]` — 솔버 입력. 벳 크기: 플랍 33%·75%, 턴·리버 66%, 레이즈 50%, 올인 문턱 0.67
 - `extract.js --one <솔버 출력> <요약>` — 출력 하나(턴까지 약 200MB)를 "패 종류별 평균 빈도"로 요약(약 20KB). 원본은 지워도 된다.
-- `extract.js <폴더> [<폴더> …]` — 요약들을 모아 `lib/solverdata.json.gz` 을 만든다.
+- `extract.js <폴더> [<폴더> …]` — 요약들을 모아 `lib/solverdata.ndjson.gz` 을 만든다.
 
 주의
 - 솔버의 `dump_result` 경로는 솔버 폴더 기준 상대 경로로(한글이 든 절대 경로에는 저장되지 않았다).
