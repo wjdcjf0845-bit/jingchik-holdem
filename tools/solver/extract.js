@@ -100,14 +100,14 @@ if (process.argv[2] === '--one') {
     process.argv.slice(2).forEach(DIR => fs.readdirSync(DIR).filter(f => f.endsWith('.json') && f.indexOf('_') > 0).forEach(f => {
         let r = null; try { r = extractOne(path.join(DIR, f)); } catch (e) { console.error('건너뜀', f, e.message); }
         if (!r || !r.o || !r.o.ip_cbet) return;
-        // 턴 자료는 크다(보드당 약 20KB) → 기본 22보드만 싣고, 표본이 적은 줄(무게 8 미만)은 뺀다. 플랍 자료는 전부 싣는다.
+        // 턴 자료는 크다(보드당 약 20KB). 표본이 적은 줄(무게 8 미만)은 뺀다.
         if (r.o.turn) {
-            if (!BASE.has(r.bkey)) delete r.o.turn;
+            if (!BASE.has(r.bkey) && process.env.TURN_BASE_ONLY) delete r.o.turn;   // 기본은 모든 보드의 턴 자료를 싣는다(실측: 972개 상황일 때 서버 메모리 130MB → 202MB). TURN_BASE_ONLY=1 이면 기본 22보드만
             else Object.values(r.o.turn).forEach(L => Object.values(L).forEach(C => Object.values(C).forEach(N => Object.keys(N).forEach(k => { if (N[k][N[k].length - 1] < 8) delete N[k]; }))));
         }
         (data[r.spot] = data[r.spot] || {})[r.bkey] = r.o; count[r.spot] = (count[r.spot] || 0) + 1;
     }));
-    const outFile = path.join(__dirname, '../../lib/solverdata.json.gz');
+    const outFile = process.env.OUT || path.join(__dirname, '../../lib/solverdata.json.gz');
     fs.writeFileSync(outFile, require('zlib').gzipSync(Buffer.from(JSON.stringify(data)), { level: 9 }));
     Object.keys(count).forEach(sp => { const all = Object.values(data[sp]).map(o => o.ip_cbet['*']); const m = i => Math.round(all.reduce((s2, x) => s2 + x[i], 0) / all.length);
         console.log(`${sp.padEnd(6)} 보드 ${String(count[sp]).padStart(3)}  나중에 행동하는 쪽 벳 평균 ${m(1) + m(2)}% (작게 ${m(1)} · 크게 ${m(2)})`); });
