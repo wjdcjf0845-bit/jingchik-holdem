@@ -521,6 +521,7 @@
         .wc-count { font-family: var(--font-num); font-size: 15px; font-weight: 800; color: #7bedaa; white-space: nowrap; }
         .wc-info { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
         .wc-info:empty { display: none; }
+        .wc-info > .wc-n { display: none; }
         .wc-info > div { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 6px 4px; text-align: center; min-width: 0; }
         .wc-info span { display: block; font-size: 10.5px; color: #8f9ab5; font-weight: 700; margin-bottom: 2px; white-space: nowrap; }
         .wc-info b { display: block; font-family: var(--font-num); font-size: 13.5px; color: #eef2fb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -538,6 +539,25 @@
         .wc-wait:empty { display: none; }
         body.wait-room #turn-indicator { display: none !important; }
         body.wait-room .pot-area { visibility: hidden; }
+        /* 📱 폰 가로(어플 화면): 오른쪽 아래에 두면 6번째 자리를 가린다 → 시작 전엔 비어 있는 테이블 가운데에 낮고 넓게 놓는다 */
+        @media screen and (max-width: 960px) and (orientation: landscape) {
+            body.wait-room #ready-controls {
+                left: 50% !important; right: auto !important; top: 45% !important; bottom: auto !important; transform: translate(-50%, -50%); box-shadow: 0 4px 14px rgba(0,0,0,0.5) !important;
+                width: min(400px, 52vw) !important; max-height: none; overflow: visible; padding: 7px 8px;
+                display: grid !important; grid-template-columns: 1fr 1fr; gap: 6px; align-items: stretch;
+            }
+            body.wait-room #ready-controls[style*="none"] { display: none !important; }
+            body.wait-room #ready-controls > * { margin: 0 !important; }
+            body.wait-room #ready-controls .wc-head { display: none; }
+            body.wait-room #ready-controls .wc-info { grid-column: 1 / -1; grid-template-columns: repeat(5, 1fr); }
+            body.wait-room #ready-controls .wc-info > .wc-n { display: block; }
+            body.wait-room #ready-controls .wc-info > .wc-n b { color: #7bedaa; }
+            body.wait-room #ready-controls .wc-info > div { padding: 3px 2px; }
+            body.wait-room #ready-controls .wc-wait { font-size: 11.5px; }
+            body.wait-room #ready-controls .wc-wait { grid-column: 1 / -1; }
+            body.wait-room #ready-controls .btn-start { padding: 0 !important; font-size: 15px !important; letter-spacing: 0.5px; min-height: 36px; }
+            body.wait-room #ready-controls .wc-bots .wc-lbl small { display: none; }
+        }
         @media (max-width: 900px) {
             .wc-head { margin-bottom: 6px; }
             .wc-title, .wc-count { font-size: 13.5px; }
@@ -4553,7 +4573,7 @@
             <button id="learn-btn" class="btn-join lb-tile" onclick="startLearnMode()"><span class="lt-ico">🎓</span><span class="lt-txt"><b>GTO 학습</b><small>AI 5명과 실전 코칭</small></span></button>
             <button id="quiz-btn" class="btn-join lb-tile" onclick="openQuiz()"><span class="lt-ico">🧠</span><span class="lt-txt"><b>GTO 문제</b><small>상황별 정답 맞히기</small></span></button>
             <button id="challenge-btn" class="btn-join lb-tile" onclick="openChallenge()"><span class="lt-ico">🤖</span><span class="lt-txt"><b>컴까기</b><small>AI 도장깨기 10단계</small></span></button>
-            <button id="guide-btn" class="btn-join lb-tile" onclick="openGuide()"><span class="lt-ico">🐣</span><span class="lt-txt"><b>처음 배우기</b><small>규칙부터 한 판 따라 치기</small></span><span id="guide-badge" class="daily-badge" style="display:none;">NEW</span></button>
+            <button id="guide-btn" class="btn-join lb-tile" onclick="openGuide()"><span class="lt-ico">🐣</span><span class="lt-txt"><b>처음 배우기</b><small>규칙부터 따라 치기</small></span><span id="guide-badge" class="daily-badge" style="display:none;">NEW</span></button>
         </div>
 
         <!-- 📊 기록·순위·기타 메뉴 (4칸 × 2줄) -->
@@ -8370,7 +8390,7 @@
             cell('블라인드', `${lb.sb.toLocaleString()}/${lb.bb.toLocaleString()}`),
             cell('레벨', lb.levelSec % 60 ? `${lb.levelSec}초` : `${lb.levelSec / 60}분`),
             cell('리바이', lb.rebuys ? `${lb.rebuys}회` : '없음')
-        ].join('') : '';
+        ].join('') + `<div class="wc-n"><span>인원</span><b>${seated.length}/${max}</b></div>` : '';
         // AI 수 조절(방장만): − 는 마지막에 넣은 AI부터 뺀다
         document.getElementById('bot-manager').style.display = host ? '' : 'none';
         document.getElementById('wc-bot-n').innerText = bots.length;
@@ -8382,10 +8402,8 @@
         const startBtn = document.querySelector('#ready-controls .btn-start');
         startBtn.style.display = host ? '' : 'none';
         startBtn.disabled = seated.length < 2;
-        startBtn.innerText = '토너먼트 시작';
-        document.getElementById('wc-wait').innerText = host
-            ? (seated.length < 2 ? '2명부터 시작할 수 있습니다 — AI를 추가하거나 친구를 초대하세요' : '')
-            : `방장 ${data.hostNickname} 님이 시작하기를 기다리는 중입니다`;
+        startBtn.innerText = seated.length < 2 ? '2명부터 시작' : '토너먼트 시작';
+        document.getElementById('wc-wait').innerText = host ? '' : `방장 ${data.hostNickname} 님이 시작하기를 기다리는 중입니다`;
     }
 
     function openProfile(nick) { socket.emit('getProfile', nick); }
