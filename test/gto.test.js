@@ -73,8 +73,8 @@ test('조언 모양: 믹스 합은 100, 권장 액션은 믹스 안에 있다 (�
 
 // ══════════════ 문제 학습 ══════════════
 
-test('분야 10개, 분야마다 문제가 만들어지고 정답이 보기 안에 있다', () => {
-    assert.strictEqual(Q.CAT_IDS.length, 10);
+test('분야 11개, 분야마다 문제가 만들어지고 정답이 보기 안에 있다', () => {
+    assert.strictEqual(Q.CAT_IDS.length, 11);
     const rng = lcg(11);
     Q.CAT_IDS.forEach(cat => {
         for (let i = 0; i < 300; i++) {

@@ -110,6 +110,7 @@ const Rogue = require('./lib/roguerun');        // 🍀 증강 컴까기(로그�
 const { Capacity } = require('./lib/capacity');  // 🚦 서버 정원 · 입장 대기열
 const Blunder = require('./lib/blunder');       // 💥 리포트의 '치명적 플레이' 기록
 const Ranges = require('./lib/ranges');         // 📊 프리플랍 범위표(레이즈를 받았을 때 패마다 3벳·콜·폴드 빈도)
+const Icm = require('./lib/icm');               // 🏆 대회 상금 기준(ICM) — 입상권 근처의 올인 콜
 const EvLoss = require('./lib/evloss');         // 📉 결정마다 잃은 기대값(bb) — 실력 점수의 단위
 const Freqs = require('./lib/freqs');           // 📊 상황별 빈도(오픈·방어·3벳·c벳…)를 기준과 비교
 const VRange = require('./lib/vrange');         // 🔍 상대의 프리플랍 행동 → 들고 있을 만한 패의 무게
@@ -359,7 +360,19 @@ const MockDB = {
     //    · 0으로 돌리는 것: 핸드 수·승수, VPIP/PFR 등 지표, GTO 점수, 실수 유형·치명적 플레이, 일별 기록, 학습 모드 통계
     //    · 그대로 두는 것: 뱅크롤, 우승·토큰·코어, 꾸미기, 업적, 상대전적, 컴까기·런 진행, 문제 풀이 기록
     //    · 이전 값은 지우지 않고 statsArchive 에 보관한다(되돌릴 수 있게). 계정마다 한 번만 적용된다.
-    STATS_EPOCH: '2026-10-09',    // 실력 점수를 "권장과 일치한 비율"에서 "잃은 기대값(EV 손실)"으로 바꾸면서 새로 시작
+    STATS_EPOCH: '2026-10-11',    // 운영자 요청으로 실력 점수를 새로 시작(대회 연습 점수 포함 — 상금 기준(ICM) 채점을 넣은 날). 앞선 기점: 2026-10-09(EV 손실 방식 도입)
+    // 🧹 배포 점검 스크립트(scratch/livecheck.js)가 만든 계정(이름이 "배포확인"으로 시작)을 지운다. 부팅 때마다 돌아서 점검 계정이 쌓이지 않는다.
+    purgeCheckAccounts() {
+        let n = 0;
+        Array.from(this.users.keys()).forEach(k => {
+            if (!k.startsWith('배포확인')) return;
+            const u = this.users.get(k);
+            if (u && u.deviceId && this.deviceOwners.get(u.deviceId) === k) this.deviceOwners.delete(u.deviceId);
+            this.users.delete(k); n++;
+        });
+        if (n) { console.log(`🧹 배포 점검 계정 ${n}개 삭제`); this.save(); }
+        return n;
+    },
     STAT_FIELDS: ['handsPlayed', 'handsWon', 'vpipHands', 'preflopOpps', 'pfrHands', 'threeBetCount', 'threeBetOpps', 'aggrBets', 'aggrCalls',
         'foldToBet', 'faceBet', 'wentToShowdown', 'wonAtShowdown', 'gtoScoreSum', 'gtoScoreCount', 'gtoW', 'seatSum', 'seatCnt', 'netBB', 'netHands'],
     // 🪑 인원 보정 값(evLossN)이 생기기 전에 쌓인 기록을 한 번 맞춰 준다 — 평균 인원으로 환산해 채운다(판별 인원은 남아 있지 않아 근사).
@@ -394,6 +407,8 @@ const MockDB = {
                 u.statsArchive = (Array.isArray(u.statsArchive) ? u.statsArchive : []).slice(-1);
                 u.statsArchive.push({ until: this.STATS_EPOCH, at: Date.now(), totals, dailyLog: u.dailyLog || {} });
             }
+            if (u.fnStats && Object.keys(u.fnStats).length) { totals.fnStats = u.fnStats; if (!had) { u.statsArchive = (Array.isArray(u.statsArchive) ? u.statsArchive : []).slice(-1); u.statsArchive.push({ until: this.STATS_EPOCH, at: Date.now(), totals, dailyLog: {} }); } }
+            { const keep = {}; Object.keys(u.fnStats || {}).filter(k => /^fn(Games|PlaceSum|Itm|Wins)$/.test(k)).forEach(k => { keep[k] = u.fnStats[k]; }); u.fnStats = keep; }   // 대회 연습 점수도 새로 시작 — 대회 성적(나간 횟수·입상·순위)과 결과 목록·복기는 그대로
             u.dailyLog = {};
             u.blunders = [];
             u.learnStats = {};
@@ -421,7 +436,7 @@ const MockDB = {
                 console.log(`🌐 원격 전적 DB 로드(Turso): ${this.users.size}명 — 원격이 기준으로 적용됨`);
                 // 원격 기준 데이터를 로컬 파일에도 반영 (아래 flush가 다시 원격 푸시하지만 내용 동일 — 무해)
                 this._remoteLoadOk = true;
-                this.applyStatsEpoch(); this.migrateEvNorm();
+                this.purgeCheckAccounts(); this.applyStatsEpoch(); this.migrateEvNorm();
                 this.flush();
             } else {
                 // 최초 연결: 원격이 빔 → 로컬 데이터로 시드
@@ -2216,6 +2231,26 @@ class GameRoom {
     // 🤖 [반복 올인 읽기] 프리플랍에 깊은 스택으로 올인한 횟수 / 받은 핸드 수.
     //    예전엔 30bb 올인을 늘 "아주 좁은 레인지"로 읽어 거의 다 접었다 → 매 핸드 올인하면 블라인드를 공짜로 가져갔다.
     //    증강 런에서는 층이 바뀌어도(방이 새로 생겨도) 이어지도록 런에 적어 둔다.
+    // 🏆 [ICM] 입상이 걸린 대회(파이널나인 연습)에서 "더 이상 벳이 없는 콜"(내가 올인되거나 상대가 올인)의 상금 기준 필요 승률.
+    //    칩 기준 필요 승률(팟오즈)과의 차이(tax)가 곧 상금 압박이다. 대상이 아니면 null.
+    //    potAfter: 콜한 뒤 이긴 쪽이 가져갈 팟(내 콜 포함). 상금 비율은 Icm.payoutsFor(입상 인원) — 3명이면 50/30/20(가정값).
+    icmCall(nick, toCall, potAfter) {
+        const m = this._mtt, p = this.players[nick];
+        if (!m || !(m.paid > 0) || !p || !(toCall > 0)) return null;
+        if (m.rebuyMax > 0 && m.blindLevel < m.rebuyUntilLevel) return null;    // 리바인이 열려 있는 동안은 탈락이 끝이 아니다
+        const vn = this.playerOrder.find(n => n !== nick && this.players[n] && !this.players[n].isFolded && (this.players[n].currentBet || 0) === this.currentHighestBet);
+        const v = vn ? this.players[vn] : null;
+        if (!v || !(toCall >= p.chips || v.chips === 0)) return null;            // 뒤에 벳이 더 남는 콜은 이 계산의 대상이 아니다
+        const others = [];
+        (m.tables || []).forEach(rid => {
+            const r = rooms.get(rid); if (!r) return;
+            r.playerOrder.forEach(n => { if (n === nick || n === vn) return; const q = r.players[n], s = q ? (q.chips || 0) + (q.currentBet || 0) : 0; if (s > 0) others.push(s); });
+        });
+        if (others.length > 40) return null;
+        const r = Icm.callReq({ hero: p.chips, vill: v.chips, toCall, potAfter, others, payouts: Icm.payoutsFor(m.paid) });
+        return { req: r.req, chip: r.chip, tax: r.tax, alive: others.length + 2, paid: m.paid };
+    }
+
     jamStat(nick) {
         const ch = this._challenge;
         if (ch && ch.run && ch.nick === nick) return (ch.run.jam = ch.run.jam || { h: 0, j: 0 });
@@ -2260,7 +2295,10 @@ class GameRoom {
             const potOdds = toCall / (totalPot + toCall);
             // 토너먼트는 탈락하면 끝이라 조금 더 요구한다. 뒤에 사람이 남았으면 더.
             const behind = live.filter(n => n !== aggr && !this.players[n].isAllIn && !this.players[n].hasActed).length;
-            const edge = (isTourney ? 0.025 : 0) + behind * 0.02;
+            // 🏆 입상이 걸린 대회에서는 봇도 상금 기준(ICM)으로 받는다 — 버블에서 아무 올인이나 받아 주지 않게
+            let icmTax = 0;
+            try { const tc = Math.min(toCall, p.chips), ic = this.icmCall(nick, tc, totalPot + tc); if (ic) icmTax = Math.max(0, ic.tax); if (ic && process.env.DEV_ICMLOG) console.log('ICMLOG bot ' + JSON.stringify(Object.assign({ n: nick, call: tc, chips: p.chips }, ic))); } catch (e) {}
+            const edge = Math.max(isTourney ? 0.025 : 0, icmTax) + behind * 0.02;
             const res = ShortStack.shouldCallShove(code, Math.min(1, x), potOdds, edge);
             this._lastBotEdge = res.equity - potOdds - edge;
             if (!res.call) return { type: 'fold' };
@@ -4256,7 +4294,8 @@ class GameRoom {
                             act: (p.isAllIn && type !== 'fold' && type !== 'check' && type !== 'call') ? 'allin' : type, amt: rb(p.currentBet || 0),
                             best: A.bestAction, mix: A.mix, pct: A.mix[key0] || 0, g: _el.grade, loss: _el.lossBB, k: _el.kind || null,
                             size: A.sizeHint ? String(A.sizeHint).slice(0, 60) : '', sv: (A.notes || []).some(n => n.indexOf('솔버') >= 0),
-                            why: _el.grade === 'best' ? '' : String(A.reason || '').slice(0, 220)
+                            why: _el.grade === 'best' ? '' : String(A.reason || '').slice(0, A.icm ? 360 : 220),
+                            ic: A.icm ? [A.icm.chip, A.icm.req] : undefined
                         });
                     }
                     // 📏 스택 깊이별(내 스택 bb) · 🏁 대회 단계별 손실 — 대회에서는 "몇 bb 일 때, 어느 단계에서 새나"가 가장 쓸모 있는 피드백이다
@@ -4271,6 +4310,8 @@ class GameRoom {
                         MockDB.recordEv(nick, f2, this.statKind());
                     }
                     // 🧮 솔버 일치율: 솔버 조언이 나온 결정 가운데 솔버 범위 안(권장 액션이거나 25% 이상 섞는 액션)으로 친 횟수
+                    // 🏆 상금 압박(ICM)이 걸린 결정: 횟수 · 기준대로 친 횟수 · 손실
+                    if (sa0.advice.icm) MockDB.recordEv(nick, { evIn: 1, evIk: (_el.grade === 'best' || _el.grade === 'good') ? 1 : 0, evIl: _el.lossBB }, this.statKind());
                     if (sa0.advice.solverTable) MockDB.recordEv(nick, { ['evVn_' + st0]: 1, ['evVk_' + st0]: (_el.grade === 'best' || _el.grade === 'good') ? 1 : 0 }, this.statKind());
                 }
                 // 📊 상황별 빈도: 이 자리에서 "했나"와 "조언이 권한 빈도"를 같이 쌓는다
@@ -4350,7 +4391,11 @@ class GameRoom {
         const potBefore = this.pot + Object.keys(this.players).reduce((s, n) => n === nick ? s : s + Math.min(this.players[n].currentBet || 0, _myMax), 0);
         // 🐛 [팟오즈] 이번 스트리트에 내가 이미 낸 칩(블라인드·앞선 벳)도 팟의 일부다. 예전엔 그걸 빼고 계산해서 필요 승률이 높게 나왔다
         //    (BB가 2.5bb 오픈을 받을 때: 실제 27%인데 33%로 계산).
-        const potOdds = toCall > 0 ? toCall / (potBefore + p.currentBet + toCall) : 0;
+        let potOdds = toCall > 0 ? toCall / (potBefore + p.currentBet + toCall) : 0;
+        // 🏆 [ICM] 입상이 걸린 대회의 올인 승부는 칩이 아니라 상금 기대값으로 본다. 차이가 2%p 이상일 때만 적용한다(대회 초반은 차이가 거의 없다).
+        //    필요 승률(potOdds)을 상금 기준 값으로 바꿔 두면 아래의 콜/폴드 판단과 설명이 전부 그 값으로 나온다.
+        let _icm = null;
+        if (toCall > 0) { try { const ic = this.icmCall(nick, toCall, potBefore + p.currentBet + toCall); if (ic && ic.tax >= 0.02) { _icm = ic; potOdds = ic.req; } if (ic && process.env.DEV_ICMLOG) console.log('ICMLOG advice ' + JSON.stringify(Object.assign({ n: nick, call: toCall, chips: p.chips }, ic))); } catch (e) {} }
         const street = this.communityCards.length === 0 ? 'preflop' : (this.communityCards.length === 3 ? 'flop' : (this.communityCards.length === 4 ? 'turn' : 'river'));
         const opponents = this.playerOrder.filter(n => n !== nick && !this.players[n].isFolded).length;
 
@@ -4706,7 +4751,7 @@ class GameRoom {
             // 🧮 [솔버 조회] 미리 풀어 둔 상황이면 솔버의 빈도를 쓴다(비슷한 대표 보드 · 같은 종류의 패 기준)
             let _sv = null;
             try {
-                const r = this.solverLookup(nick, toCall, potBefore, effBB);
+                const r = _icm ? null : this.solverLookup(nick, toCall, potBefore, effBB);   // 솔버 자료는 칩 기준이라 상금 압박이 걸린 자리에는 쓰지 않는다
                 if (r) {
                     const f = r.freqs, ko = FlopSolve.bucketKo(r.bucket);
                     const cards = FlopSolve.parseBoardKey(r.board).map(c => c[0] + ({ s: '♠', h: '♥', d: '♦', c: '♣' })[c[1]]).join('');
@@ -4785,7 +4830,18 @@ class GameRoom {
             }
         }
 
+        let _icmOut = null;
+        if (_icm) {
+            const tot = potBefore + p.currentBet + toCall, c = Math.round(_icm.chip * 100), q = Math.round(_icm.req * 100);
+            // 채점도 같은 기준으로: 콜의 기대값에서 상금 압박만큼(필요 승률 차이 × 콜 뒤 팟)을 뺀다
+            if (typeof _ev.call === 'number') _ev.call = Math.round(_ev.call - _icm.tax * tot);
+            delete _ev.acts;
+            notes.push(`상금 기준(ICM) — 필요 승률 ${c}% → ${q}%`);
+            reason = String(reason || '') + ` 🏆 상금 기준(ICM): ${_icm.alive}명 남음 · 입상 ${_icm.paid}명 — 칩만 보면 ${c}%면 되지만, 지면 ${toCall >= p.chips ? '탈락이라' : '칩이 크게 줄어'} 상금 기대값이 깎이므로 ${q}%가 필요합니다.`;
+            _icmOut = { chip: c, req: q, alive: _icm.alive, paid: _icm.paid };
+        }
         return {
+            icm: _icmOut,
             equity: Math.round(equity * 100),
             potOdds: Math.round(potOdds * 100),
             tier, tierLabel, tierColor,
@@ -6893,7 +6949,7 @@ io.on('connection', (socket) => {
         const mttId = 'mtt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
         const name = `🏁 파이널나인 딥스택 연습 (${socket.nickname})`;
         const mtt = new MTTManager(mttId, socket.nickname, { name, fn: true, tableSize: FN_MTT.tableSize, startingChips: FN_MTT.startingChips,
-            blindUpInterval: FN_MTT.blindUpInterval, maxEntrants: FN_MTT.entrants, structure: FN_MTT.structure, paid: FN_MTT.paid,
+            blindUpInterval: Number(process.env.DEV_FN_LEVEL) || FN_MTT.blindUpInterval, maxEntrants: FN_MTT.entrants, structure: FN_MTT.structure, paid: FN_MTT.paid,
             rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel });
         mtts.set(mttId, mtt);
         mtt.addEntrant(socket.nickname, socket.id, false);
@@ -6934,6 +6990,7 @@ io.on('connection', (socket) => {
                 lv1: FN_MTT.structure[0].sb + '/' + FN_MTT.structure[0].bb, paid: FN_MTT.paid, tableSize: FN_MTT.tableSize, rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel, normalBots: FN_MTT.normalBots, anteLevel: 3 },
             ev: evView(F), summary: sum(F), results: (u.fnResults || []).slice(-20).reverse(),
             depth: per(F, dk, 'evDn_', 'evDl_'), phases: per(F, pk, 'evTn_', 'evTl_'),
+            icm: { n: F.evIn || 0, ok: F.evIk || 0, loss: Math.round((F.evIl || 0) * 10) / 10, payouts: Icm.payoutsFor(FN_MTT.paid) },
             freqs: Freqs.summarize(F), leaks, blunders: Blunder.top(F.blunders, 0, 5).map(Blunder.describe),
             stats: { vpip: F.preflopOpps > 0 ? Math.round((F.vpipHands || 0) / F.preflopOpps * 100) : null, pfr: F.preflopOpps > 0 ? Math.round((F.pfrHands || 0) / F.preflopOpps * 100) : null, hands: F.handsPlayed || 0 },
             board
@@ -7603,7 +7660,7 @@ const PORT = process.env.PORT || 3000;
 //    (재배포 직후 빈 로컬 상태로 로그인 받다가 원격 데이터로 뒤늦게 덮어쓰는 레이스 방지)
 //    원격 미설정이면 initRemote()는 즉시 반환 — 기존 동작 그대로.
 MockDB.initRemote().catch(e => console.error('🌐 원격 초기화 오류:', e && e.message)).finally(() => {
-    try { MockDB.applyStatsEpoch(); MockDB.migrateEvNorm(); } catch (e) { console.error('통계 기점 적용 오류:', e && e.message); }
+    try { MockDB.purgeCheckAccounts(); MockDB.applyStatsEpoch(); MockDB.migrateEvNorm(); } catch (e) { console.error('통계 기점 적용 오류:', e && e.message); }
     server.listen(PORT, () => {
         console.log(`✅ [Master Server] 치명 버그 수정 + 보안 패치 + 방 정리 시스템 적용 완료! (포트 ${PORT})`);
     });
