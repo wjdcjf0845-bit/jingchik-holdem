@@ -110,6 +110,7 @@ const Rogue = require('./lib/roguerun');        // 🍀 증강 컴까기(로그�
 const { Capacity } = require('./lib/capacity');  // 🚦 서버 정원 · 입장 대기열
 const Blunder = require('./lib/blunder');       // 💥 리포트의 '치명적 플레이' 기록
 const Ranges = require('./lib/ranges');         // 📊 프리플랍 범위표(레이즈를 받았을 때 패마다 3벳·콜·폴드 빈도)
+const Jam = require('./lib/jam');               // 🧨 프리플랍 올인 승부(푸시·리쉬브)를 패 대 패 승률표로 직접 푼 균형
 const Icm = require('./lib/icm');               // 🏆 대회 상금 기준(ICM) — 입상권 근처의 올인 콜
 const EvLoss = require('./lib/evloss');         // 📉 결정마다 잃은 기대값(bb) — 실력 점수의 단위
 const Freqs = require('./lib/freqs');           // 📊 상황별 빈도(오픈·방어·3벳·c벳…)를 기준과 비교
@@ -125,6 +126,11 @@ const BOT_CHART_DEFAULT = true;
 //   어느 것도 오차를 뚜렷이 넘지 못했다 — 예전에 "해롭다"고 본 것은 근거가 약했다. 자료를 넓힌 지금 구성(③)에서 해롭다는 증거가 없어 켠다(2026-10-10).
 //   조언대로 치는 가상 플레이어도 턴 조언 켬 − 끔 = 헤즈업 −0.6 ± 5.8 · 6인 −12.6 ± 14.1 로 차이가 확인되지 않았다.
 const BOT_TURN_DEFAULT = true;
+// 🧨 봇이 푸시/리쉬브를 "직접 푼 균형"(lib/jam.js)으로 칠지 — 예전 어림표(lib/shortstack.js)와의 맞대결 스위치는 BOT_AB10.
+//   측정(2026-10-11, 20bb 시작 · 1분 레벨 · 24테이블 277,175핸드): 새 − 옛 = +0.5 ± 2.6 bb/100 — 차이가 확인되지 않았다(해롭지도 않다).
+//   조언·채점·문제와 같은 계산을 쓰게 하려고 켠다.
+const BOT_JAM_DEFAULT = true;
+const OPEN_PRIOR = {};                          // 자리별 오픈 범위(패마다 여는 확률) — jamInfo 가 채워 쓴다
 const BOT_RIVER_DEFAULT = false;                // 고수 봇이 리버 계산을 쓸지 — 맞대결 측정 전(botV9)
 const GtoAdvice = require('./lib/gtoadvice');   // 🎓 학습모드 조언 — 상대 수·포지션·스택 깊이별
 const Quiz = require('./lib/gtoquiz');          // 🧠 GTO 문제 학습
@@ -2198,6 +2204,44 @@ class GameRoom {
         const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
         return ab === '2' ? !bit : bit;
     }
+    botV10(nick) {
+        const ab = process.env.BOT_AB10;
+        if (!ab) return BOT_JAM_DEFAULT;
+        const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
+        return ab === '2' ? !bit : bit;
+    }
+    // 🧨 [올인 계산] 지금 자리에서 내가 올인하면: 그 패의 기대값(bb, 접는 것 대비) · 기대값 순위(위에서 몇 %) · 균형에서 미는 범위.
+    //    아직 아무도 안 열었으면 푸시, 한 명이 열었으면 리쉬브(연 사람은 그 자리의 오픈 범위를 들고 있다고 본다). 그 밖(3벳 이상·이미 올인한 사람 있음)은 null.
+    jamInfo(nick, code) {
+        if (!Jam.load()) return null;
+        const p = this.players[nick], bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+        const raises = this.raiseCountThisStreet || 0;
+        if (!p || raises >= 2) return null;
+        const idx = this.playerOrder.indexOf(nick), n = this.playerOrder.length, callers = [], hu = n === 2;
+        for (let k = 1; k < n; k++) {
+            const q = this.players[this.playerOrder[(idx + k) % n]];
+            if (!q || q.isFolded) continue;
+            if (q.isAllIn || q.chips <= 0) return null;
+            const opener = (q.currentBet || 0) === this.currentHighestBet && this.currentHighestBet > bb;
+            let prior = null, tag = '';
+            if (opener) {
+                tag = 'o' + (hu ? 'HU' : Ranges.dataPos(q.position || ''));
+                prior = OPEN_PRIOR[tag];
+                if (!prior) {
+                    const x = hu ? 0.76 : ShortStack.openPct(q.position || '');
+                    prior = Float64Array.from(Ranges.ALL.map(c => { const f = hu ? null : Ranges.openFreq(q.position || '', c); return f != null ? f / 100 : (ShortStack.handPercentile(c) <= x ? 1 : 0); }));
+                    OPEN_PRIOR[tag] = prior;
+                }
+            }
+            callers.push({ stack: (q.chips + (q.currentBet || 0)) / bb, posted: (q.currentBet || 0) / bb, prior, tag });
+        }
+        if (!callers.length || callers.length > 5) return null;
+        if (raises === 1 && !callers.some(c => c.prior)) return null;
+        const pot = (this.pot + Object.keys(this.players).reduce((a, k) => a + (this.players[k].currentBet || 0), 0)) / bb;
+        const res = Jam.solveCached({ pot, hero: { stack: (p.chips + (p.currentBet || 0)) / bb, posted: (p.currentBet || 0) / bb }, callers });
+        if (!res) return null;
+        return { ev: res.ev[Jam.load().idx[code]], rank: Jam.rankOf(res, code), range: res.jamPct, res };
+    }
     // 🔬 리버 계산을 고수 봇에 쓰는 것의 측정 스위치(BOT_AB9). 측정 결과로 BOT_RIVER_DEFAULT 를 정한다.
     botV9(nick) {
         const ab = process.env.BOT_AB9;
@@ -2334,25 +2378,34 @@ class GameRoom {
             if (!facingRaise) {
                 const behind = Math.max(1, live.filter(n => !this.players[n].hasActed && !this.players[n].isAllIn).length);
                 const limped = live.some(n => (this.players[n].currentBet || 0) >= bb && this.players[n].hasActed);
-                let range = ShortStack.pushPct(effBB, behind) * (limped ? 0.8 : 1);
+                let range = ShortStack.pushPct(effBB, behind) * (limped ? 0.8 : 1), rank = pct;
+                // 🧨 어림표 대신 지금 스택·앤티·뒤 사람들의 칩으로 직접 푼 균형을 쓴다
+                if (this.botV10(nick)) { try { const ji = this.jamInfo(nick, code); if (ji) { range = ji.range * (limped ? 0.8 : 1); rank = ji.rank; } } catch (e) {} }
                 // 🏆 입상이 걸린 대회에서는 상금 기준으로 범위를 넓히거나 좁힌다
                 try { const ip = this.icmPush(nick, range, live.filter(n => !this.players[n].hasActed && !this.players[n].isAllIn)); if (ip && Math.abs(ip.ratio - 1) >= 0.12) range = Math.max(0.03, Math.min(1, range * ip.ratio)); } catch (e) {}
-                if (pct <= range) return shove();
+                if (rank <= range) return shove();
                 if (toCall === 0) return { type: 'check' };              // BB 무료 체크
                 if (isBB && toCall <= bb * 0.5) return null;              // 거의 공짜면 평소대로
                 return { type: 'fold' };
             }
             // 오픈을 마주함 → 리쉬브 아니면 폴드 (숏스택 콜은 플랍에서 할 수 있는 게 없다)
             const openX = raises >= 2 ? 0.07 : ShortStack.openPct(aggrP ? aggrP.position : '');
-            if (pct <= ShortStack.reshovePct(openX, effBB)) return shove();
+            let jr = null;
+            if (this.botV10(nick)) { try { jr = this.jamInfo(nick, code); } catch (e) {} }
+            if (jr ? jr.ev > 0 : pct <= ShortStack.reshovePct(openX, effBB)) return shove();
             if (isBB && toCall <= bb * 1.5 && effBB >= 6) return null;    // BB 는 싸게 볼 수 있으면 평소 방어
             return { type: 'fold' };
         }
 
         // ── (다) 13~20bb: 늦은 포지션 스틸에 리쉬브 (스택 대비 팟이 커서 접게 만들면 큰 이득) ──
-        if (effBB <= 20 && facingRaise && raises <= 1 && aggrP && !aggrAllIn) {
-            const openX = ShortStack.openPct(aggrP.position);
-            if (pct <= ShortStack.reshovePct(openX, effBB) && Math.random() < 0.75) return shove();
+        if (effBB <= 25 && facingRaise && raises <= 1 && aggrP && !aggrAllIn) {
+            let jr = null;
+            if (this.botV10(nick)) { try { jr = this.jamInfo(nick, code); } catch (e) {} }
+            if (jr) { if (jr.ev > (effBB <= 20 ? 0.3 : 1) && Math.random() < 0.85) return shove(); }
+            else if (effBB <= 20) {
+                const openX = ShortStack.openPct(aggrP.position);
+                if (pct <= ShortStack.reshovePct(openX, effBB) && Math.random() < 0.75) return shove();
+            }
         }
         return null;
     }
@@ -4533,7 +4586,9 @@ class GameRoom {
                 if (!facingRaise) {
                     const _bhd = _liveOpp.filter(n => !this.players[n].hasActed && !this.players[n].isAllIn);
                     const behind = Math.max(1, _bhd.length);
-                    let range = ShortStack.pushPct(effBB, behind);
+                    let range = ShortStack.pushPct(effBB, behind), _rk = _pctl, _jev = null;
+                    // 🧨 어림표 대신 지금 스택·앤티·뒤 사람들의 칩으로 직접 푼 균형(lib/jam.js)을 쓴다. 순위도 "올인 기대값이 높은 순"이다.
+                    try { const ji = this.jamInfo(nick, code); if (ji) { range = ji.range; _rk = ji.rank; _jev = ji.ev; notes.push('올인 균형 계산'); } } catch (e) {}
                     // 🏆 [ICM] 입상이 걸린 대회에서는 푸시 범위도 상금 기준으로 — 받는 쪽이 조심해야 하는 자리면 넓게, 내가 지면 먼저 떨어지는 자리면 좁게
                     try {
                         const ip = this.icmPush(nick, range, _bhd);
@@ -4544,38 +4599,43 @@ class GameRoom {
                     } catch (e) {}
                     notes.push('숏스택 — 푸시/폴드');
                     _special = true;
-                    if (_pctl <= range) {
+                    const _jt = _jev != null ? ` (올인의 기대값 약 ${_jev >= 0 ? '+' : ''}${Math.round(_jev * 10) / 10}bb)` : '';
+                    if (_rk <= range) {
                         mix = canCheck ? { check: 8, raise: 92 } : { fold: 8, raise: 92 };
                         bestAction = 'raise';
-                        reason = `${Math.round(effBB)}bb 숏스택 — 작게 열고 접을 칩이 없습니다. 올인 아니면 폴드: 뒤에 ${behind}명이면 푸시 범위는 상위 약 ${_pc(range)}%, ${code}는 상위 ${_pc(_pctl)}% → 올인.`;
+                        reason = `${Math.round(effBB)}bb 숏스택 — 작게 열고 접을 칩이 없습니다. 올인 아니면 폴드: 뒤에 ${behind}명이면 푸시 범위는 상위 약 ${_pc(range)}%, ${code}는 상위 ${_pc(_rk)}% → 올인.${_jt}`;
                     } else if (canCheck) {
                         mix = { check: 100 }; bestAction = 'check';
                         reason = `${Math.round(effBB)}bb 숏스택 — ${code}는 푸시 범위(상위 약 ${_pc(range)}%) 밖입니다. 공짜로 플랍을 보세요.`;
                     } else {
                         mix = { fold: 94, raise: 6 }; bestAction = 'fold';
-                        reason = `${Math.round(effBB)}bb 숏스택 — 올인 아니면 폴드입니다. 뒤에 ${behind}명이면 푸시 범위는 상위 약 ${_pc(range)}%인데 ${code}는 상위 ${_pc(_pctl)}% → 폴드. (작게 열거나 림프하면 칩만 흘립니다.)`;
+                        reason = `${Math.round(effBB)}bb 숏스택 — 올인 아니면 폴드입니다. 뒤에 ${behind}명이면 푸시 범위는 상위 약 ${_pc(range)}%인데 ${code}는 상위 ${_pc(_rk)}% → 폴드.${_jt} (작게 열거나 림프하면 칩만 흘립니다.)`;
                     }
                 } else if (!(isBB && toCall <= bb * 1.5 && effBB >= 6)) {
                     const openX = _raises >= 2 ? 0.07 : ShortStack.openPct(_aggrP ? _aggrP.position : '');
-                    const r = ShortStack.reshovePct(openX, effBB);
+                    let r = ShortStack.reshovePct(openX, effBB), _in = _pctl <= r, _rk = _pctl, _jt = '';
+                    // 🧨 연 사람의 오픈 범위를 상대로 직접 푼 균형: 올인의 기대값이 0 을 넘는 패가 리쉬브 범위다
+                    try { const jr = this.jamInfo(nick, code); if (jr) { r = Jam.fracAbove(jr.res, 0); _in = jr.ev > 0; _rk = jr.rank; _jt = ` (올인의 기대값 약 ${jr.ev >= 0 ? '+' : ''}${Math.round(jr.ev * 10) / 10}bb)`; notes.push('올인 균형 계산'); } } catch (e) {}
                     notes.push('숏스택 — 리쉬브/폴드');
                     _special = true;
-                    if (_pctl <= r) {
+                    if (_in) {
                         mix = { fold: 6, call: 4, raise: 90 }; bestAction = 'raise';
-                        reason = `${Math.round(effBB)}bb로 오픈을 받았습니다 — 콜하면 플랍 뒤에 할 수 있는 게 없어 올인(리쉬브) 아니면 폴드. 리쉬브 범위 상위 약 ${_pc(r)}%, ${code}는 상위 ${_pc(_pctl)}% → 올인.`;
+                        reason = `${Math.round(effBB)}bb로 오픈을 받았습니다 — 콜하면 플랍 뒤에 할 수 있는 게 없어 올인(리쉬브) 아니면 폴드. 리쉬브 범위 상위 약 ${_pc(r)}%, ${code}는 상위 ${_pc(_rk)}% → 올인.${_jt}`;
                     } else {
                         mix = { fold: 92, call: 6, raise: 2 }; bestAction = 'fold';
-                        reason = `${Math.round(effBB)}bb로 오픈을 받았습니다 — 올인 아니면 폴드. 리쉬브 범위는 상위 약 ${_pc(r)}%인데 ${code}는 상위 ${_pc(_pctl)}% → 폴드.`;
+                        reason = `${Math.round(effBB)}bb로 오픈을 받았습니다 — 올인 아니면 폴드. 리쉬브 범위는 상위 약 ${_pc(r)}%인데 ${code}는 상위 ${_pc(_rk)}% → 폴드.${_jt}`;
                     }
                 }
-            } else if (effBB <= 20 && facingRaise && _raises <= 1 && _aggrP && !_aggrAllIn) {
-                // (다) 13~20bb: 넓은 오픈에는 리쉬브가 3벳보다 낫다
-                const r = ShortStack.reshovePct(ShortStack.openPct(_aggrP.position), effBB);
-                if (_pctl <= r) {
+            } else if (effBB <= 25 && facingRaise && _raises <= 1 && _aggrP && !_aggrAllIn) {
+                // (다) 13~25bb: 넓은 오픈에는 리쉬브가 3벳보다 낫다. 연 사람의 오픈 범위 상대로 직접 푼 올인의 기대값으로 고른다
+                //      (13~20bb 는 +0.3bb, 20~25bb 는 +1bb 넘게 남을 때만 — 그 아래는 콜·작은 3벳이 나을 수 있어 범위표에 맡긴다).
+                let r = effBB <= 20 ? ShortStack.reshovePct(ShortStack.openPct(_aggrP.position), effBB) : 0, _in = effBB <= 20 && _pctl <= r, _rk = _pctl, _jt = '';
+                try { const jr = this.jamInfo(nick, code), thr = effBB <= 20 ? 0.3 : 1; if (jr) { r = Jam.fracAbove(jr.res, thr); _in = jr.ev > thr; _rk = jr.rank; _jt = ` 올인의 기대값 약 +${Math.round(jr.ev * 10) / 10}bb.`; if (_in) notes.push('올인 균형 계산'); } } catch (e) {}
+                if (_in) {
                     notes.push('리쉬브 스택');
                     _special = true;
                     mix = { fold: 8, call: 17, raise: 75 }; bestAction = 'raise';
-                    reason = `${Math.round(effBB)}bb — 작게 3벳하면 스택의 3분의 1이 들어가 어차피 못 접습니다. ${_aggrP.position || '상대'} 오픈 상대로 리쉬브 범위는 상위 약 ${_pc(r)}%, ${code}는 상위 ${_pc(_pctl)}% → 올인이 기준.`;
+                    reason = `${Math.round(effBB)}bb — 작게 3벳하면 스택의 3분의 1이 들어가 어차피 못 접습니다. ${_aggrP.position || '상대'} 오픈 상대로 리쉬브 범위는 상위 약 ${_pc(r)}%, ${code}는 상위 ${_pc(_rk)}% → 올인이 기준.${_jt}`;
                 }
             }
             // 📊 레인지 표가 지금 상황에 맞는 표를 그리도록 알려준다 (헤즈업 / 숏스택 푸시 / 6인)

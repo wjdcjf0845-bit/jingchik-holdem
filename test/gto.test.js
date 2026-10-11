@@ -108,10 +108,12 @@ test('푸시/폴드 문제의 정답은 기준표와 일치하고, 경계에서 
     for (let i = 0; i < 400; i++) {
         const q = Q.generate('push', rng);
         const stack = Number(q.tags[0].match(/(\d+)bb/)[1]), behind = Number(q.tags[2].match(/(\d+)명/)[1]);
-        const range = SS.pushPct(stack, behind);
-        const p = SS.handPercentile(PF.handToCode(q.hand));
-        if (q.answer === 'push') assert.ok(p <= range * 0.71, `${q.prompt} p=${p} range=${range}`);
-        else { assert.strictEqual(q.answer, 'fold'); assert.ok(p >= range * 1.39, `${q.prompt} p=${p} range=${range}`); }
+        // 기준: 올인 승부를 직접 푼 균형(lib/jam.js). 문제와 같은 자리를 따로 풀어 그 패의 올인 기대값 부호와 견준다.
+        const Jam = require('../lib/jam'), POS6 = ['UTG', 'HJ', 'CO', 'BTN', 'SB', 'BB'], pos = POS6[5 - behind];
+        const res = Jam.solve({ pot: 1.5, hero: { stack, posted: pos === 'SB' ? 0.5 : 0 }, callers: POS6.slice(6 - behind).map(x => ({ stack: 30, posted: x === 'SB' ? 0.5 : x === 'BB' ? 1 : 0 })) });
+        const ev = res.ev[Jam.load().idx[PF.handToCode(q.hand)]];
+        if (q.answer === 'push') assert.ok(ev > 0.2, `${q.prompt} ev=${ev}`);
+        else { assert.strictEqual(q.answer, 'fold'); assert.ok(ev < -0.2, `${q.prompt} ev=${ev}`); }
     }
 });
 
