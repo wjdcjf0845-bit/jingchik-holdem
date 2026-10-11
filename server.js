@@ -1726,7 +1726,7 @@ class GameRoom {
                     if (!_threeBetPlus && this.botV6(nick)) {
                         // 🏁 유효 스택이 대회용 자료의 범위 안이면(그리고 스위치가 켜져 있으면) 그 깊이의 표를 쓴다
                         const _dep = this.botV11(nick) && !_huBot ? _effB : 0;
-                        const rtC = preflopRangeTier(code, p.position || '', true, { chart: true, raises: 1, openerPos: _opnPos, closing: !!isBB, potOdds, depth: _dep });
+                        const rtC = preflopRangeTier(code, p.position || '', true, { chart: true, raises: 1, openerPos: _opnPos, closing: !!isBB, potOdds, depth: _dep, players: this.playerOrder.length });
                         if (rtC.freq && rtC.freq.mtt) { _mttBot = true; if (Math.random() * 100 < rtC.freq.jam) return { type: 'raise', amount: p.currentBet + p.chips }; }
                         if (rtC.freq) {
                             const x = Math.random() * 100;
@@ -1740,7 +1740,7 @@ class GameRoom {
                 if (!facingRaise && persona.proStrategy && !_huBot && !isBB && toCall > 0 && this.botV6(nick)) {
                     const _of = Ranges.openFreq(p.position || '', code);
                     const _limped = this.playerOrder.some(n => n !== nick && this.players[n] && !this.players[n].isFolded && (this.players[n].currentBet || 0) === bb && !(this.players[n].role && /SB|BB/.test(this.players[n].role)));
-                    const _mo = this.botV11(nick) && !_limped && _effB > 12 ? Ranges.mttOpen(p.position || '', code, _effB) : null;
+                    const _mo = this.botV11(nick) && !_limped && _effB > 12 ? Ranges.mttOpen(p.position || '', code, _effB, this.playerOrder.length) : null;
                     if (_mo) {
                         // 🏁 대회용 자료: 올인 · 오픈 · 림프(SB) · 폴드를 그 빈도대로
                         const x = Math.random() * 100; _mttBot = true;
@@ -4542,7 +4542,7 @@ class GameRoom {
             const _iRaised = (this.actionLog || []).some(a => a.nick === nick && (a.board || []).length === 0 && (a.type === 'raise' || a.type === 'allin'));
             // 📊 솔버 프리플랍 자료의 열쇠: 지금까지의 행동(자리:R 레이즈 · C 콜 · F 들어왔다가 접음)>내 자리
             let _seqKey = null, _seqA = null;
-            if (!_huTable && facingRaise) {
+            if (facingRaise) {
                 const _dp = n => Ranges.dataPos((this.players[n] || {}).position || '');
                 let _hi = bb; const _tok = [], _tokA = [], _in = new Set();
                 (this.actionLog || []).filter(a => a.street === 1).forEach(a => {
@@ -4552,13 +4552,13 @@ class GameRoom {
                     else if (a.type === 'call' || a.type === 'allin') { _tok.push(ps + ':C'); _tokA.push(ps + ':C'); _in.add(a.nick); }
                     else if (a.type === 'fold' && _in.has(a.nick)) { _tok.push(ps + ':F'); _tokA.push(ps + ':F'); }
                 });
-                _seqKey = _tok.join(',') + '>' + _dp(nick);
+                if (!_huTable) _seqKey = _tok.join(',') + '>' + _dp(nick);     // 100bb 자료는 6인용이라 헤즈업에는 쓰지 않는다
                 _seqA = _tokA.join(',') + '>' + _dp(nick);       // 대회용 자료의 열쇠: 올인 레이즈는 A
             }
             const _ctx = { seq: _seqKey, numActive: opponents + 1, threeBetPlus: (this.raiseCountThisStreet || 0) >= 2,
                 headsUp: _huTable, openerPos: _opnPos, closing: !!isBB, potOdds: facingRaise ? potOdds : 0,   // potOdds: 오픈 크기·앤티에 따라 방어 폭이 달라진다
                 chart: true, raises: this.raiseCountThisStreet || 1, iRaised: _iRaised, inPosition: this.isInPosition(nick),
-                depth: _huTable ? 0 : effBB, seqA: _seqA };      // 🏁 유효 스택이 대회용 자료(직접 푼 20~30bb)의 범위 안이면 그 표를 쓴다
+                depth: effBB, seqA: _seqA, players: this.playerOrder.length };      // 🏁 유효 스택이 대회용 자료(직접 푼 것)의 범위 안이면 그 인원·깊이의 표를 쓴다
             const rt = preflopRangeTier(code, p.position || '', facingRaise, _ctx);
             if (rt.freq && rt.freq.mtt) { _mttF = rt.freq; notes.push('대회용 자료(직접 푼 계산)'); }
             // 문구: 처음 연 것이면 '오픈', 누가 림프한 뒤 올린 것(내가 림프했거나 블라인드가 올림)이면 '레이즈', 두 번째 레이즈부터는 '리레이즈'

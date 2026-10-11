@@ -1,17 +1,19 @@
 // HRC(Holdem Resources Calculator)로 직접 푼 대회용 프리플랍 결과를 게임이 쓰는 표로 바꾼다 → lib/preflop_mtt.json.gz
 //   HRC 에서: Hand → Export Strategies → Complete Export → zip 저장 → 풀어서 그 폴더를 넘긴다.
-//   사용: node tools/hrc_import.js <깊이bb>=<폴더> [<깊이bb>=<폴더> …]     예) node tools/hrc_import.js 25=C:/Poker/out/x25 20=C:/Poker/out/x20
+//   사용: node tools/hrc_import.js <이름>=<폴더> …     이름은 6인이면 깊이만("25"), 2~5인이면 "p<인원>_<깊이>"("p2_20").
+//         예) node tools/hrc_import.js 25=C:/Poker/out/x25 p2_20=C:/Poker/out/hu20
 //   열쇠: lib/preflopdata.json.gz 와 같다 — "지금까지의 행동>내 자리". 행동은 자리:R(레이즈)·A(올인)·C(콜)·F(들어왔다가 접음). 아직 안 들어온 사람의 폴드는 적지 않는다.
 //   값: { 패: [레이즈 %(올인 포함), 콜 %, 그중 올인 %] } — 전부 0 인 패는 뺀다.
 //   이 자료는 우리가 직접 푼 계산 결과다(구조: 6인 · BB 앤티 · 스택 동일). 설정은 meta 에 같이 남긴다.
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const Ranges = require('../lib/ranges');
-const POSN = { 6: ['UTG', 'MP', 'CO', 'BTN', 'SB', 'BB'] };
+// 인원별 자리 이름(HRC 의 행동 순서 → 게임의 자리 이름). 헤즈업은 버튼이 SB 를 겸한다.
+const POSN = { 2: ['BTN', 'BB'], 3: ['BTN', 'SB', 'BB'], 4: ['CO', 'BTN', 'SB', 'BB'], 5: ['MP', 'CO', 'BTN', 'SB', 'BB'], 6: ['UTG', 'MP', 'CO', 'BTN', 'SB', 'BB'] };
 
 function importDir(dir) {
     const settings = JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8'));
     const stacks = settings.handdata.stacks, bb = settings.handdata.blinds[0] > settings.handdata.blinds[1] ? settings.handdata.blinds[0] : settings.handdata.blinds[1];
-    const POS = POSN[stacks.length]; if (!POS) throw new Error('6인만 지원: ' + stacks.length);
+    const POS = POSN[stacks.length]; if (!POS) throw new Error('2~6인만 지원: ' + stacks.length);
     const tables = {}, reach = {};
     fs.readdirSync(path.join(dir, 'nodes')).forEach(f => {
         const n = JSON.parse(fs.readFileSync(path.join(dir, 'nodes', f), 'utf8'));
