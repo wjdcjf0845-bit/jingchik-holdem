@@ -841,6 +841,21 @@ const MockDB = {
         if (r.place <= r.paid) F.fnItm = (F.fnItm || 0) + 1;
         if (r.place === 1) F.fnWins = (F.fnWins || 0) + 1;
         u.fnResults = (Array.isArray(u.fnResults) ? u.fnResults : []).concat([r]).slice(-60);
+        const rv = (u.fnReviews || []).find(x => x.id === r.id);
+        if (rv) { rv.place = r.place; rv.agreed = !!r.agreed; }
+        this.save();
+    },
+    // 🎞️ [대회 복기] 연습 대회에서 친 판을 결정째로 남긴다 — 최근 3개 대회, 대회당 400판까지.
+    //    쓰레기 패를 맞게 접은 판처럼 볼 것이 없는 판은 개수만 센다(trivial).
+    recordFnHand(nickname, mttId, rec, trivial) {
+        const u = this.users.get(nickname);
+        if (!u || typeof nickname !== 'string' || nickname.startsWith('🤖')) return;
+        if (!Array.isArray(u.fnReviews)) u.fnReviews = [];
+        let rv = u.fnReviews.find(x => x.id === mttId);
+        if (!rv) { rv = { id: mttId, t: Date.now(), hands: [], skipped: 0, played: 0 }; u.fnReviews.push(rv); u.fnReviews = u.fnReviews.slice(-3); }
+        rv.played = (rv.played || 0) + 1;
+        if (trivial) rv.skipped = (rv.skipped || 0) + 1;
+        else if (rv.hands.length < 400) { rec.n = rv.played; rv.hands.push(rec); }
         this.save();
     },
     // 📉 EV 손실 집계 — 이름이 ev 로 시작하는 칸에 더한다(일별 기록에도). 판 단위(evLoss·evLossSq·evHands)와 결정 단위(evG_등급·evC_스트리트·evS_스트리트)를 같이 쓴다.
@@ -4134,6 +4149,12 @@ class GameRoom {
             if (!pl || pl.isBot || typeof start !== 'number' || !this.countsForSkill()) return;
             const net = (pl.chips - start) / bb;
             MockDB.recordNet(nick, Math.round(net * 10) / 10, this.statKind());
+            if (this._fnMode && this._mtt && this._fnRev && this._fnRev.hand === this.handId && this._fnRev.by[nick]) {
+                const fr = this._fnRev.by[nick], ds = fr.d;
+                const trivial = ds.length === 1 && ds[0].st === 'preflop' && ds[0].act === 'fold' && (ds[0].g === 'best' || ds[0].g === 'good');
+                MockDB.recordFnHand(nick, this._mtt.mttId, { lv: this.blindLevel + 1, bb, stk: fr.stk, pos: pl.position || '', seats: this.playerOrder.length, alive: this._mtt.countAlive(),
+                    h: fr.h, b: this.communityCards.slice(), net: Math.round(net * 10) / 10, loss: Math.round(ds.reduce((a, x) => a + (x.loss || 0), 0) * 100) / 100, d: ds }, trivial);
+            }
             // 📉 이 판에서 잃은 기대값(결정별 손실의 합) + 🎲 운을 뺀 결과(올인 뒤 남은 카드는 승률만큼 받은 것으로 계산)
             const loss = (this._evHandId === this.handId && this._evHand && this._evHand[nick]) || 0;
             const aq = this._allinEq && this._allinEq.handId === this.handId ? this._allinEq.adj : null;
@@ -4223,6 +4244,18 @@ class GameRoom {
                     this._evHand[nick] = (this._evHand[nick] || 0) + _el.lossBB;
                     const st0 = sa0.advice.street || 'preflop';
                     MockDB.recordEv(nick, { ['evG_' + _el.grade]: 1, ['evC_' + st0]: 1, ['evS_' + st0]: _el.lossBB }, this.statKind());
+                    // 🎞️ [대회 복기] 연습 대회의 결정은 판별로 모아 두었다가 판이 끝나면 저장한다
+                    if (this._fnMode) {
+                        if (!this._fnRev || this._fnRev.hand !== this.handId) this._fnRev = { hand: this.handId, by: {} };
+                        const A = sa0.advice, rb = x => Math.round(x / bb0 * 10) / 10, key0 = GtoAdvice.actionKey(A, type);
+                        (this._fnRev.by[nick] = this._fnRev.by[nick] || { h: sa0.pre.hand, stk: rb(sa0.pre.chips + beforeBet), d: [] }).d.push({
+                            st: st0, b: sa0.pre.board.length, pot: rb(sa0.pre.pot), call: rb(Math.max(0, Math.min(toCall, sa0.pre.chips))),
+                            act: (p.isAllIn && type !== 'fold' && type !== 'check' && type !== 'call') ? 'allin' : type, amt: rb(p.currentBet || 0),
+                            best: A.bestAction, mix: A.mix, pct: A.mix[key0] || 0, g: _el.grade, loss: _el.lossBB, k: _el.kind || null,
+                            size: A.sizeHint ? String(A.sizeHint).slice(0, 60) : '', sv: (A.notes || []).some(n => n.indexOf('솔버') >= 0),
+                            why: _el.grade === 'best' ? '' : String(A.reason || '').slice(0, 220)
+                        });
+                    }
                     // 📏 스택 깊이별(내 스택 bb) · 🏁 대회 단계별 손실 — 대회에서는 "몇 bb 일 때, 어느 단계에서 새나"가 가장 쓸모 있는 피드백이다
                     {
                         const myBB = (sa0.pre.chips + beforeBet) / bb0, dk = myBB <= 12 ? 'd12' : myBB <= 25 ? 'd25' : myBB <= 40 ? 'd40' : 'deep';
@@ -4680,7 +4713,7 @@ class GameRoom {
                         const bet = f.length === 3 ? f[1] + f[2] : f[1];
                         mix = { check: f[0], bet };
                         bestAction = bet > f[0] ? 'bet' : 'check';
-                        _sv = { big: f.length === 3 && f[2] > f[1], turn: !!r.turnClass };
+                        _sv = { big: f.length === 3 && f[2] > f[1], turn: !!r.turnClass, mixed: f.length === 3 && bet > 0 && Math.max(f[1], f[2]) < 0.7 * bet };   // mixed: 두 크기를 비슷하게 섞는 패
                         reason = `${src}: 이 자리에서 "${ko}" 종류의 패는 체크 ${f[0]}% · 벳 ${bet}%${f.length === 3 && bet > 0 ? ` (작게 ${f[1]}% · 크게 ${f[2]}%)` : ''}로 칩니다.${Math.min(f[0], bet) >= 25 ? ' 섞어 치는 자리라 어느 쪽도 실수가 아닙니다.' : ''}`;
                     } else {
                         mix = { fold: f[0], call: f[1], raise: f[2] };
@@ -4737,7 +4770,10 @@ class GameRoom {
             } else if (_sv && bestAction === 'bet' && _sv.turn) {
                 sizeHint = `팟의 2/3 ≈ ${Math.round(potBefore * 0.66).toLocaleString()} (솔버 계산에 쓴 크기)`;
             } else if (_sv && bestAction === 'bet') {
-                sizeHint = _sv.big ? `팟의 3/4 ≈ ${Math.round(potBefore * 0.75).toLocaleString()} (솔버가 이 종류의 패에 주로 쓰는 크기)` : `팟의 1/3 ≈ ${Math.round(potBefore * 0.33).toLocaleString()} (솔버가 이 종류의 패에 주로 쓰는 크기)`;
+                // 🔎 [검증 2026-10-11] 같은 상황을 4배 정밀하게(오차 1% → 0.25%) 다시 풀어 보니 체크·벳, 폴드·콜·레이즈의 빈도는 평균 1~5%p 차이로 안정적이었지만
+                //    "작게/크게"의 비율은 크게 달라졌다(예: 작게 15% → 0%). 두 크기의 기대값이 비슷해서다. 그래서 한쪽이 뚜렷할 때만 크기를 권한다.
+                sizeHint = _sv.mixed ? `팟의 1/3 ≈ ${Math.round(potBefore * 0.33).toLocaleString()} 또는 3/4 ≈ ${Math.round(potBefore * 0.75).toLocaleString()} (솔버가 두 크기를 섞어 씁니다 — 어느 쪽이든 괜찮습니다)`
+                    : _sv.big ? `팟의 3/4 ≈ ${Math.round(potBefore * 0.75).toLocaleString()} (솔버가 이 종류의 패에 주로 쓰는 크기)` : `팟의 1/3 ≈ ${Math.round(potBefore * 0.33).toLocaleString()} (솔버가 이 종류의 패에 주로 쓰는 크기)`;
             } else if ((mix.bet || 0) > 0 && bestAction === 'bet') {
                 sizeHint = GtoAdvice.betSize({ opponents, wet: !!_tx.wet, dry: !!_tx.dry, spr: _spr, pot: potBefore, thin: !!pa.thin, range: !!pa.rangeBet }).text;
             } else if (bestAction === 'raise') {
@@ -5335,7 +5371,7 @@ class MTTManager {
         if (this.eliminated.find(e => e.nick === nick)) return;
         const place = this.totalEntrants - this.eliminated.length;
         this.eliminated.push({ nick, place });
-        if (this.fn) MockDB.recordFnResult(nick, { t: Date.now(), place, total: this.totalEntrants, paid: this.paid, level: this.blindLevel + 1 });
+        if (this.fn) MockDB.recordFnResult(nick, { t: Date.now(), place, total: this.totalEntrants, id: this.mttId, paid: this.paid, level: this.blindLevel + 1 });
         if (process.env.DEV_MTTLOG) console.log(`[MTTLOG] out ${place} ${nick} t=${Date.now()} alive=${this.countAlive()} room=${roomId.split('#')[1]}`);
         const room = rooms.get(roomId);
         if (room && room.players[nick] && room.players[nick].socketId) {
@@ -5452,8 +5488,8 @@ class MTTManager {
             .concat(missing.map((e, i) => ({ place: alive.length + i + 1, nick: e.nick })))
             .concat(this.eliminated.slice().sort((a, b) => a.place - b.place).map(e => ({ place: e.place, nick: e.nick })));
         if (this.fn) {
-            alive.forEach((a, i) => { if (!a.isBot) MockDB.recordFnResult(a.nick, { t: Date.now(), place: i + 1, total: this.totalEntrants, paid: this.paid, level: this.blindLevel + 1, agreed: true }); });
-            missing.forEach((e, i) => { if (!e.isBot) MockDB.recordFnResult(e.nick, { t: Date.now(), place: alive.length + i + 1, total: this.totalEntrants, paid: this.paid, level: this.blindLevel + 1, agreed: true }); });
+            alive.forEach((a, i) => { if (!a.isBot) MockDB.recordFnResult(a.nick, { t: Date.now(), place: i + 1, total: this.totalEntrants, id: this.mttId, paid: this.paid, level: this.blindLevel + 1, agreed: true }); });
+            missing.forEach((e, i) => { if (!e.isBot) MockDB.recordFnResult(e.nick, { t: Date.now(), place: alive.length + i + 1, total: this.totalEntrants, id: this.mttId, paid: this.paid, level: this.blindLevel + 1, agreed: true }); });
         }
         const champion = alive.length ? alive[0].nick : (ranking[0] && ranking[0].nick);
         if (process.env.DEV_MTTLOG) console.log(`[MTTLOG] agreed-finish ${JSON.stringify(ranking.slice(0, 8).map(r => r.place + ':' + r.nick))}`);
@@ -5665,7 +5701,7 @@ class MTTManager {
         if (this._blindTimer) { clearInterval(this._blindTimer); this._blindTimer = null; }
         const champion = winner.nick;
         // 연습 모드의 우승은 연습 기록에만 남긴다(명예의 전당·토큰과 무관)
-        if (this.fn) { if (!winner.isBot) MockDB.recordFnResult(champion, { t: Date.now(), place: 1, total: this.totalEntrants, paid: this.paid, level: this.blindLevel + 1 }); }
+        if (this.fn) { if (!winner.isBot) MockDB.recordFnResult(champion, { t: Date.now(), place: 1, total: this.totalEntrants, id: this.mttId, paid: this.paid, level: this.blindLevel + 1 }); }
         else if (!winner.isBot) MockDB.addMttWin(champion, this.totalEntrants, (this.humanEntrants || 0) >= TOKEN_MIN_HUMANS);
 
         // 누락된 탈락자 보완: entrants 중 우승자도, 탈락기록도 없는 사람을 채움
@@ -5678,7 +5714,7 @@ class MTTManager {
         missing.forEach(e => {
             const place = this.totalEntrants - this.eliminated.length;
             this.eliminated.push({ nick: e.nick, place });
-            if (this.fn && !e.isBot) MockDB.recordFnResult(e.nick, { t: Date.now(), place, total: this.totalEntrants, paid: this.paid, level: this.blindLevel + 1 });
+            if (this.fn && !e.isBot) MockDB.recordFnResult(e.nick, { t: Date.now(), place, total: this.totalEntrants, id: this.mttId, paid: this.paid, level: this.blindLevel + 1 });
         });
 
         const ranking = [{ place: 1, nick: champion }].concat(
@@ -6861,6 +6897,16 @@ io.on('connection', (socket) => {
         socket.emit('mttCreated', { mttId, name });
         mtt.broadcastLobby();
         io.emit('mttList', mttListArray());
+    });
+    // 🎞️ [대회 복기] 최근 연습 대회 목록 + 고른 대회의 판들(결정마다 권장 플레이·손실)
+    socket.on('getFnReview', (data) => {
+        if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
+        const u = MockDB.users.get(socket.nickname), all = (u.fnReviews || []).slice().reverse();
+        const meta = r => ({ id: r.id, t: r.t, place: r.place || null, played: r.played || 0, entrants: FN_MTT.entrants, shown: r.hands.length, skipped: r.skipped || 0, agreed: !!r.agreed,
+            loss: Math.round(r.hands.reduce((a, h) => a + (h.loss || 0), 0) * 10) / 10, mistakes: r.hands.reduce((a, h) => a + h.d.filter(x => x.loss > 0).length, 0) });
+        const cur = all.find(r => r.id === (data && data.id)) || all[0] || null;
+        const kinds = {}; Blunder.KIND_KEYS.forEach(k => { kinds[k] = { name: Blunder.KINDS[k].name, tip: Blunder.KINDS[k].tip }; });
+        socket.emit('fnReview', { list: all.map(meta), cur: cur ? Object.assign(meta(cur), { hands: cur.hands.map(h => Object.assign({}, h, { d: h.d.map(x => Object.assign({}, x, { why: Blunder.std(x.why) })) })) }) : null, kinds });
     });
     // 🏁 [파이널나인 연습 기록] 이 모드에서 친 것만 모은 점수·피드백·대회 결과 + 친구들 비교
     socket.on('getFnReport', () => {
