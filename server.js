@@ -1067,7 +1067,7 @@ class GameRoom {
         this.turnTimeLimit = clampInt(settings.turnTimeLimit, 5, 60, 20);
         this.maxRebuys = clampInt(settings.maxRebuys, 0, 3, 1); // 💡 리바이 허용 횟수 (블라인드 레벨 2까지)
         this._rebuyGraceActive = false;
-        // 💵 게임 모드: 'tournament'(기본) | 'cash'
+        // 게임 모드: 'tournament'(기본). 'cash'(블라인드 고정)는 GTO 학습 모드가 내부에서만 쓴다 — 캐시 게임 방은 만들 수 없다
         this.mode = settings.mode === 'cash' ? 'cash' : 'tournament';
         this.cashBlind = clampInt(settings.cashBlind, 1, 100000, 100); // 캐시 빅블라인드 고정값
         // 🎲 런잇트와이스 — 올인 시 보드를 두 번 깔아 분산을 줄인다.
@@ -3075,7 +3075,7 @@ class GameRoom {
         if (this.playerOrder.length === 1) {
             if (this.mode === 'cash') {
                 this.gameStage = 0;
-                io.to(this.roomId).emit('gameMessage', '💵 캐시 테이블 — 플레이어를 기다리는 중입니다...');
+                io.to(this.roomId).emit('gameMessage', '플레이어를 기다리는 중입니다...');
                 this.sendState();
                 this.tryAutoResume();
                 return;
@@ -3166,7 +3166,7 @@ class GameRoom {
             const humansInPlay = this.playerOrder.filter(n => this.players[n] && !this.players[n].isBot).length;
             if (humansInPlay === 0) {
                 this.gameStage = 0;
-                io.to(this.roomId).emit('gameMessage', '💵 캐시 테이블 — 플레이어가 돌아오길 기다리는 중입니다...');
+                io.to(this.roomId).emit('gameMessage', '플레이어가 돌아오길 기다리는 중입니다...');
                 this.sendState();
                 this.tryAutoResume();
                 return;
@@ -4125,7 +4125,7 @@ class GameRoom {
         const ch = this._challenge;
         const rec = {
             t: Date.now(), learn: this.statKind(), kind: a.kind, costBB: a.costBB,
-            modeLabel: this._fnMode ? '파이널나인 연습' : this._learnMode ? '학습' : (ch ? (ch.run ? '증강 컴까기' : '컴까기') : (this.mode === 'cash' ? '캐시' : '토너먼트')),
+            modeLabel: this._fnMode ? '파이널나인 연습' : this._learnMode ? '학습' : (ch ? (ch.run ? '증강 컴까기' : '컴까기') : '토너먼트'),
             street: advice.street, hand: pre.hand, board: pre.board,
             pos: p.position || '', seats: this.playerOrder.length, opp: pre.opp,
             potBB: r1(pre.pot), toCallBB: r1(toCall), stackBB: r1(pre.chips + beforeBet),
@@ -6146,6 +6146,8 @@ io.on('connection', (socket) => {
 
         if (!rooms.has(roomId)) {
             const settings = (data && data.settings) || {};
+            // 💵 캐시 게임은 없앴다(운영자 결정) — 방은 토너먼트로만 만든다. 내부의 'cash' 진행 방식은 GTO 학습 모드(블라인드 고정·칩 자동 충전)만 쓴다.
+            settings.mode = 'tournament'; delete settings.cashBlind; delete settings.runItTwice;
             rooms.set(roomId, new GameRoom(roomId, settings));
             io.emit('roomList', roomListArray());
         }
@@ -7283,11 +7285,6 @@ io.on('connection', (socket) => {
         room.doRebuy(socket.nickname);
     });
 
-    socket.on('cashBuyin', () => {
-        const room = rooms.get(socket.currentRoom);
-        if (!room || !socket.nickname) return;
-        room.doCashBuyin(socket.nickname);
-    });
 
     // 💰 뱅크롤 조회 (로비 표시 갱신)
     socket.on('getBankroll', async () => {
@@ -7331,7 +7328,6 @@ io.on('connection', (socket) => {
             vpipHands: u.vpipHands || 0,
             biggestPot: u.biggestPot || 0,
             seasonPoints: (u.seasonId === CURRENT_SEASON) ? (u.seasonPoints || 0) : 0,
-            cashNet: u.cashNet || 0,
             achievements: ach,
             // 📊 포커 분석 지표
             stats: {

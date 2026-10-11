@@ -542,7 +542,6 @@
         .room-list-empty { color: var(--txt-dim); font-size: 13px; padding: 16px 0; }
         .room-badge { display: inline-block; font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: middle; letter-spacing: 0.2px; }
         .room-badge.tourney { color: #ffd97a; background: rgba(95,74,44,0.5); border: 1px solid rgba(245,201,71,0.35); }
-        .room-badge.cash { color: #7bedaa; background: rgba(26,58,40,0.6); border: 1px solid rgba(124,237,170,0.35); }
         .room-badge.mtt { color: #3a2503; background: var(--gold-grad); border: 1px solid rgba(245,201,71,0.5); }
         .room-meta { display: inline-block; font-size: 11px; color: var(--txt-dim); margin-left: 6px; vertical-align: middle; }
 
@@ -2275,8 +2274,6 @@
         #result-modal .rw-rank.me { background: var(--paper-hi); box-shadow: 0 0 0 1px rgba(255,200,87,0.55), 0 6px 20px rgba(0,0,0,0.5); font-weight: 900; }
 
         /* 🎲 런잇트와이스 — 로비 토글 + 결과창 런별 보드 */
-        .rit-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--ink); font-weight: 700; }
-        .rit-toggle input { width: 16px; height: 16px; accent-color: var(--verm); cursor: pointer; }
         .sd-rit-wrap { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
         .sd-rit-label { color: var(--verm); font-weight: 900; }
         /* 두 런이 공유하는 카드는 흐리게 — 어디서부터 갈렸는지 바로 보이게 */
@@ -2595,7 +2592,6 @@
         .room-count { background: var(--gold-grad) !important; color: #2c1c00 !important; }
         .lobby-col { background: rgba(6,9,18,0.4) !important; border: 1px solid rgba(255,255,255,0.07) !important; border-radius: 12px; }
         #lobby-chat-text { background: rgba(6,9,18,0.7) !important; border: 1px solid rgba(255,255,255,0.12) !important; color: #fff !important; }
-        .rit-toggle { color: #c3cbe0; }
 
         /* ── 포커 테이블: 카본 레일 + 골드 트림 + 에메랄드 펠트 ── */
         .poker-table {
@@ -4524,7 +4520,6 @@
                 <span>🎮 게임 모드</span>
                 <div class="mode-toggle">
                     <button type="button" id="mode-tourney" class="mode-btn active" onclick="setMode('tournament')">🏆 토너먼트</button>
-                    <button type="button" id="mode-cash" class="mode-btn" onclick="setMode('cash')">💵 캐시</button>
                     <button type="button" id="mode-mtt" class="mode-btn" onclick="setMode('mtt')">👑 MTT</button>
                 </div>
             </div>
@@ -4535,15 +4530,6 @@
             <div class="setting-row" id="row-blindtime">
                 <span>⏱️ 블라인드 업 (분)</span>
                 <input type="number" id="set-blind-time" class="setting-input" value="10" min="1" max="60">
-            </div>
-            <div class="setting-row" id="row-cashblind" style="display:none;">
-                <span>🎯 빅블라인드 (고정)</span>
-                <input type="number" id="set-cash-blind" class="setting-input" value="100" min="2" step="10" max="100000">
-            </div>
-            <!-- 🎲 런잇트와이스 — 캐시 전용 (TDA 규정상 토너먼트 금지) -->
-            <div class="setting-row" id="row-rit" style="display:none;">
-                <span>🎲 런잇트와이스 <span style="font-size:11px; color:var(--txt-dim); font-weight:400;">(올인 시 보드 2번)</span></span>
-                <label class="rit-toggle"><input type="checkbox" id="set-rit"><span>사용</span></label>
             </div>
             <div class="setting-row" id="row-turntime">
                 <span>⏳ 턴 대기 시간 (초)</span>
@@ -5929,18 +5915,13 @@
     function setMode(m) {
         selectedMode = m;
         document.getElementById('mode-tourney').classList.toggle('active', m === 'tournament');
-        document.getElementById('mode-cash').classList.toggle('active', m === 'cash');
         document.getElementById('mode-mtt').classList.toggle('active', m === 'mtt');
         // 모드별 설정 행 표시 전환
-        const isCash = (m === 'cash');
         const isMtt = (m === 'mtt');
-        document.getElementById('row-blindtime').style.display = isCash ? 'none' : 'flex';
-        document.getElementById('row-cashblind').style.display = isCash ? 'flex' : 'none';
-        document.getElementById('row-rit').style.display = isCash ? 'flex' : 'none'; // 🎲 런잇트와이스는 캐시 전용
-        document.getElementById('row-rebuys').style.display = (isCash || isMtt) ? 'none' : 'flex'; // MTT는 리바이 없음
+        document.getElementById('row-rebuys').style.display = isMtt ? 'none' : 'flex'; // MTT는 리바이 없음
         document.getElementById('row-turntime').style.display = isMtt ? 'none' : 'flex';
         document.getElementById('row-mtt-tablesize').style.display = isMtt ? 'flex' : 'none';
-        document.getElementById('chips-hint').innerText = isCash ? '(바이인)' : (isMtt ? '(시작 스택)' : '');
+        document.getElementById('chips-hint').innerText = isMtt ? '(시작 스택)' : '';
         // 버튼 라벨/입력 placeholder 전환
         const btn = document.getElementById('btn-create-room');
         const input = document.getElementById('room-input');
@@ -5970,12 +5951,10 @@
         const blindTime = (parseInt(document.getElementById('set-blind-time').value) || 10) * 60;
         const turnTime = parseInt(document.getElementById('set-turn-time').value) || 20;
         const maxRebuys = parseInt(document.getElementById('set-rebuys').value);
-        const cashBlind = parseInt(document.getElementById('set-cash-blind').value) || 100;
-        const runItTwice = !!document.getElementById('set-rit').checked; // 🎲 캐시 전용 (서버가 모드 재검증)
         socket.emit('joinRoom', { roomId: rm, settings: {
             startingChips: chips, blindUpInterval: blindTime, turnTimeLimit: turnTime,
             maxRebuys: isNaN(maxRebuys) ? 1 : maxRebuys,
-            mode: selectedMode, cashBlind: cashBlind, runItTwice: runItTwice
+            mode: 'tournament'
         } });
     }
 
@@ -6119,12 +6098,10 @@
         rooms.forEach(r => {
             // 구버전 호환: 문자열이면 객체로 변환
             const room = (typeof r === 'string') ? { id: r, mode: 'tournament', total: 0, playing: false } : r;
-            const isCash = room.mode === 'cash';
             const isCoop = room.mode === 'coop';
             const badge = isCoop ? '<span class="room-badge coop">🤖 컴까기 협동</span>'
-                : isCash ? '<span class="room-badge cash">💵 캐시</span>'
                 : '<span class="room-badge tourney">🏆 토너먼트</span>';
-            const suit = isCoop ? '🤖' : (isCash ? '💵' : '♠');
+            const suit = isCoop ? '🤖' : '♠';
             const meta = `<span class="room-meta">${room.total || 0}명${room.playing ? ' · 진행중' : ' · 대기중'}</span>`;
             const btn = document.createElement('div');
             btn.className = 'room-item';
@@ -7013,14 +6990,11 @@
         } 
         else if (data.gameStage === 0) {
             document.getElementById('action-controls').style.display = 'none';
-            const isCash = data.gameMode === 'cash';
             const startBtn = document.querySelector('#ready-controls .btn-start');
-            if (startBtn) startBtn.innerText = isCash ? '💵 캐시게임 시작' : '🏆 토너먼트 시작';
+            if (startBtn) startBtn.innerText = '🏆 토너먼트 시작';
             if (isIAmHost) {
                 document.getElementById('ready-controls').style.display = 'block';
-                ind.innerText = isCash
-                    ? '봇을 추가하고 [캐시게임 시작]을 눌러주세요! (시작 후엔 자동 진행)'
-                    : '플레이어들이 모두 모였다면 [토너먼트 시작] 버튼을 눌러주세요!';
+                ind.innerText = '플레이어들이 모두 모였다면 [토너먼트 시작] 버튼을 눌러주세요!';
                 renderBotManager(data);
             } else {
                 document.getElementById('ready-controls').style.display = 'none';
@@ -7553,26 +7527,15 @@
     });
 
     // 🔄 리바이
-    let rebuyKind = 'rebuy'; // 'rebuy' | 'cash'
     socket.on('rebuyOffer', d => {
-        rebuyKind = 'rebuy';
         document.querySelector('#rebuy-prompt .rb-title').innerText = '💸 파산했습니다!';
         document.querySelector('#rebuy-prompt .rb-sub').innerHTML = `리바이로 다시 일어서 봅시다 (잔여 <span id="rb-remaining">${d.remaining}</span>회)`;
         document.querySelector('#rebuy-prompt .rb-yes').innerHTML = `🔄 리바이 (${Number(d.stack).toLocaleString()} 칩)`;
         document.getElementById('rebuy-prompt').style.display = 'block';
         SFX.myturn();
     });
-    // 💵 캐시 바이인 오퍼 (무제한)
-    socket.on('cashBuyinOffer', d => {
-        rebuyKind = 'cash';
-        document.querySelector('#rebuy-prompt .rb-title').innerText = '💵 칩이 떨어졌습니다!';
-        document.querySelector('#rebuy-prompt .rb-sub').innerText = '캐시 테이블 — 언제든 다시 바이인할 수 있습니다';
-        document.querySelector('#rebuy-prompt .rb-yes').innerHTML = `💵 바이인 (${Number(d.stack).toLocaleString()} 칩)`;
-        document.getElementById('rebuy-prompt').style.display = 'block';
-        SFX.myturn();
-    });
     function doRebuy() {
-        socket.emit(rebuyKind === 'cash' ? 'cashBuyin' : 'rebuy');
+        socket.emit('rebuy');
         document.getElementById('rebuy-prompt').style.display = 'none';
         SFX.chip();
     }
@@ -9177,11 +9140,9 @@
                    <div><b>${has(s.af) ? s.af : '–'}</b><span>AF · 공격성</span></div>
                </div>`
             : '<div class="pf-ach-empty" style="margin-top:10px;">📊 지표 분석에는 몇 핸드가 더 필요합니다</div>';
-        const cashStr = (u.cashNet || 0) !== 0 ? `${u.cashNet > 0 ? '+' : ''}${(u.cashNet || 0).toLocaleString()}` : '0';
         const more = `<div class="pf-more" id="pf-more" style="display:none;">
                 ${(s.sampleActions || 0) > 0 ? row('3-Bet', fmtPct(s.threeBet), '리레이즈 빈도') + row('Fold→Bet', fmtPct(s.foldToBet), '벳에 폴드') + row('WTSD', fmtPct(s.wtsd), '쇼다운 도달') + row('W$SD', fmtPct(s.wsd), '쇼다운 승률') : ''}
                 ${row('시즌 포인트', (u.seasonPoints || 0).toLocaleString() + 'pt', '')}
-                ${row('캐시 순익', cashStr, '')}
                 ${row('최대 획득 팟', (u.biggestPot || 0).toLocaleString(), '')}
                 ${(s.sampleActions || 0) > 0 ? row('분석한 액션', (s.sampleActions || 0).toLocaleString() + '개', '') : ''}
                 ${ach.length ? '<div class="pf-ach-wrap" style="margin-top:10px;">' + ach.map(a => `<span class="pf-ach"><span class="a-ico">${a.icon}</span>${esc(a.name)}</span>`).join('') + '</div>' : ''}
