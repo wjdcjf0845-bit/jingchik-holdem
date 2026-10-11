@@ -3246,6 +3246,39 @@
         .lobby-shell .lb-col > br { display: none; }
         .lobby-shell .room-list-box { margin-bottom: 14px; }
         .lobby-shell #lobby-social { margin-top: 0; }
+        /* ═══ 🧹 대기실 정리: 프로필은 아바타 하나 · 메뉴는 4칸 격자 · 방 설정은 접어 둔다 ═══ */
+        .lb-head { flex-wrap: nowrap !important; }
+        .lb-head #lobby-profile { position: relative; flex: 0 0 auto !important; display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 0; padding: 0; background: none; border: none; }
+        .lb-head #lp-avatar { width: 54px; height: 54px; font-size: 22px; }
+        #lobby-profile .lp-cam { position: absolute; right: -4px; top: 34px; width: 24px; height: 24px; padding: 0; border-radius: 50%; font-size: 12px; line-height: 1; background: #1c2540 !important; border: 1px solid rgba(255,255,255,0.3) !important; color: #fff; cursor: pointer; }
+        #lobby-profile #lp-remove { padding: 0; background: none !important; border: none !important; font-size: 10.5px; font-weight: 700; color: #8d98b3 !important; text-decoration: underline; cursor: pointer; }
+        .lb-head { flex-wrap: wrap !important; }
+        .lb-head .lb-titles { flex: 1 1 0; }
+        .lb-head #lp-msg { flex: 1 1 100%; margin: 0; display: none; }
+        .lb-head #lp-msg[style*="color"] { display: block; }
+        .lb-sec { margin: 0 0 8px !important; }
+        .lb-sec-row { display: flex; align-items: center; justify-content: space-between; }
+        .lb-help { font: inherit; font-size: 12px; font-weight: 800; letter-spacing: 0; color: #aeb9d4; background: none; border: none; padding: 2px 0; cursor: pointer; }
+        .lb-help:hover { color: #fff; }
+        .lobby-shell .lb-tiles, .lobby-shell .fn-row, .lobby-shell .rank-row, .lobby-shell #skill-mini { margin-bottom: 16px !important; }
+        .lobby-shell .rank-row { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+        .lobby-shell .rank-btn { position: relative; padding: 9px 2px 8px; }
+        .lobby-shell .rank-btn .daily-badge { font-style: normal; top: -5px; right: -5px; }
+        .lobby-shell .fn-btn { font-size: 14.5px; padding: 12px 12px 11px; }
+        .lb-set { margin: 0 0 9px; border-radius: 13px; background: rgba(6,9,18,0.45); border: 1px solid rgba(255,255,255,0.10); }
+        .lb-set > summary { list-style: none; cursor: pointer; padding: 10px 13px; font-size: 13px; font-weight: 800; color: #c3cbe0; display: flex; align-items: center; gap: 8px; }
+        .lb-set > summary::-webkit-details-marker { display: none; }
+        .lb-set > summary::after { content: '▾'; margin-left: auto; color: #8d98b3; transition: transform 0.15s; }
+        .lb-set[open] > summary::after { transform: rotate(180deg); }
+        .lb-set > summary small { font-size: 11.5px; font-weight: 600; color: #8d98b3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .lb-set .settings-panel { margin: 0 !important; border: none !important; border-top: 1px solid rgba(255,255,255,0.08) !important; border-radius: 0 0 13px 13px !important; background: none !important; box-shadow: none !important; }
+        @media screen and (max-width: 960px) and (orientation: landscape) { #lobby-profile .lp-cam { top: 27px; } }
+        .lobby-shell #guide-badge { right: 6px; }
+        .lobby-shell .rank-btn .daily-badge { right: 2px; }
+        .lb-create #room-input { font-size: 15px !important; padding: 11px 13px !important; text-align: left; }
+        .lb-create { display: flex; gap: 8px; align-items: stretch; }
+        .lb-create #room-input { flex: 1 1 auto; min-width: 0; width: auto !important; margin: 0 !important; box-sizing: border-box; }
+        .lb-create #btn-create-room { flex: 0 0 auto; width: auto !important; margin: 0 !important; padding: 0 18px !important; font-size: 15px !important; white-space: nowrap; }
         @media screen and (max-width: 520px) {
             #lobby-overlay .login-box.lobby-shell { padding: 14px 13px 16px; }
             .lb-head { flex-wrap: wrap; gap: 10px; }
@@ -3598,7 +3631,6 @@
 
         /* ═══ 🧠 GTO 문제 학습 ═══ */
         #quiz-btn.lb-tile { --tile: #ff8bd8; --tile-grad: linear-gradient(180deg, #ff9fe0, #d6459f); }
-        .lb-tiles #shop-btn.lb-tile { grid-column: 1 / -1; }   /* 타일이 5개라 마지막(상점)은 한 줄을 다 쓴다 */
         #quiz-modal { align-items: center; justify-content: center; }
         .quiz-card { width: 600px; max-width: 96vw; max-height: calc(100dvh - 20px); overflow-y: auto; text-align: left; }
         .qz-intro { font-size: 12px; color: #9aa6c2; margin-bottom: 10px; word-break: keep-all; }
@@ -4498,52 +4530,51 @@
             <div id="lobby-nick"></div>
         </div>
 
-        <!-- 📷 내 프로필 사진 — 대기실에서 바로 올린다 (상점까지 들어갈 필요 없이) -->
+        <!-- 📷 내 프로필 사진 — 아바타를 누르면 바로 올린다 -->
         <div id="lobby-profile">
             <div class="pf-avatar" id="lp-avatar" onclick="pickPhoto()" title="눌러서 사진 바꾸기">?</div>
-            <div class="lp-side">
-                <div class="lp-btns">
-                    <button type="button" onclick="pickPhoto()">📷 내 사진 올리기</button>
-                    <button type="button" id="lp-remove" onclick="removePhoto()" style="display:none;">내리기</button>
-                </div>
-                <div id="lp-msg">이미지 파일(JPG·PNG·WEBP)을 고르면 프로필 사진이 됩니다</div>
-            </div>
+            <button type="button" class="lp-cam" onclick="pickPhoto()" title="내 사진 올리기">📷</button>
+            <button type="button" id="lp-remove" onclick="removePhoto()" style="display:none;">사진 내리기</button>
         </div>
+        <div id="lp-msg"></div>
       </div>
 
       <div class="lb-main">
        <div class="lb-col lb-play">
-        <div class="lb-sec">🎮 바로 즐기기</div>
-        <div class="lb-tiles">
-            <button id="guide-btn" class="btn-join lb-tile" onclick="openGuide()"><span class="lt-ico">🐣</span><span class="lt-txt"><b>처음 배우기</b><small>규칙부터 한 판 따라 치기</small></span><span id="guide-badge" class="daily-badge" style="display:none;">NEW</span></button>
-            <button id="challenge-btn" class="btn-join lb-tile" onclick="openChallenge()"><span class="lt-ico">🤖</span><span class="lt-txt"><b>컴까기</b><small>AI 도장깨기 10단계</small></span></button>
-            <button id="learn-btn" class="btn-join lb-tile" onclick="startLearnMode()"><span class="lt-ico">🎓</span><span class="lt-txt"><b>GTO 학습</b><small>AI 5명과 실전 코칭</small></span></button>
-            <button id="daily-btn" class="btn-join lb-tile" onclick="openDaily()"><span class="lt-ico">🎁</span><span class="lt-txt"><b>출석 · 미션</b><small>매일 뱅크롤 보상</small></span><span id="daily-badge" class="daily-badge" style="display:none;">!</span></button>
-            <button id="quiz-btn" class="btn-join lb-tile" onclick="openQuiz()"><span class="lt-ico">🧠</span><span class="lt-txt"><b>GTO 문제</b><small>상황별 정답 맞히기</small></span></button>
-            <button id="shop-btn" class="btn-join lb-tile" onclick="openShop()"><span class="lt-ico">🎨</span><span class="lt-txt"><b>꾸미기 상점</b><small>뒷면 · 아바타 · 칭호</small></span></button>
+        <!-- 🏁 파이널나인 딥스택 연습 (20인 MTT) — 기록은 이 모드 것만 따로 모은다 -->
+        <div class="lb-sec">🏁 대회 연습</div>
+        <div class="fn-row">
+            <button type="button" class="fn-btn go" onclick="socket.emit('createFnMtt')">파이널나인 딥스택 연습 <small>20인 대회 열기 · 친구는 열린 방 목록에서 참가</small></button>
+            <button type="button" class="fn-btn" onclick="socket.emit('getFnReport')">연습 기록 <small>점수 · 복기</small></button>
         </div>
 
-        <!-- 🏆 순위·전당 -->
+        <div class="lb-sec">🎓 연습 · 학습</div>
+        <div class="lb-tiles">
+            <button id="learn-btn" class="btn-join lb-tile" onclick="startLearnMode()"><span class="lt-ico">🎓</span><span class="lt-txt"><b>GTO 학습</b><small>AI 5명과 실전 코칭</small></span></button>
+            <button id="quiz-btn" class="btn-join lb-tile" onclick="openQuiz()"><span class="lt-ico">🧠</span><span class="lt-txt"><b>GTO 문제</b><small>상황별 정답 맞히기</small></span></button>
+            <button id="challenge-btn" class="btn-join lb-tile" onclick="openChallenge()"><span class="lt-ico">🤖</span><span class="lt-txt"><b>컴까기</b><small>AI 도장깨기 10단계</small></span></button>
+            <button id="guide-btn" class="btn-join lb-tile" onclick="openGuide()"><span class="lt-ico">🐣</span><span class="lt-txt"><b>처음 배우기</b><small>규칙부터 한 판 따라 치기</small></span><span id="guide-badge" class="daily-badge" style="display:none;">NEW</span></button>
+        </div>
+
+        <!-- 📊 기록·순위·기타 메뉴 (4칸 × 2줄) -->
+        <div class="lb-sec lb-sec-row"><span>📊 기록 · 순위</span><button type="button" class="lb-help" onclick="openHelp()">📖 도움말</button></div>
         <div class="rank-row">
+            <button class="rank-btn" onclick="socket.emit('getSkillBoard')" title="친구들과 실력 비교">📈<span>실력</span></button>
+            <button class="rank-btn" onclick="openSessionReport()" title="내 세션 리포트">📊<span>리포트</span></button>
             <button class="rank-btn" onclick="socket.emit('getHallOfFame')" title="명예의 전당">🏆<span>전당</span></button>
             <button class="rank-btn" onclick="socket.emit('getSeasonBoard')" title="시즌 랭킹">📅<span>시즌</span></button>
             <button class="rank-btn" onclick="socket.emit('getBankrollBoard')" title="뱅크롤 순위">💰<span>뱅크롤</span></button>
             <button class="rank-btn" onclick="socket.emit('getMttChampions')" title="MTT 챔피언">👑<span>챔피언</span></button>
-            <button class="rank-btn report" onclick="socket.emit('getSkillBoard')" title="친구들과 실력 비교">📈<span>실력</span></button>
-            <button class="rank-btn report" onclick="openSessionReport()" title="내 세션 리포트">📊<span>리포트</span></button>
-            <button class="rank-btn help" onclick="openHelp()" title="족보·규칙 도움말">📖<span>도움말</span></button>
-        </div>
-
-        <!-- 🏁 파이널나인 딥스택 연습 (20인 MTT) — 기록은 이 모드 것만 따로 모은다 -->
-        <div class="fn-row">
-            <button type="button" class="fn-btn go" onclick="socket.emit('createFnMtt')">🏁 파이널나인 딥스택 연습 <small>20인 대회 열기 · 친구는 아래 목록에서 참가</small></button>
-            <button type="button" class="fn-btn" onclick="socket.emit('getFnReport')">📋 연습 기록 <small>점수 · 피드백</small></button>
+            <button class="rank-btn" onclick="openDaily()" title="출석 · 미션 — 매일 뱅크롤 보상">🎁<span>출석</span><i id="daily-badge" class="daily-badge" style="display:none;">!</i></button>
+            <button class="rank-btn" onclick="openShop()" title="꾸미기 상점 — 뒷면 · 아바타 · 칭호">🎨<span>상점</span></button>
         </div>
 
         <!-- 📈 실력 순위 — 로비에서 바로 보이게 (누르면 자세한 비교) -->
         <div id="skill-mini" onclick="socket.emit('getSkillBoard')" style="display:none;"></div>
 
         <div class="lb-sec">♠ 방 만들기</div>
+        <details class="lb-set">
+            <summary>⚙ 방 설정 <small id="lb-set-sum"></small></summary>
         <div class="settings-panel">
             <div class="setting-row">
                 <span>🎮 게임 모드</span>
@@ -4574,9 +4605,12 @@
                 <input type="number" id="set-mtt-tablesize" class="setting-input" value="6" min="2" max="6">
             </div>
         </div>
+        </details>
 
-        <input type="text" id="room-input" class="login-input" placeholder="생성할 방 이름" maxlength="20" autocomplete="off" style="width:100%;"><br>
-        <button class="btn-join" id="btn-create-room" onclick="createRoom()" style="width: 100%; margin-bottom: 14px;">♠ 새 방 만들기</button>
+        <div class="lb-create">
+        <input type="text" id="room-input" class="login-input" placeholder="방 이름" maxlength="20" autocomplete="off">
+        <button class="btn-join" id="btn-create-room" onclick="createRoom()">방 만들기</button>
+        </div>
 
        </div>
 
@@ -5948,7 +5982,16 @@
     });
 
     let selectedMode = 'tournament';
+    // ⚙ 접어 둔 방 설정의 현재 값을 한 줄로 보여 준다
+    function updateSetSum() {
+        const el = document.getElementById('lb-set-sum'); if (!el) return;
+        const v = id => parseInt(document.getElementById(id).value) || 0;
+        el.innerText = `${selectedMode === 'mtt' ? 'MTT' : '토너먼트'} · ${v('set-chips').toLocaleString()}칩 · 레벨 ${v('set-blind-time')}분`;
+    }
+    document.addEventListener('input', e => { if (e.target.closest && e.target.closest('.lb-set')) updateSetSum(); });
+    setTimeout(updateSetSum, 0);
     function setMode(m) {
+        setTimeout(updateSetSum, 0);
         selectedMode = m;
         document.getElementById('mode-tourney').classList.toggle('active', m === 'tournament');
         document.getElementById('mode-mtt').classList.toggle('active', m === 'mtt');
