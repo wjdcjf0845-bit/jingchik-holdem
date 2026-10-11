@@ -1276,6 +1276,9 @@ class GameRoom {
                     handId: this.handId,
                     hostNickname: this.hostNickname,
                     startingChips: this.startingChips,
+                    // 🪑 대기 화면에 보여 줄 방 설정 요약 (시작 전 일반 토너먼트 방에서만)
+                    lobby: (this.gameStage === 0 && !this.tournamentStarted && this.mode === 'tournament' && !this.mttId && !this._challenge)
+                        ? { sb: this.blindStructure[0].sb, bb: this.blindStructure[0].bb, levelSec: this.blindUpInterval, rebuys: this.maxRebuys, turnSec: this.turnTimeLimit } : null,
                     playerOrder: this.playerOrder
                 });
             });

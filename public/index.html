@@ -498,9 +498,6 @@
         .btn-start:hover { filter: brightness(1.08); transform: translateY(-2px); }
 
         /* ── 봇 매니저 (대기실) ── */
-        #bot-manager { margin-bottom: 12px; }
-        #bot-list { display: flex; flex-wrap: wrap; gap: 7px; justify-content: center; margin-bottom: 10px; }
-        #bot-list:empty { margin-bottom: 0; }
         .bot-chip {
             display: inline-flex; align-items: center; gap: 6px;
             background: linear-gradient(160deg, rgba(40,48,66,0.9), rgba(20,25,38,0.95));
@@ -517,6 +514,41 @@
         }
         .btn-addbot:hover { filter: brightness(1.12); border-color: rgba(124,237,170,0.6); }
         .btn-addbot:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* ── 🪑 대기 화면 카드: 인원 · 방 설정 · AI 수 · 시작 ── */
+        .wc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+        .wc-title { font-size: 15px; font-weight: 900; color: #eef2fb; letter-spacing: 0.3px; }
+        .wc-count { font-family: var(--font-num); font-size: 15px; font-weight: 800; color: #7bedaa; white-space: nowrap; }
+        .wc-info { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+        .wc-info:empty { display: none; }
+        .wc-info > div { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 6px 4px; text-align: center; min-width: 0; }
+        .wc-info span { display: block; font-size: 10.5px; color: #8f9ab5; font-weight: 700; margin-bottom: 2px; white-space: nowrap; }
+        .wc-info b { display: block; font-family: var(--font-num); font-size: 13.5px; color: #eef2fb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .wc-bots { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; padding: 6px 6px 6px 12px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); }
+        .wc-bots .wc-lbl { font-size: 13px; font-weight: 800; color: #c9d2e8; }
+        .wc-bots .wc-lbl small { font-size: 11px; font-weight: 600; color: #8f9ab5; margin-left: 6px; }
+        .wc-step { display: flex; align-items: center; gap: 4px; }
+        .wc-step button { width: 34px; height: 34px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.08); color: #eef2fb; font-size: 19px; font-weight: 900; line-height: 1; cursor: pointer; }
+        .wc-step button:hover:not(:disabled) { background: rgba(255,255,255,0.16); }
+        .wc-step button:disabled { opacity: 0.3; cursor: not-allowed; }
+        .wc-step b { min-width: 30px; text-align: center; font-family: var(--font-num); font-size: 17px; color: #eef2fb; }
+        #ready-controls .btn-start { padding: 13px 0; font-size: 19px; }
+        #ready-controls .btn-start:disabled { filter: grayscale(0.7) brightness(0.7); cursor: not-allowed; transform: none; }
+        .wc-wait { font-size: 12.5px; color: #a8b3cc; font-weight: 700; text-align: center; margin-top: 8px; }
+        .wc-wait:empty { display: none; }
+        body.wait-room #turn-indicator { display: none !important; }
+        body.wait-room .pot-area { visibility: hidden; }
+        @media (max-width: 900px) {
+            .wc-head { margin-bottom: 6px; }
+            .wc-title, .wc-count { font-size: 13.5px; }
+            .wc-info { gap: 4px; margin-bottom: 6px; }
+            .wc-info > div { padding: 4px 2px; border-radius: 8px; }
+            .wc-info span { font-size: 9.5px; margin-bottom: 1px; }
+            .wc-info b { font-size: 12px; }
+            .wc-bots { margin-bottom: 6px; padding: 4px 4px 4px 10px; }
+            .wc-step button { width: 32px; height: 32px; }
+            #ready-controls .btn-start { padding: 11px 0; font-size: 17px; }
+        }
         .diff-easy { color:#7bedaa !important; border-color:rgba(124,237,170,0.4) !important; margin-bottom:0 !important; }
         .diff-normal { color:#ffd97a !important; border-color:rgba(245,201,71,0.4) !important; margin-bottom:0 !important; }
         .diff-hard { color:#ff8a7a !important; border-color:rgba(255,138,122,0.4) !important; margin-bottom:0 !important; }
@@ -1511,9 +1543,6 @@
             .step-btn { width: 34px; height: 34px; font-size: 18px; }
             .slider-row { gap: 5px; }
             /* 봇 매니저(대기실) 컴팩트 */
-            #bot-list { gap: 4px; }
-            .bot-chip { font-size: 11px; padding: 4px 6px 4px 9px; }
-            .btn-addbot { padding: 10px 0; font-size: 14px; }
 
             #chat-panel { transform: translateX(100%); z-index: 4000; box-shadow: -5px 0 20px rgba(0,0,0,0.8); width: 85%; max-width: 320px; }
             #chat-panel.open { transform: translateX(0); }
@@ -4626,11 +4655,18 @@
 
     <div class="controls">
         <div id="ready-controls" style="display:none;">
-            <div id="bot-manager">
-                <div id="bot-list"></div>
-                <button class="btn-addbot diff-hard" onclick="addBotDiff('hard')" style="width:100%; padding:11px 0; font-size:14px;">🔴 고수 AI 추가</button>
+            <div class="wc-head"><span class="wc-title">게임 대기 중</span><span class="wc-count" id="wc-count"></span></div>
+            <div class="wc-info" id="wc-info"></div>
+            <div id="bot-manager" class="wc-bots">
+                <span class="wc-lbl">AI 상대<small>고수</small></span>
+                <div class="wc-step">
+                    <button type="button" id="wc-bot-minus" title="AI 한 명 빼기">−</button>
+                    <b id="wc-bot-n">0</b>
+                    <button type="button" id="wc-bot-plus" title="AI 한 명 추가" onclick="addBotDiff('hard')">+</button>
+                </div>
             </div>
             <button class="btn-start" onclick="socket.emit('startFirstHand')" style="width:100%;">토너먼트 시작</button>
+            <div class="wc-wait" id="wc-wait"></div>
         </div>
 
         <div id="action-controls" class="action-container" style="display:none;">
@@ -6956,6 +6992,9 @@
             if (_sb) _sb.style.display = 'none';
         }
         const isSpectator = data.playerOrder && !data.playerOrder.includes(myNickname);
+        // 🪑 시작 전 대기 화면(일반 토너먼트 방): 빈 팟·안내 줄을 감추고 대기 카드 하나로 보여 준다
+        const waitRoom = !!data.lobby && data.gameStage === 0 && !(myPlayer && myPlayer.isSpectator);
+        document.body.classList.toggle('wait-room', waitRoom);
 
         if (myPlayer && myPlayer.isSpectator) {
             document.getElementById('ready-controls').style.display = 'none';
@@ -6990,16 +7029,9 @@
         } 
         else if (data.gameStage === 0) {
             document.getElementById('action-controls').style.display = 'none';
-            const startBtn = document.querySelector('#ready-controls .btn-start');
-            if (startBtn) startBtn.innerText = '🏆 토너먼트 시작';
-            if (isIAmHost) {
-                document.getElementById('ready-controls').style.display = 'block';
-                ind.innerText = '플레이어들이 모두 모였다면 [토너먼트 시작] 버튼을 눌러주세요!';
-                renderBotManager(data);
-            } else {
-                document.getElementById('ready-controls').style.display = 'none';
-                ind.innerText = `방장[${data.hostNickname}]님이 게임을 개시하길 대기 중입니다...`;
-            }
+            ind.innerText = isIAmHost ? '플레이어들이 모두 모였다면 [토너먼트 시작] 버튼을 눌러주세요!' : `방장[${data.hostNickname}]님이 게임을 개시하길 대기 중입니다...`;
+            document.getElementById('ready-controls').style.display = (isIAmHost || waitRoom) ? 'block' : 'none';
+            if (isIAmHost || waitRoom) renderBotManager(data);
         } else if (data.gameStage === 5) {
             document.getElementById('ready-controls').style.display = 'none';
             document.getElementById('action-controls').style.display = 'none';
@@ -8284,21 +8316,33 @@
     // 🤖 봇 매니저: 대기실에서 봇 목록 + 추가 버튼 상태 관리
     function addBotDiff(difficulty) { socket.emit('addBot', { difficulty }); }
     function renderBotManager(data) {
-        const bots = Object.keys(data.players).filter(n => data.players[n] && data.players[n].isBot);
-        const list = document.getElementById('bot-list');
-        list.innerHTML = bots.map(n => {
-            const diff = data.players[n].difficulty || 'normal';
-            const badge = { easy: '🟢', normal: '🟡', hard: '🔴' }[diff] || '🟡';
-            return `<span class="bot-chip">${badge} ${esc(n)}<button class="bot-x" data-bot="${esc(n)}">✕</button></span>`;
-        }).join('');
-        list.querySelectorAll('.bot-x').forEach(b => {
-            b.onclick = () => socket.emit('removeBot', b.dataset.bot);
-        });
-        const full = Object.keys(data.players).length >= 6;
-        document.querySelectorAll('.diff-easy, .diff-normal, .diff-hard').forEach(btn => {
-            btn.disabled = full;
-            btn.style.opacity = full ? '0.4' : '1';
-        });
+        const seated = Object.keys(data.players).filter(n => data.players[n] && !data.players[n].isSpectator);
+        const bots = seated.filter(n => data.players[n].isBot);
+        const max = data.seatsMax || 6, full = seated.length >= max, host = (data.hostNickname === myNickname);
+        document.getElementById('wc-count').innerText = `${seated.length} / ${max}명`;
+        // 방 설정 요약
+        const lb = data.lobby, cell = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
+        document.getElementById('wc-info').innerHTML = lb ? [
+            cell('시작 칩', (data.startingChips || 0).toLocaleString()),
+            cell('블라인드', `${lb.sb.toLocaleString()}/${lb.bb.toLocaleString()}`),
+            cell('레벨', lb.levelSec % 60 ? `${lb.levelSec}초` : `${lb.levelSec / 60}분`),
+            cell('리바이', lb.rebuys ? `${lb.rebuys}회` : '없음')
+        ].join('') : '';
+        // AI 수 조절(방장만): − 는 마지막에 넣은 AI부터 뺀다
+        document.getElementById('bot-manager').style.display = host ? '' : 'none';
+        document.getElementById('wc-bot-n').innerText = bots.length;
+        const minus = document.getElementById('wc-bot-minus');
+        minus.disabled = !bots.length;
+        minus.onclick = () => { if (bots.length) socket.emit('removeBot', bots[bots.length - 1]); };
+        document.getElementById('wc-bot-plus').disabled = full;
+        // 시작 버튼(방장만) · 안내 한 줄
+        const startBtn = document.querySelector('#ready-controls .btn-start');
+        startBtn.style.display = host ? '' : 'none';
+        startBtn.disabled = seated.length < 2;
+        startBtn.innerText = '토너먼트 시작';
+        document.getElementById('wc-wait').innerText = host
+            ? (seated.length < 2 ? '2명부터 시작할 수 있습니다 — AI를 추가하거나 친구를 초대하세요' : '')
+            : `방장 ${data.hostNickname} 님이 시작하기를 기다리는 중입니다`;
     }
 
     function openProfile(nick) { socket.emit('getProfile', nick); }
