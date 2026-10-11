@@ -130,6 +130,8 @@ const BOT_TURN_DEFAULT = true;
 //   측정(2026-10-11, 20bb 시작 · 1분 레벨 · 24테이블 277,175핸드): 새 − 옛 = +0.5 ± 2.6 bb/100 — 차이가 확인되지 않았다(해롭지도 않다).
 //   조언·채점·문제와 같은 계산을 쓰게 하려고 켠다.
 const BOT_JAM_DEFAULT = true;
+// 🏁 봇이 20~30bb 대에서 "직접 푼 대회용 프리플랍 자료"(lib/preflop_mtt.json.gz)를 쓸지 — 맞대결 스위치 BOT_AB11.
+const BOT_MTT_DEFAULT = true;   // 운영자 결정(2026-10-11): 맞대결 측정 없이 켠다
 const OPEN_PRIOR = {};                          // 자리별 오픈 범위(패마다 여는 확률) — jamInfo 가 채워 쓴다
 const BOT_RIVER_DEFAULT = false;                // 고수 봇이 리버 계산을 쓸지 — 맞대결 측정 전(botV9)
 const GtoAdvice = require('./lib/gtoadvice');   // 🎓 학습모드 조언 — 상대 수·포지션·스택 깊이별
@@ -1706,7 +1708,8 @@ class GameRoom {
                     _opnPos = _o ? (this.players[_o].position || '') : '';
                 }
                 const _study = _v4 && !!_opnPos && (isBB || p.position === 'SB');      // 블라인드 방어에만 적용(콜드콜 자리는 예전 기준)
-                let _chartPick = null;
+                let _chartPick = null, _mttBot = false;
+                const _effB = (() => { const os = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded).map(n => this.players[n].chips + (this.players[n].currentBet || 0)); return os.length ? Math.min(p.chips + p.currentBet, Math.max(...os)) / bb : 0; })();
                 let rt = preflopRangeTier(code, p.position || '', facingRaise,
                     { numActive: _numActive, threeBetPlus: _threeBetPlus, headsUp: _huBot, closing: _huBot && !!isBB });
                 // 📊 [맞대결 실측 — 2026-10-06, 100bb 하드 봇 5명, 각 약 3만 핸드]
@@ -1721,7 +1724,10 @@ class GameRoom {
                     // 📊 [범위표 — 측정 스위치 BOT_AB6] 단일 오픈을 받는 블라인드: lib/ranges.js 의 빈도대로 3벳·콜·폴드를 고른다(가격 보정 포함).
                     //    플랍을 솔버 자료로 치게 된 뒤라 넓은 방어가 이제는 성립하는지 다시 잰다.
                     if (!_threeBetPlus && this.botV6(nick)) {
-                        const rtC = preflopRangeTier(code, p.position || '', true, { chart: true, raises: 1, openerPos: _opnPos, closing: !!isBB, potOdds });
+                        // 🏁 유효 스택이 대회용 자료의 범위 안이면(그리고 스위치가 켜져 있으면) 그 깊이의 표를 쓴다
+                        const _dep = this.botV11(nick) && !_huBot ? _effB : 0;
+                        const rtC = preflopRangeTier(code, p.position || '', true, { chart: true, raises: 1, openerPos: _opnPos, closing: !!isBB, potOdds, depth: _dep });
+                        if (rtC.freq && rtC.freq.mtt) { _mttBot = true; if (Math.random() * 100 < rtC.freq.jam) return { type: 'raise', amount: p.currentBet + p.chips }; }
                         if (rtC.freq) {
                             const x = Math.random() * 100;
                             const t = x < rtC.freq.raise ? 'raise' : x < rtC.freq.raise + rtC.freq.call ? 'call' : 'fold';
@@ -1734,7 +1740,15 @@ class GameRoom {
                 if (!facingRaise && persona.proStrategy && !_huBot && !isBB && toCall > 0 && this.botV6(nick)) {
                     const _of = Ranges.openFreq(p.position || '', code);
                     const _limped = this.playerOrder.some(n => n !== nick && this.players[n] && !this.players[n].isFolded && (this.players[n].currentBet || 0) === bb && !(this.players[n].role && /SB|BB/.test(this.players[n].role)));
-                    if (_of != null && !_limped) { const t = Math.random() * 100 < _of ? 'raise' : 'fold'; rt = { tier: t, label: t === 'raise' ? '오픈 레이즈' : '폴드', score: rt.score }; }
+                    const _mo = this.botV11(nick) && !_limped && _effB > 12 ? Ranges.mttOpen(p.position || '', code, _effB) : null;
+                    if (_mo) {
+                        // 🏁 대회용 자료: 올인 · 오픈 · 림프(SB) · 폴드를 그 빈도대로
+                        const x = Math.random() * 100; _mttBot = true;
+                        if (x < _mo.jam) return { type: 'raise', amount: p.currentBet + p.chips };
+                        if (x >= _mo.raise && x < _mo.raise + _mo.call) return { type: 'call' };
+                        const t = x < _mo.raise ? 'raise' : 'fold'; rt = { tier: t, label: t === 'raise' ? '오픈 레이즈' : '폴드', score: rt.score };
+                    }
+                    else if (_of != null && !_limped) { const t = Math.random() * 100 < _of ? 'raise' : 'fold'; rt = { tier: t, label: t === 'raise' ? '오픈 레이즈' : '폴드', score: rt.score }; }
                 }
                 if (_huBot && !facingRaise && rt.tier !== 'raise' && rt.score > Quiz.HU_OPEN_SCORE) rt = { tier: 'raise', label: '오픈 레이즈', score: rt.score };
 
@@ -1754,7 +1768,7 @@ class GameRoom {
 
                 // 🤖 [숏스택·올인] 스택이 짧거나 올인을 마주하면 일반 로직보다 먼저 푸시/폴드 판단을 한다
                 if (persona.proStrategy && this.botV2(nick)) {
-                    const ssd = this.shortStackDecision(nick, { code, toCall, bb, totalPot, facingRaise, isBB });
+                    const ssd = this.shortStackDecision(nick, { code, toCall, bb, totalPot, facingRaise, isBB, mtt: _mttBot });
                     if (ssd) return ssd;
                 }
 
@@ -2204,6 +2218,12 @@ class GameRoom {
         const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
         return ab === '2' ? !bit : bit;
     }
+    botV11(nick) {
+        const ab = process.env.BOT_AB11;
+        if (!ab) return BOT_MTT_DEFAULT;
+        const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
+        return ab === '2' ? !bit : bit;
+    }
     botV10(nick) {
         const ab = process.env.BOT_AB10;
         if (!ab) return BOT_JAM_DEFAULT;
@@ -2329,7 +2349,7 @@ class GameRoom {
     //    반환: 결정 객체, 또는 null(일반 프리플랍 로직에 맡김)
     shortStackDecision(nick, c) {
         const p = this.players[nick];
-        const { code, toCall, bb, totalPot, facingRaise, isBB } = c;
+        const { code, toCall, bb, totalPot, facingRaise, isBB } = c, hasMtt = !!c.mtt;
         const live = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded);
         if (!live.length) return null;
         const stackOf = n => this.players[n].chips + (this.players[n].currentBet || 0);
@@ -2398,7 +2418,7 @@ class GameRoom {
         }
 
         // ── (다) 13~20bb: 늦은 포지션 스틸에 리쉬브 (스택 대비 팟이 커서 접게 만들면 큰 이득) ──
-        if (effBB <= 25 && facingRaise && raises <= 1 && aggrP && !aggrAllIn) {
+        if (effBB <= 25 && facingRaise && raises <= 1 && aggrP && !aggrAllIn && !hasMtt) {     // 대회용 자료가 그 자리를 덮으면 올인 빈도도 거기서 나온다
             let jr = null;
             if (this.botV10(nick)) { try { jr = this.jamInfo(nick, code); } catch (e) {} }
             if (jr) { if (jr.ev > (effBB <= 20 ? 0.3 : 1) && Math.random() < 0.85) return shove(); }
@@ -4471,7 +4491,7 @@ class GameRoom {
         let potOdds = toCall > 0 ? toCall / (potBefore + p.currentBet + toCall) : 0;
         // 🏆 [ICM] 입상이 걸린 대회의 올인 승부는 칩이 아니라 상금 기대값으로 본다. 차이가 2%p 이상일 때만 적용한다(대회 초반은 차이가 거의 없다).
         //    필요 승률(potOdds)을 상금 기준 값으로 바꿔 두면 아래의 콜/폴드 판단과 설명이 전부 그 값으로 나온다.
-        let _icm = null, _icmPush = null;
+        let _icm = null, _icmPush = null, _mttF = null;
         if (toCall > 0) { try { const ic = this.icmCall(nick, toCall, potBefore + p.currentBet + toCall); if (ic && ic.tax >= 0.02) { _icm = ic; potOdds = ic.req; } if (ic && process.env.DEV_ICMLOG) console.log('ICMLOG advice ' + JSON.stringify(Object.assign({ n: nick, call: toCall, chips: p.chips }, ic))); } catch (e) {} }
         const street = this.communityCards.length === 0 ? 'preflop' : (this.communityCards.length === 3 ? 'flop' : (this.communityCards.length === 4 ? 'turn' : 'river'));
         const opponents = this.playerOrder.filter(n => n !== nick && !this.players[n].isFolded).length;
@@ -4521,23 +4541,26 @@ class GameRoom {
             // 📊 범위표(lib/ranges.js)에 넘길 것: 레이즈가 몇 번 나왔나 · 내가 이미 올렸나(= 내 오픈에 3벳이 온 것) · 올린 사람보다 내가 뒤인가
             const _iRaised = (this.actionLog || []).some(a => a.nick === nick && (a.board || []).length === 0 && (a.type === 'raise' || a.type === 'allin'));
             // 📊 솔버 프리플랍 자료의 열쇠: 지금까지의 행동(자리:R 레이즈 · C 콜 · F 들어왔다가 접음)>내 자리
-            let _seqKey = null;
+            let _seqKey = null, _seqA = null;
             if (!_huTable && facingRaise) {
                 const _dp = n => Ranges.dataPos((this.players[n] || {}).position || '');
-                let _hi = bb; const _tok = [], _in = new Set();
+                let _hi = bb; const _tok = [], _tokA = [], _in = new Set();
                 (this.actionLog || []).filter(a => a.street === 1).forEach(a => {
                     if (a.type === 'sb' || a.type === 'bb' || a.type === 'ante' || a.type === 'check') return;
                     const ps = _dp(a.nick);
-                    if ((a.type === 'raise' || a.type === 'allin') && a.amount > _hi) { _tok.push(ps + ':R'); _hi = a.amount; _in.add(a.nick); }
-                    else if (a.type === 'call' || a.type === 'allin') { _tok.push(ps + ':C'); _in.add(a.nick); }
-                    else if (a.type === 'fold' && _in.has(a.nick)) _tok.push(ps + ':F');
+                    if ((a.type === 'raise' || a.type === 'allin') && a.amount > _hi) { _tok.push(ps + ':R'); _tokA.push(ps + (a.type === 'allin' ? ':A' : ':R')); _hi = a.amount; _in.add(a.nick); }
+                    else if (a.type === 'call' || a.type === 'allin') { _tok.push(ps + ':C'); _tokA.push(ps + ':C'); _in.add(a.nick); }
+                    else if (a.type === 'fold' && _in.has(a.nick)) { _tok.push(ps + ':F'); _tokA.push(ps + ':F'); }
                 });
                 _seqKey = _tok.join(',') + '>' + _dp(nick);
+                _seqA = _tokA.join(',') + '>' + _dp(nick);       // 대회용 자료의 열쇠: 올인 레이즈는 A
             }
             const _ctx = { seq: _seqKey, numActive: opponents + 1, threeBetPlus: (this.raiseCountThisStreet || 0) >= 2,
                 headsUp: _huTable, openerPos: _opnPos, closing: !!isBB, potOdds: facingRaise ? potOdds : 0,   // potOdds: 오픈 크기·앤티에 따라 방어 폭이 달라진다
-                chart: true, raises: this.raiseCountThisStreet || 1, iRaised: _iRaised, inPosition: this.isInPosition(nick) };
+                chart: true, raises: this.raiseCountThisStreet || 1, iRaised: _iRaised, inPosition: this.isInPosition(nick),
+                depth: _huTable ? 0 : effBB, seqA: _seqA };      // 🏁 유효 스택이 대회용 자료(직접 푼 20~30bb)의 범위 안이면 그 표를 쓴다
             const rt = preflopRangeTier(code, p.position || '', facingRaise, _ctx);
+            if (rt.freq && rt.freq.mtt) { _mttF = rt.freq; notes.push('대회용 자료(직접 푼 계산)'); }
             // 문구: 처음 연 것이면 '오픈', 누가 림프한 뒤 올린 것(내가 림프했거나 블라인드가 올림)이면 '레이즈', 두 번째 레이즈부터는 '리레이즈'
             const _iLimped = !isBB && (p.currentBet || 0) >= bb;
             const _opnBlind = !!(_opn && this.players[_opn].role && /SB|BB/.test(this.players[_opn].role) && this.playerOrder.length > 2);
@@ -4626,7 +4649,7 @@ class GameRoom {
                         reason = `${Math.round(effBB)}bb로 오픈을 받았습니다 — 올인 아니면 폴드. 리쉬브 범위는 상위 약 ${_pc(r)}%인데 ${code}는 상위 ${_pc(_rk)}% → 폴드.${_jt}`;
                     }
                 }
-            } else if (effBB <= 25 && facingRaise && _raises <= 1 && _aggrP && !_aggrAllIn) {
+            } else if (effBB <= 25 && facingRaise && _raises <= 1 && _aggrP && !_aggrAllIn && !_mttF) {
                 // (다) 13~25bb: 넓은 오픈에는 리쉬브가 3벳보다 낫다. 연 사람의 오픈 범위 상대로 직접 푼 올인의 기대값으로 고른다
                 //      (13~20bb 는 +0.3bb, 20~25bb 는 +1bb 넘게 남을 때만 — 그 아래는 콜·작은 3벳이 나을 수 있어 범위표에 맡긴다).
                 let r = effBB <= 20 ? ShortStack.reshovePct(ShortStack.openPct(_aggrP.position), effBB) : 0, _in = effBB <= 20 && _pctl <= r, _rk = _pctl, _jt = '';
@@ -4663,7 +4686,14 @@ class GameRoom {
                 const late = (p.position === 'BTN' || p.position === 'CO' || p.position === 'SB');
                 // 모두 접고 SB 가 BB 한 명만 상대하는 자리(6인 테이블의 블라인드 대결). 헤즈업 테이블은 아래에서 따로 넓게 연다.
                 const _sbVsBb = !_huTable && opponents === 1 && !!(p.role && p.role.includes('SB'));
-                if (rt.freq && rt.open && !canCheck && opponents >= 2) {
+                if (rt.freq && rt.freq.mtt && rt.open && !canCheck) {
+                    // 🏁 먼저 여는 자리(대회용 자료): 오픈 · 림프(SB) · 폴드 빈도 그대로
+                    const f = rt.freq;
+                    mix = f.call ? { fold: f.fold, call: f.call, raise: f.raise } : { fold: f.fold, raise: f.raise };
+                    bestAction = rt.tier;
+                    const parts = [f.raise ? `오픈 ${f.raise}%${f.jam ? ` (그중 올인 ${f.jam}%)` : ''}` : '', f.call ? `림프 ${f.call}%` : '', f.fold ? `폴드 ${f.fold}%` : ''].filter(Boolean).join(' · ');
+                    reason = `${rt.chartName}: ${code} — ${parts}${Math.max(f.raise, f.call, f.fold) >= 85 ? '' : ' — 섞어 치는 패라 25% 넘게 쓰는 선택은 어느 쪽도 실수가 아닙니다'}.`;
+                } else if (rt.freq && rt.open && !canCheck && opponents >= 2) {
                     // 📊 먼저 여는 자리: 솔버 자료의 오픈 빈도
                     const f = rt.freq;
                     mix = { fold: f.fold, raise: f.raise };
@@ -4932,6 +4962,11 @@ class GameRoom {
             notes.push(`상금 기준(ICM) — 필요 승률 ${c}% → ${q}%`);
             reason = String(reason || '') + ` 🏆 상금 기준(ICM): ${_icm.alive}명 남음 · 입상 ${_icm.paid}명 — 칩만 보면 ${c}%면 되지만, 지면 ${toCall >= p.chips ? '탈락이라' : '칩이 크게 줄어'} 상금 기대값이 깎이므로 ${q}%가 필요합니다.`;
             _icmOut = { chip: c, req: q, alive: _icm.alive, paid: _icm.paid };
+        }
+        // 🏁 대회용 자료의 크기: 그 패의 레이즈가 주로 올인이면 올인, 먼저 여는 자리면 계산에 쓴 오픈 크기
+        if (_mttF && bestAction === 'raise' && street === 'preflop') {
+            if (_mttF.jam * 2 >= _mttF.raise) sizeHint = '올인';
+            else if (toCall <= _bbNow && this.currentHighestBet <= _bbNow) sizeHint = '2.3bb (계산에 쓴 크기)';
         }
         if (_icmPush) {
             notes.push(`상금 기준(ICM) — 푸시 범위 ${_icmPush.chip}% → ${_icmPush.req}%`);
