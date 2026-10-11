@@ -526,7 +526,7 @@
         .wc-info span { display: block; font-size: 10.5px; color: #8f9ab5; font-weight: 700; margin-bottom: 2px; white-space: nowrap; }
         .wc-info b { display: block; font-family: var(--font-num); font-size: 13.5px; color: #eef2fb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .wc-bots { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; padding: 6px 6px 6px 12px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); }
-        .wc-bots .wc-lbl { font-size: 13px; font-weight: 800; color: #c9d2e8; }
+        .wc-bots .wc-lbl { font-size: 13px; font-weight: 800; color: #c9d2e8; white-space: nowrap; }
         .wc-bots .wc-lbl small { font-size: 11px; font-weight: 600; color: #8f9ab5; margin-left: 6px; }
         .wc-step { display: flex; align-items: center; gap: 4px; }
         .wc-step button { width: 34px; height: 34px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.08); color: #eef2fb; font-size: 19px; font-weight: 900; line-height: 1; cursor: pointer; }
@@ -540,11 +540,11 @@
         body.wait-room #turn-indicator { display: none !important; }
         body.wait-room .pot-area { visibility: hidden; }
         /* 📱 폰 가로(어플 화면): 오른쪽 아래에 두면 6번째 자리를 가린다 → 시작 전엔 비어 있는 테이블 가운데에 낮고 넓게 놓는다 */
-        @media screen and (max-width: 960px) and (orientation: landscape) {
+        @media screen and (max-width: 960px) and (orientation: landscape), screen and (max-width: 520px) and (orientation: portrait) {
             body.wait-room #ready-controls {
                 left: 50% !important; right: auto !important; top: 45% !important; bottom: auto !important; transform: translate(-50%, -50%); box-shadow: 0 4px 14px rgba(0,0,0,0.5) !important;
                 width: min(400px, 52vw) !important; max-height: none; overflow: visible; padding: 7px 8px;
-                display: grid !important; grid-template-columns: 1fr 1fr; gap: 6px; align-items: stretch;
+                display: grid !important; grid-template-columns: auto 1fr; gap: 6px; align-items: stretch;
             }
             body.wait-room #ready-controls[style*="none"] { display: none !important; }
             body.wait-room #ready-controls > * { margin: 0 !important; }
@@ -558,6 +558,8 @@
             body.wait-room #ready-controls .btn-start { padding: 0 !important; font-size: 15px !important; letter-spacing: 0.5px; min-height: 36px; }
             body.wait-room #ready-controls .wc-bots .wc-lbl small { display: none; }
         }
+        /* 📱 폰 세로: 아래에 두면 내 자리를 가린다 → 세로에서도 테이블 가운데(양옆 자리 사이)에 놓는다 */
+        @media screen and (max-width: 520px) and (orientation: portrait) { body.wait-room #ready-controls { width: calc(100vw - 28px) !important; top: 41% !important; } }
         @media (max-width: 900px) {
             .wc-head { margin-bottom: 6px; }
             .wc-title, .wc-count { font-size: 13.5px; }
@@ -7980,9 +7982,9 @@
             <div class="skfs">${skFreqs(d.freqs)}</div>
             ${blunderHtml({ blunders: d.blunders, leaks: d.leaks, stats: { sampleActions: ev ? ev.decisions : 0 } })}
             <div class="sr-section-title" style="margin-top:14px;">👥 친구들 (이 모드만)</div>${board}
-            <div class="sr-section-title" style="margin-top:14px;">🏆 상금 압박(ICM)이 걸린 올인 승부</div>
+            <div class="sr-section-title" style="margin-top:14px;">🏆 상금 압박(ICM)이 걸린 올인 결정</div>
             <div class="gd-text" style="font-size:12px;">${d.icm && d.icm.n ? `지금까지 <b>${d.icm.n}번</b> · 기준대로 친 것 <b>${d.icm.ok}번</b> (${Math.round(d.icm.ok / d.icm.n * 100)}%) · 잃은 기대값 ${d.icm.loss}bb` : '아직 그런 자리가 없었습니다.'}</div>
-            <div class="bl-foot" style="margin-top:6px;">입상권이 가까워지면 칩을 잃는 아픔이 칩을 얻는 기쁨보다 커집니다. 그래서 올인을 받을 때(또는 받으면 내가 올인될 때)는 칩이 아니라 <b>상금 기대값</b>으로 필요 승률을 계산해 조언·채점합니다(리바인이 끝난 뒤부터, 차이가 2%p 이상일 때). 예: 4명 남고 3명 입상이면 같은 스택끼리의 올인 콜에 50%가 아니라 약 65%가 필요합니다. 상금 비율은 ${(d.icm ? d.icm.payouts : [50, 30, 20]).map(x => Math.round(x)).join(' / ')} 로 가정했습니다(매장 구조표를 받으면 바꿉니다). 내가 먼저 올인하는 범위와 올인이 아닌 벳에는 아직 반영하지 않았습니다.</div>`;
+            <div class="bl-foot" style="margin-top:6px;">입상권이 가까워지면 칩을 잃는 아픔이 칩을 얻는 기쁨보다 커집니다. 그래서 올인을 받을 때(또는 받으면 내가 올인될 때)는 칩이 아니라 <b>상금 기대값</b>으로 필요 승률을 계산해 조언·채점합니다(리바인이 끝난 뒤부터, 차이가 2%p 이상일 때). 12bb 이하에서 내가 먼저 올인하는 범위도 같은 기준으로 넓히거나 좁힙니다 — 뒤의 사람들이 탈락이 무서워 좁게 받아야 하는 자리면 넓게, 받히고 지면 내가 먼저 떨어지는 자리면 좁게. 예: 4명 남고 3명 입상이면 같은 스택끼리의 올인 콜에 50%가 아니라 약 65%가 필요합니다. 상금 비율은 ${(d.icm ? d.icm.payouts : [50, 30, 20]).map(x => Math.round(x)).join(' / ')} 로 가정했습니다(매장 구조표를 받으면 바꿉니다). 푸시 범위는 받는 사람을 한 명씩만 보는 어림 계산이고, 리쉬브(13~20bb)와 올인이 아닌 벳에는 아직 반영하지 않았습니다.</div>`;
         list.scrollTop = 0;
         document.getElementById('skill-modal').style.display = 'flex';
     });
@@ -8009,7 +8011,7 @@
                 const did = (actKo[x.act] || x.act) + (x.amt > 0 && x.act !== 'fold' && x.act !== 'check' ? ` ${x.amt}bb` : '');
                 return `<div class="frv-d${bad ? ' bad' : ''}">
                     <span class="frv-g" style="background:${g[1]};">${bad ? '−' + x.loss : '✓'}</span>
-                    <span class="frv-t"><b>${stKo[x.st]}</b> · 팟 ${x.pot}bb${x.call > 0 ? ` · 콜 ${x.call}bb` : ''} · 내 선택 <b>${esc(did)}</b>${x.g === 'best' ? ' <u>= 권장</u>' : ` → 권장 <b class="g">${actKo[x.best] || x.best}</b>`}${x.sv ? ' <i>🧮</i>' : ''}${x.ic ? ` <i title="상금 기준(ICM) 필요 승률">🏆 ${x.ic[0]}→${x.ic[1]}%</i>` : ''}
+                    <span class="frv-t"><b>${stKo[x.st]}</b> · 팟 ${x.pot}bb${x.call > 0 ? ` · 콜 ${x.call}bb` : ''} · 내 선택 <b>${esc(did)}</b>${x.g === 'best' ? ' <u>= 권장</u>' : ` → 권장 <b class="g">${actKo[x.best] || x.best}</b>`}${x.sv ? ' <i>🧮</i>' : ''}${x.ic ? (x.ic[2] ? ` <i title="상금 기준(ICM) 푸시 범위">🏆 푸시 ${x.ic[0]}→${x.ic[1]}%</i>` : ` <i title="상금 기준(ICM) 필요 승률">🏆 ${x.ic[0]}→${x.ic[1]}%</i>`) : ''}
                         <small>${esc(mixTxt(x.mix || {}))}${x.size && x.g !== 'best' ? ' · 크기 ' + esc(x.size) : ''}</small>
                         ${bad ? `<em><b style="color:${g[1]};">${g[0]}</b>${x.k && d.kinds[x.k] ? ' · ' + esc(d.kinds[x.k].name) : ''} — ${esc(x.why || '')}</em>` : (x.g === 'good' ? `<em>섞어 치는 범위 안이라 손실 없음.</em>` : '')}</span>
                 </div>`; }).join('');

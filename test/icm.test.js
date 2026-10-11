@@ -76,6 +76,32 @@ test('짧은 스택이 곧 탈락할 것 같으면 더 조심한다', () => {
     assert.ok(shorty.req > even.req);
 });
 
+// ── 푸시 범위 ──
+const SS = require('../lib/shortstack'), Ranges = require('../lib/ranges');
+const HANDS = Ranges.ALL.map(code => ({ code, w: Ranges.combos(code) }));
+const push = (stack, callers, others, payouts, base) => Icm.pushShift({ stack, posted: 0, dead: 1.5, callers, others, payouts: payouts || [50, 30, 20], base: base || 0.4, hands: HANDS, eqVs: SS.equityVs });
+
+test('푸시: 승자 독식·헤즈업이면 칩 기준과 같다', () => {
+    const a = push(10, [{ stack: 10, posted: 0.5 }, { stack: 10, posted: 1 }], [10, 10], [100]);
+    near(a.ratio, 1, 1e-9);
+    const hu = Icm.pushShift({ stack: 10, posted: 0.5, dead: 1.5, callers: [{ stack: 10, posted: 1 }], others: [], payouts: [65, 35], base: 0.6, hands: HANDS, eqVs: SS.equityVs });
+    near(hu.ratio, 1, 1e-9);
+});
+
+test('푸시: 버블에서 나를 덮는 큰 스택 앞으로는 좁게, 내가 덮는 작은 스택 앞으로는 넓게', () => {
+    // 4명 남음 · 입상 3명. BTN 에서 밀고 SB·BB 가 뒤에 있다. 한 명(3bb)은 다른 자리에서 곧 떨어질 처지.
+    const risky = push(10, [{ stack: 30, posted: 0.5 }, { stack: 30, posted: 1 }], [3]);     // 지면 내가 먼저 탈락
+    const bully = push(30, [{ stack: 10, posted: 0.5 }, { stack: 10, posted: 1 }], [3]);     // 받는 쪽이 지면 탈락
+    assert.ok(risky.ratio < 1, 'risky ' + JSON.stringify(risky));
+    assert.ok(bully.ratio > risky.ratio, JSON.stringify({ risky, bully }));
+    assert.ok(bully.icm >= bully.chip - 1e-9, 'bully ' + JSON.stringify(bully));
+});
+
+test('푸시: 대회 초반(20명)에는 거의 그대로', () => {
+    const r = push(10, [{ stack: 30, posted: 0.5 }, { stack: 30, posted: 1 }], new Array(17).fill(30));
+    assert.ok(Math.abs(r.ratio - 1) < 0.1, JSON.stringify(r));
+});
+
 test('상금 비율의 합은 100', () => {
     [1, 2, 3, 4, 5, 8].forEach(n => near(Icm.payoutsFor(n).reduce((a, b) => a + b, 0), 100));
 });

@@ -2251,6 +2251,28 @@ class GameRoom {
         return { req: r.req, chip: r.chip, tax: r.tax, alive: others.length + 2, paid: m.paid };
     }
 
+    // 🏆 [ICM] 내가 먼저 올인(푸시)하는 범위가 상금 기준으로 몇 배가 되나(1 = 그대로). 대상이 아니면 null.
+    //    base: 칩 기준 푸시 범위(0~1), behind: 내 뒤에 남은 사람들. 계산은 lib/icm.js 의 pushShift(칩 기준·상금 기준을 같은 모형으로 풀어 그 비율만 쓴다).
+    icmPush(nick, base, behind) {
+        const m = this._mtt, p = this.players[nick];
+        if (!m || !(m.paid > 0) || !p || !behind || !behind.length) return null;
+        if (m.rebuyMax > 0 && m.blindLevel < m.rebuyUntilLevel) return null;
+        const inHand = new Set([nick].concat(behind)), others = [];
+        (m.tables || []).forEach(rid => {
+            const r = rooms.get(rid); if (!r) return;
+            r.playerOrder.forEach(n => { if (inHand.has(n) && r === this) return; const q = r.players[n], s = q ? (q.chips || 0) + (r === this ? 0 : (q.currentBet || 0)) : 0; if (s > 0) others.push(s); });
+        });
+        if (others.length + behind.length + 1 <= 2 || others.length > 40) return null;      // 헤즈업은 차이가 없다
+        const dead = this.pot + Object.keys(this.players).reduce((a, n) => a + (this.players[n].currentBet || 0), 0);
+        if (!this._icmHands) this._icmHands = Ranges.ALL.map(code => ({ code, w: Ranges.combos(code) }));
+        const r = Icm.pushShift({ stack: p.chips + (p.currentBet || 0), posted: p.currentBet || 0, dead,
+            callers: behind.map(n => ({ stack: this.players[n].chips + (this.players[n].currentBet || 0), posted: this.players[n].currentBet || 0 })),
+            others, payouts: Icm.payoutsFor(m.paid), base, hands: this._icmHands, eqVs: ShortStack.equityVs });
+        const ratio = Math.max(0.35, Math.min(2.5, r.ratio));
+        if (process.env.DEV_ICMLOG) console.log('ICMLOG push ' + JSON.stringify({ n: nick, base: Math.round(base * 100), chip: Math.round(r.chip * 100), icm: Math.round(r.icm * 100), ratio: Math.round(ratio * 100) / 100, alive: others.length + behind.length + 1 }));
+        return { ratio, alive: others.length + behind.length + 1, paid: m.paid };
+    }
+
     jamStat(nick) {
         const ch = this._challenge;
         if (ch && ch.run && ch.nick === nick) return (ch.run.jam = ch.run.jam || { h: 0, j: 0 });
@@ -2313,6 +2335,8 @@ class GameRoom {
                 const behind = Math.max(1, live.filter(n => !this.players[n].hasActed && !this.players[n].isAllIn).length);
                 const limped = live.some(n => (this.players[n].currentBet || 0) >= bb && this.players[n].hasActed);
                 let range = ShortStack.pushPct(effBB, behind) * (limped ? 0.8 : 1);
+                // 🏆 입상이 걸린 대회에서는 상금 기준으로 범위를 넓히거나 좁힌다
+                try { const ip = this.icmPush(nick, range, live.filter(n => !this.players[n].hasActed && !this.players[n].isAllIn)); if (ip && Math.abs(ip.ratio - 1) >= 0.12) range = Math.max(0.03, Math.min(1, range * ip.ratio)); } catch (e) {}
                 if (pct <= range) return shove();
                 if (toCall === 0) return { type: 'check' };              // BB 무료 체크
                 if (isBB && toCall <= bb * 0.5) return null;              // 거의 공짜면 평소대로
@@ -4295,7 +4319,7 @@ class GameRoom {
                             best: A.bestAction, mix: A.mix, pct: A.mix[key0] || 0, g: _el.grade, loss: _el.lossBB, k: _el.kind || null,
                             size: A.sizeHint ? String(A.sizeHint).slice(0, 60) : '', sv: (A.notes || []).some(n => n.indexOf('솔버') >= 0),
                             why: _el.grade === 'best' ? '' : String(A.reason || '').slice(0, A.icm ? 360 : 220),
-                            ic: A.icm ? [A.icm.chip, A.icm.req] : undefined
+                            ic: A.icm ? (A.icm.push ? [A.icm.chip, A.icm.req, 'p'] : [A.icm.chip, A.icm.req]) : undefined
                         });
                     }
                     // 📏 스택 깊이별(내 스택 bb) · 🏁 대회 단계별 손실 — 대회에서는 "몇 bb 일 때, 어느 단계에서 새나"가 가장 쓸모 있는 피드백이다
@@ -4394,7 +4418,7 @@ class GameRoom {
         let potOdds = toCall > 0 ? toCall / (potBefore + p.currentBet + toCall) : 0;
         // 🏆 [ICM] 입상이 걸린 대회의 올인 승부는 칩이 아니라 상금 기대값으로 본다. 차이가 2%p 이상일 때만 적용한다(대회 초반은 차이가 거의 없다).
         //    필요 승률(potOdds)을 상금 기준 값으로 바꿔 두면 아래의 콜/폴드 판단과 설명이 전부 그 값으로 나온다.
-        let _icm = null;
+        let _icm = null, _icmPush = null;
         if (toCall > 0) { try { const ic = this.icmCall(nick, toCall, potBefore + p.currentBet + toCall); if (ic && ic.tax >= 0.02) { _icm = ic; potOdds = ic.req; } if (ic && process.env.DEV_ICMLOG) console.log('ICMLOG advice ' + JSON.stringify(Object.assign({ n: nick, call: toCall, chips: p.chips }, ic))); } catch (e) {} }
         const street = this.communityCards.length === 0 ? 'preflop' : (this.communityCards.length === 3 ? 'flop' : (this.communityCards.length === 4 ? 'turn' : 'river'));
         const opponents = this.playerOrder.filter(n => n !== nick && !this.players[n].isFolded).length;
@@ -4507,8 +4531,17 @@ class GameRoom {
             } else if (effBB <= 12 && p.chips > 0) {
                 // (나) 12bb 이하: 올인 아니면 폴드
                 if (!facingRaise) {
-                    const behind = Math.max(1, _liveOpp.filter(n => !this.players[n].hasActed && !this.players[n].isAllIn).length);
-                    const range = ShortStack.pushPct(effBB, behind);
+                    const _bhd = _liveOpp.filter(n => !this.players[n].hasActed && !this.players[n].isAllIn);
+                    const behind = Math.max(1, _bhd.length);
+                    let range = ShortStack.pushPct(effBB, behind);
+                    // 🏆 [ICM] 입상이 걸린 대회에서는 푸시 범위도 상금 기준으로 — 받는 쪽이 조심해야 하는 자리면 넓게, 내가 지면 먼저 떨어지는 자리면 좁게
+                    try {
+                        const ip = this.icmPush(nick, range, _bhd);
+                        if (ip && Math.abs(ip.ratio - 1) >= 0.12) {
+                            const r0 = range; range = Math.max(0.03, Math.min(1, range * ip.ratio));
+                            _icmPush = { chip: Math.round(r0 * 100), req: Math.round(range * 100), alive: ip.alive, paid: ip.paid, push: true };
+                        }
+                    } catch (e) {}
                     notes.push('숏스택 — 푸시/폴드');
                     _special = true;
                     if (_pctl <= range) {
@@ -4549,7 +4582,7 @@ class GameRoom {
             posInfo.chart = { players: this.playerOrder.length, headsUp: _huTable, effBB: Math.round(effBB), push: null };
             if (effBB <= 12 && !facingRaise) {
                 const _bh = Math.max(1, _liveOpp.filter(n => !this.players[n].hasActed && !this.players[n].isAllIn).length);
-                posInfo.chart.push = { range: ShortStack.pushPct(effBB, _bh), behind: _bh };
+                posInfo.chart.push = { range: _icmPush ? _icmPush.req / 100 : ShortStack.pushPct(effBB, _bh), behind: _bh };
             }
             // 📊 레이즈를 받은 자리면 그 상황의 범위표 한 장을 같이 보낸다(패마다 [레이즈 %, 콜 %])
             if (rt.freq && !_special && (facingRaise || rt.open)) {
@@ -4839,6 +4872,11 @@ class GameRoom {
             notes.push(`상금 기준(ICM) — 필요 승률 ${c}% → ${q}%`);
             reason = String(reason || '') + ` 🏆 상금 기준(ICM): ${_icm.alive}명 남음 · 입상 ${_icm.paid}명 — 칩만 보면 ${c}%면 되지만, 지면 ${toCall >= p.chips ? '탈락이라' : '칩이 크게 줄어'} 상금 기대값이 깎이므로 ${q}%가 필요합니다.`;
             _icmOut = { chip: c, req: q, alive: _icm.alive, paid: _icm.paid };
+        }
+        if (_icmPush) {
+            notes.push(`상금 기준(ICM) — 푸시 범위 ${_icmPush.chip}% → ${_icmPush.req}%`);
+            reason = String(reason || '') + ` 🏆 상금 기준(ICM): ${_icmPush.alive}명 남음 · 입상 ${_icmPush.paid}명 — 칩만 보면 푸시 범위는 상위 약 ${_icmPush.chip}%지만, ${_icmPush.req > _icmPush.chip ? '뒤의 사람들이 탈락이 무서워 좁게 받아야 하는 자리라 더 넓게 밀 수 있습니다' : '받히고 지면 내가 먼저 떨어지는 자리라 더 좁게 밉니다'}(약 ${_icmPush.req}%).`;
+            _icmOut = _icmPush;
         }
         return {
             icm: _icmOut,
