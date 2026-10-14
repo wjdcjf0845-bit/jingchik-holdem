@@ -3269,6 +3269,12 @@
         .lobby-shell .room-list-box { margin-bottom: 14px; }
         .lobby-shell #lobby-social { margin-top: 0; }
         /* ═══ 🧹 대기실 정리: 프로필은 아바타 하나 · 메뉴는 4칸 격자 · 방 설정은 접어 둔다 ═══ */
+        .jp-box { text-align: left; margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: rgba(255,200,87,0.08); border: 1px solid rgba(255,200,87,0.45); }
+        .jp-box .jp-t { font-size: 14px; font-weight: 800; color: #ffe27a; }
+        .jp-box .jp-t b { font-size: 18px; } .jp-box .jp-t small { font-size: 11.5px; font-weight: 600; color: #c9b27a; margin-left: 4px; }
+        .jp-box .jp-pay { margin-top: 6px; font-size: 13px; color: #fff; line-height: 1.45; } .jp-box .jp-pay b { color: #ffe27a; }
+        .jp-box .jp-rule { margin-top: 5px; font-size: 11.5px; color: #a8b3cc; line-height: 1.45; word-break: keep-all; }
+        .jp-box .jp-hist { margin-top: 6px; }
         .lb-head { flex-wrap: nowrap !important; }
         .lb-head #lobby-profile { position: relative; flex: 0 0 auto !important; display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 0; padding: 0; background: none; border: none; }
         .lb-head #lp-avatar { width: 54px; height: 54px; font-size: 22px; }
@@ -4566,7 +4572,7 @@
         <!-- 🏁 파이널나인 딥스택 연습 (20인 MTT) — 기록은 이 모드 것만 따로 모은다 -->
         <div class="lb-sec">🏁 대회 연습</div>
         <div class="fn-row">
-            <button type="button" class="fn-btn go" onclick="socket.emit('createFnMtt')">파이널나인 딥스택 연습 <small>30인 대회 열기 · 친구는 열린 방 목록에서 참가</small></button>
+            <button type="button" class="fn-btn go" onclick="socket.emit('createFnMtt')">파이널나인 딥스택 연습 <small id="fn-btn-sub">30인 대회 열기 · 친구는 열린 방 목록에서 참가</small></button>
             <button type="button" class="fn-btn" onclick="socket.emit('getFnReport')">연습 기록 <small>점수 · 복기</small></button>
         </div>
 
@@ -4945,6 +4951,7 @@
     <div class="login-box" style="width: 460px;">
         <h2 id="mttwait-title" style="margin-top:0; font-family: var(--font-disp); font-weight:400; letter-spacing:1px; color: var(--gold);">🏆 MTT 대기실</h2>
         <div id="mttwait-info" style="font-size:13px; color:var(--txt-dim); margin-bottom:10px;"></div>
+        <div id="mttwait-jackpot" style="display:none;"></div>
         <div id="mttwait-entrants" style="margin: 12px 0; max-height: 240px; overflow-y: auto; text-align: left;"></div>
         <div id="mttwait-hostctrl" style="display:none;">
             <button class="btn-join" style="width:100%; background: linear-gradient(180deg,#2c5a3f,#1a3a28); color:#7bedaa; margin-bottom:8px; text-shadow:none;" onclick="socket.emit('addMttBot')">🤖 봇 추가</button>
@@ -7982,6 +7989,10 @@
                 <div><span>나간 대회</span><b>${sm.games}</b><small>입상 ${sm.itm}번${sm.games ? ` (${Math.round(sm.itm / sm.games * 100)}%)` : ''} · 우승 ${sm.wins}번${sm.avgPlace != null ? ` · 평균 순위 ${sm.avgPlace}위` : ''} — ${c.entrants}명 중 ${c.paid}명 입상이라 실력이 같다면 입상은 ${Math.round(c.paid / c.entrants * 100)}%쯤이 평균입니다</small></div>
                 ${ev ? `<div class="tot"><span>연습 점수</span><b>${ev.score} <small style="display:inline; font-size:14px; color:#ffe27a;">±${ev.pm}</small></b><small>${ev.hands.toLocaleString()}판 · 100판당 잃은 기대값 ${ev.raw100}bb (6인 기준 환산 ${ev.loss100}bb). 실력 점수와 같은 계산입니다 — 결정마다 권장 플레이 대비 잃은 기대값.</small></div>` : '<div><span>연습 점수</span><b>–</b><small>대회를 한 번 치면 나옵니다.</small></div>'}
             </div>
+            ${d.jackpot ? `<div class="sr-section-title" style="margin-top:14px;">🎯 홀인원 상금</div>
+            <div class="jp-box"><div class="jp-t">지금 상금 <b>${d.jackpot.pot.toLocaleString()}원</b> <small>${d.jackpot.cycle}회차 · ${d.jackpot.players}명 참가 · 다음 참가비 ${d.jackpot.myFee.toLocaleString()}원</small></div>
+                <div class="jp-rule">${d.jackpot.entries.length ? '이번 회차 참가: ' + d.jackpot.entries.map(e => `${esc(e.nick)} ${e.fee.toLocaleString()}`).join(' · ') : '이번 회차 참가자가 아직 없습니다.'}</div>
+                <div class="jp-hist">${d.jackpot.history.length ? d.jackpot.history.map(h => `<div class="bl-leak"><span>${when(h.t)}</span><b style="color:#ffe27a;">🏆 ${esc(h.nick)}</b><i>${h.c}회차 · ${h.amount.toLocaleString()}원 받음</i></div>`).join('') : '<div class="bl-none">아직 상금을 받은 사람이 없습니다.</div>'}</div></div>` : ''}
             <div class="sr-section-title" style="margin-top:14px;">② 최근 대회</div>
             <div class="bl-leaks">${results}</div>
             <button type="button" class="sk-trust" style="margin-top:8px;" onclick="socket.emit('getFnReview', {})">🎞️ 대회 복기 — 내가 친 판을 결정마다 다시 보기</button>
@@ -8067,6 +8078,15 @@
         document.getElementById('mttwait-info').innerText = d.fn
             ? `파이널나인 딥스택 연습 · 정원 ${d.maxEntrants}명 (시작하면 빈자리는 봇이 채웁니다 — 중수 3명, 나머지 고수) · 시작칩 ${d.startingChips.toLocaleString()} (${d.startBB}bb) · 레벨 ${Math.round(d.levelSec / 60)}분 · 3레벨부터 BB 앤티 · 리바인 ${d.rebuys}회(레벨 ${d.rebuyUntilLevel}까지, 자동) · 상위 ${d.paid}명 입상 · 지금 ${d.entrants.length}명 — 이 대회의 기록은 "연습 기록"에만 쌓입니다`
             : `테이블 ${d.tableSize}인 · 시작칩 ${d.startingChips.toLocaleString()} · ${d.entrants.length}명 참가`;
+        // 🎯 홀인원 상금(딥스택 연습): 지금 상금 · 내 참가비 안내 · 이번 회차 참가자
+        const jpEl = document.getElementById('mttwait-jackpot');
+        if (jpEl) {
+            const j = d.fn && d.jackpot;
+            jpEl.style.display = j ? 'block' : 'none';
+            if (j) jpEl.innerHTML = `<div class="jp-box"><div class="jp-t">🎯 홀인원 상금 <b>${j.pot.toLocaleString()}원</b> <small>${j.cycle}회차 · ${j.players}명 참가</small></div>
+                <div class="jp-pay">참가하려면 <b>${esc(j.payee)}</b>${j.account ? ` 계좌(<b>${esc(j.account)}</b>)` : ' 계좌'}로 <b>${j.myFee.toLocaleString()}원</b>을 보내고 참가하세요.</div>
+                <div class="jp-rule">이번 회차 첫 참가 ${j.first.toLocaleString()}원 · 다시 참가할 때마다 ${j.next.toLocaleString()}원. 사람이 처음 우승하면 쌓인 상금을 전부 받고, 그다음 대회부터 새 회차가 시작됩니다(봇이 우승하면 상금은 넘어갑니다).</div></div>`;
+        }
         const isHost = (d.hostNick === myNickname);
         document.getElementById('mttwait-hostctrl').style.display = isHost ? 'block' : 'none';
         document.getElementById('mttwait-entrants').innerHTML = d.entrants.map(n => `
@@ -8105,6 +8125,11 @@
         document.getElementById('emote-panel').style.display = 'flex';
         if (d.roomId) currentRoomId = d.roomId;
         showCenterMessage(d.moved ? '👀 테이블이 정리되어\n다른 테이블을 관전합니다' : '👀 관전을 시작합니다\n나가기로 언제든 로비로 돌아갑니다');
+    });
+    // 🎯 홀인원 상금 — 로비 버튼에 지금 상금을 보여 준다
+    socket.on('jackpot', d => {
+        const el = document.getElementById('fn-btn-sub');
+        if (el && d) el.innerText = `30인 대회 · 🎯 홀인원 상금 ${Number(d.pot || 0).toLocaleString()}원 (${d.cycle}회차)`;
     });
     socket.on('mttStatus', d => {
         const bar = document.getElementById('mtt-status-bar');
