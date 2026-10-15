@@ -198,6 +198,15 @@ const io = new Server(server);
 // 🩺 헬스체크 / 킵얼라이브 — UptimeRobot가 5분마다 가볍게 노크해 무료 인스턴스가 잠들지 않게 (271KB HTML 대신 "ok"만 응답)
 app.get('/healthz', (req, res) => res.status(200).send('ok'));
 // 🔖 지금 돌고 있는 배포 버전(Render 가 넣어 주는 커밋) — 배포가 실제로 반영됐는지 확인용
+// 🖥️ 미니 PC 감시기용: 지금 진행 중인 대회(사람이 남은 딥스택·MTT) 수 — 업데이트 재시작을 대회가 끝날 때까지 미룬다. 같은 컴퓨터에서만 묻는다
+//    (터널을 거친 바깥 요청도 localhost 로 보일 수 있지만, 개수만 알려 주므로 괜찮다).
+app.get('/busy', (req, res) => {
+    const ip = String(req.socket.remoteAddress || '');
+    if (!/^(::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(ip)) return res.status(404).end();
+    let mtt = 0, fn = 0;
+    try { mtts.forEach(m => { if (m.started && !m.finished) { mtt++; if (m.fn) fn++; } }); } catch (e) {}
+    res.json({ mtt, fn, online: io.engine ? io.engine.clientsCount : 0 });
+});
 app.get('/version', (req, res) => res.status(200).type('text/plain').send(String(process.env.RENDER_GIT_COMMIT || 'local').slice(0, 12)));
 
 // 🛗 승강설비 현장조회 — /manual 만 Basic 인증 (MANUAL_USER / MANUAL_PASS).
@@ -8171,3 +8180,5 @@ function gracefulShutdown(signal) {
 }
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+// 🖥️ 미니 PC 감시기(tools/minipc/runner.js)가 업데이트로 재시작할 때 보내는 종료 요청 — Windows 에는 SIGTERM 이 없어서 IPC 로 받는다
+process.on('message', m => { if (m === 'shutdown') gracefulShutdown('runner'); });
