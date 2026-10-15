@@ -8,7 +8,7 @@
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs'), path = require('path'), http = require('http');
 
-const ROOT = path.join(__dirname, '..', '..');
+const ROOT = process.env.RUNNER_ROOT || path.join(__dirname, '..', '..');      // (RUNNER_ROOT: 시험용으로 다른 폴더를 돌린다)
 const HOME = process.env.JINGCHIK_HOME || 'C:\\jingchik-data';
 const ENV_FILE = path.join(HOME, 'server.env');
 const RUN_LOG = path.join(HOME, 'runner.log'), SERVER_LOG = path.join(HOME, 'server.log');
@@ -36,10 +36,11 @@ function loadEnv() {
 }
 const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000 }).trim();
 
-let child = null, wantStop = false, crashes = [];
+let child = null, wantStop = false, crashes = [], runningHead = '';
 function start() {
     let head = 'local';
     try { head = git('rev-parse', 'HEAD'); } catch (e) {}
+    runningHead = head;
     const env = Object.assign({}, process.env, { PORT: '3000', DATA_DIR: HOME }, loadEnv(), { RENDER_GIT_COMMIT: head });
     rotate(SERVER_LOG);
     const out = fs.openSync(SERVER_LOG, 'a');
@@ -75,28 +76,42 @@ function busy() {
     });
 }
 
-let pendingSince = 0;
+let pendingSince = 0, updating = false;
+// 새 커밋을 받는다 → (대회 중이면 미룸) → 서버를 끈 뒤에 패키지를 맞추고 → 다시 띄운다.
+//   ⚠️ Windows 에서는 돌고 있는 서버가 패키지 파일(.node)을 잡고 있어서, 서버를 끄기 전에 설치하면 실패한다.
+//   받아 두기만 하고 재시작을 못 한 경우(설치 실패 등)도 다음 확인 때 "돌고 있는 커밋 ≠ 받은 커밋" 으로 다시 시도한다.
 async function checkUpdate() {
+    if (updating) return;
+    updating = true;
     try {
         git('fetch', '--quiet', 'origin', 'main');
-        const local = git('rev-parse', 'HEAD'), remote = git('rev-parse', 'origin/main');
-        if (local === remote) { pendingSince = 0; return; }
+        const remote = git('rev-parse', 'origin/main');
+        if (git('rev-parse', 'HEAD') === remote && runningHead === remote) { pendingSince = 0; return; }
         const b = await busy();
-        if (b && b.mtt > 0 && pendingSince && Date.now() - pendingSince < MAX_DEFER_MS) return;
-        if (b && b.mtt > 0 && !pendingSince) { pendingSince = Date.now(); log(`⏳ 새 커밋 ${remote.slice(0, 7)} — 대회 ${b.mtt}개가 진행 중이라 끝난 뒤 반영합니다`); return; }
-        const pkgBefore = git('rev-parse', 'HEAD:package-lock.json');
-        log(`⬇️ 새 커밋 ${remote.slice(0, 7)} 받는 중 (${local.slice(0, 7)} → ${remote.slice(0, 7)})`);
-        git('merge', '--ff-only', 'origin/main');
-        if (git('rev-parse', 'HEAD:package-lock.json') !== pkgBefore) {
-            log('📦 패키지가 바뀌어 npm ci 실행');
-            execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['ci', '--omit=dev'], { cwd: ROOT, stdio: 'ignore', timeout: 600000, shell: process.platform === 'win32' });
+        if (b && b.mtt > 0) {
+            if (!pendingSince) { pendingSince = Date.now(); log(`⏳ 새 커밋 ${remote.slice(0, 7)} — 대회 ${b.mtt}개가 진행 중이라 끝난 뒤 반영합니다`); }
+            if (Date.now() - pendingSince < MAX_DEFER_MS) return;
         }
+        if (git('rev-parse', 'HEAD') !== remote) {
+            log(`⬇️ 새 커밋 받는 중 (${git('rev-parse', 'HEAD').slice(0, 7)} → ${remote.slice(0, 7)})`);
+            git('merge', '--ff-only', 'origin/main');
+        }
+        let pkgChanged = true;
+        try { pkgChanged = git('rev-parse', runningHead + ':package-lock.json') !== git('rev-parse', 'HEAD:package-lock.json'); } catch (e) {}
+        const runnerChanged = (() => { try { return git('rev-parse', runningHead + ':tools/minipc/runner.js') !== git('rev-parse', 'HEAD:tools/minipc/runner.js'); } catch (e) { return false; } })();
         pendingSince = 0;
         await stop();
+        if (pkgChanged) {
+            log('📦 패키지가 바뀌어 npm install 실행');
+            try { execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: 600000, shell: process.platform === 'win32' }); }
+            catch (e) { log('⚠️ npm install 실패(그래도 서버를 띄운다): ' + String(e.stderr || e.message || e).split(/\r?\n/).filter(Boolean).slice(-3).join(' / ')); }
+        }
         start();
+        if (runnerChanged) log('ℹ️ 감시기(runner.js) 자체도 바뀌었습니다 — 미니 PC 를 다시 켜거나 작업 JingchikHoldem 을 다시 실행하면 적용됩니다');
     } catch (e) {
-        log('⚠️ 업데이트 확인 실패: ' + String(e.message || e).split('\n')[0]);
-    }
+        log('⚠️ 업데이트 확인 실패: ' + String(e.message || e).split(/\r?\n/)[0]);
+        if (!child && !wantStop) start();
+    } finally { updating = false; }
 }
 
 process.on('SIGINT', async () => { log('🛑 감시기 종료'); await stop(); process.exit(0); });
