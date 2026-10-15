@@ -1771,7 +1771,7 @@ class GameRoom {
                         // 🏁 유효 스택이 대회용 자료의 범위 안이면(그리고 스위치가 켜져 있으면) 그 깊이의 표를 쓴다
                         const _dep = this.botV11(nick) && !_huBot ? _effB : 0;
                         const rtC = preflopRangeTier(code, p.position || '', true, { chart: true, raises: 1, openerPos: _opnPos, closing: !!isBB, potOdds, depth: _dep, players: this.playerOrder.length });
-                        if (rtC.freq && rtC.freq.mtt) { _mttBot = true; if (Math.random() * 100 < rtC.freq.jam) return { type: 'raise', amount: p.currentBet + p.chips }; }
+                        if (rtC.freq && rtC.freq.mtt) { _mttBot = true; if (process.env.DEV_BOTSRC) console.log('BOTSRC mtt-defend'); if (Math.random() * 100 < rtC.freq.jam) return { type: 'raise', amount: p.currentBet + p.chips }; }
                         if (rtC.freq) {
                             const x = Math.random() * 100;
                             const t = x < rtC.freq.raise ? 'raise' : x < rtC.freq.raise + rtC.freq.call ? 'call' : 'fold';
@@ -1788,11 +1788,18 @@ class GameRoom {
                     if (_mo) {
                         // 🏁 대회용 자료: 올인 · 오픈 · 림프(SB) · 폴드를 그 빈도대로
                         const x = Math.random() * 100; _mttBot = true;
+                        if (process.env.DEV_BOTSRC) console.log('BOTSRC mtt-open');
                         if (x < _mo.jam) return { type: 'raise', amount: p.currentBet + p.chips };
                         if (x >= _mo.raise && x < _mo.raise + _mo.call) return { type: 'call' };
                         const t = x < _mo.raise ? 'raise' : 'fold'; rt = { tier: t, label: t === 'raise' ? '오픈 레이즈' : '폴드', score: rt.score };
                     }
                     else if (_of != null && !_limped) { const t = Math.random() * 100 < _of ? 'raise' : 'fold'; rt = { tier: t, label: t === 'raise' ? '오픈 레이즈' : '폴드', score: rt.score }; }
+                }
+                // ⚔️ [헤즈업 — 솔버 자료] 둘만 남으면(대회 결승) HRC 로 직접 푼 헤즈업 표대로 친다:
+                //    버튼은 오픈·림프·올인·폴드, BB 는 림프에 레이즈·체크 · 오픈에 3벳·콜·폴드, 버튼은 3벳에 올인·콜·폴드. 올인을 받는 자리는 아래 숏스택 계산이 맡는다.
+                if (_huBot && persona.proStrategy && this.botV11(nick) && _effB > 12 && Ranges.mttDepth(_effB, 2)) {
+                    const hb = this.huSolverPick(nick, code, _effB);
+                    if (hb) { if (process.env.DEV_BOTSRC) console.log('BOTSRC hu ' + hb.type); return hb; }
                 }
                 if (_huBot && !facingRaise && rt.tier !== 'raise' && rt.score > Quiz.HU_OPEN_SCORE) rt = { tier: 'raise', label: '오픈 레이즈', score: rt.score };
 
@@ -2261,6 +2268,34 @@ class GameRoom {
         if (!ab) return BOT_CHART_DEFAULT;
         const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
         return ab === '2' ? !bit : bit;
+    }
+    // ⚔️ 헤즈업 프리플랍을 HRC 로 푼 표(lib/preflop_mtt.json.gz 의 p2_*)에서 고른다. 표에 없는 자리(올인을 받는 자리 등)면 null.
+    huSolverPick(nick, code, effBB) {
+        const p = this.players[nick], bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+        if (!p) return null;
+        let hi = bb; const tok = [], inPot = new Set();
+        (this.actionLog || []).filter(a => a.street === 1).forEach(a => {
+            if (a.type === 'sb' || a.type === 'bb' || a.type === 'ante' || a.type === 'check') return;
+            const ps = Ranges.dataPos((this.players[a.nick] || {}).position || '');
+            if ((a.type === 'raise' || a.type === 'allin') && a.amount > hi) { tok.push(ps + (a.type === 'allin' ? ':A' : ':R')); hi = a.amount; inPot.add(a.nick); }
+            else if (a.type === 'call' || a.type === 'allin') { tok.push(ps + ':C'); inPot.add(a.nick); }
+            else if (a.type === 'fold' && inPot.has(a.nick)) tok.push(ps + ':F');
+        });
+        if (tok.some(t => t.endsWith(':A'))) return null;
+        const key = tok.join(',') + '>' + Ranges.dataPos(p.position || '');
+        const f = Ranges.lookup({ seqA: key, depth: effBB, players: 2, heroPos: p.position || '', raises: 1 }, code);
+        if (!f || !f.mtt) return null;
+        const toCall = this.currentHighestBet - p.currentBet, allIn = p.currentBet + p.chips, nR = tok.filter(t => t.endsWith(':R')).length;
+        const x = Math.random() * 100;
+        if (x < (f.jam || 0)) return allIn > this.currentHighestBet ? { type: 'raise', amount: allIn } : { type: 'call' };
+        if (x < f.raise) {
+            // 크기: HRC 계산에 쓴 것 — 오픈 2.3bb · 림프에 레이즈 4.5bb · 3벳 2.6배 · 그 위는 올인
+            let to = nR === 0 ? (toCall > 0 ? 2.3 * bb : 4.5 * bb) : nR === 1 ? this.currentHighestBet * 2.6 : allIn;
+            to = Math.min(allIn, Math.max(Math.round(to), this.currentHighestBet + (this.lastFullRaiseAmount || bb)));
+            return to > this.currentHighestBet ? { type: 'raise', amount: to } : (toCall > 0 ? { type: 'call' } : { type: 'check' });
+        }
+        if (x < f.raise + f.call) return toCall > 0 ? { type: 'call' } : { type: 'check' };
+        return toCall > 0 ? { type: 'fold' } : { type: 'check' };
     }
     botV11(nick) {
         const ab = process.env.BOT_AB11;
@@ -4736,7 +4771,16 @@ class GameRoom {
                 const late = (p.position === 'BTN' || p.position === 'CO' || p.position === 'SB');
                 // 모두 접고 SB 가 BB 한 명만 상대하는 자리(6인 테이블의 블라인드 대결). 헤즈업 테이블은 아래에서 따로 넓게 연다.
                 const _sbVsBb = !_huTable && opponents === 1 && !!(p.role && p.role.includes('SB'));
-                if (rt.freq && rt.freq.mtt && rt.open && !canCheck) {
+                const _huLimp = (_huTable && canCheck && isBB) ? Ranges.lookup({ seqA: 'BTN:C>BB', depth: effBB, players: 2, heroPos: 'BB', raises: 1 }, code) : null;
+                if (_huLimp && _huLimp.mtt) {
+                    // ⚔️ 헤즈업 BB 가 림프를 받음 — HRC 로 푼 표: 레이즈(올인 포함) 아니면 체크
+                    const r = _huLimp.raise;
+                    mix = { check: 100 - r, raise: r };
+                    bestAction = r >= 50 ? 'raise' : 'check';
+                    _mttF = { raise: r, call: 100 - r, fold: 0, jam: _huLimp.jam || 0, mtt: true };
+                    notes.push('대회용 자료(직접 푼 계산)');
+                    reason = `${_huLimp.name}: ${code} — 레이즈 ${r}%${_huLimp.jam ? ` (그중 올인 ${_huLimp.jam}%)` : ''} · 체크 ${100 - r}%${Math.max(r, 100 - r) >= 85 ? '' : ' — 섞어 치는 패라 25% 넘게 쓰는 선택은 어느 쪽도 실수가 아닙니다'}.`;
+                } else if (rt.freq && rt.freq.mtt && rt.open && !canCheck) {
                     // 🏁 먼저 여는 자리(대회용 자료): 오픈 · 림프(SB) · 폴드 빈도 그대로
                     const f = rt.freq;
                     mix = f.call ? { fold: f.fold, call: f.call, raise: f.raise } : { fold: f.fold, raise: f.raise };
