@@ -5535,6 +5535,15 @@ class MTTManager {
         this.entrants = this.entrants.filter(e => e.nick !== nick);
         this.broadcastLobby();
     }
+    // 대기실에서 빠진다. 방장이면 대회를 취소하고 남은 사람들을 로비로 돌려보낸다(그들의 대회 표시도 지운다 — 안 지우면 새 대회를 못 만든다).
+    dropFromLobby(nick) {
+        if (this.started) return;
+        if (this.hostNick === nick) {
+            this.entrants.forEach(e => { if (!e.socketId) return; io.to(e.socketId).emit('mttCancelled'); const s = io.sockets.sockets.get(e.socketId); if (s && s._mttId === this.mttId) { s._mttId = null; enterLobby(s); } });
+            this.finished = true; mtts.delete(this.mttId);
+        } else this.removeEntrant(nick);
+        io.emit('mttList', mttListArray());
+    }
 
     addBot() {
         const pool = ['김봇식', '이서봇', '박올인', '최콜콜', '정레이즈', '한판봇', '강타짜', '윤폴드', '조블러프', '도박봇', '신털이', '배포커', '오막판', '서클럽'];
@@ -5770,6 +5779,32 @@ class MTTManager {
         this._say('🤝 사람 전원 동의! 진행 중인 판이 끝나면 남은 칩 순서대로 순위를 정하고 토너먼트를 마칩니다.');
         this.tryAgreedFinish();
     }
+    // 🔬 개발용 검산(DEV_MTTCHECK): 칩 총량 보존 · 한 사람 한 자리 · 테이블 정원 · 순위 중복
+    _devCheck() {
+        const bad = m => console.log('MTTCHECK ' + this.mttId + ' ' + m);
+        const seen = {}; let chips = 0, idle = true;
+        this.tables.forEach(rid => {
+            const r = rooms.get(rid); if (!r) return;
+            if (r.gameStage >= 1 && r.gameStage <= 4) idle = false;
+            const seated = r.playerOrder.filter(n => r.players[n] && (r.players[n].chips > 0 || (r.gameStage >= 1 && r.gameStage <= 4 && r.players[n].isAllIn)));
+            if (seated.length > this.tableSize) bad(`정원 초과 ${rid} ${seated.length}`);
+            seated.forEach(n => { if (seen[n]) bad(`두 테이블 ${n} ${seen[n]} ${rid}`); seen[n] = rid; });
+            // 판이 끝난 테이블(5)은 팟을 이미 나눠 준 뒤라 다음 판 시작 때까지 pot 값만 남아 있다 — 세지 않는다
+            chips += (r.gameStage === 5 ? 0 : (r.pot || 0)) + Object.values(r.players).reduce((a, p) => a + (p.chips || 0) + (p.currentBet || 0), 0);
+        });
+        const rebuys = Object.values(this.rebuys || {}).reduce((a, b) => a + b, 0);
+        const expect = this.startingChips * ((this.totalEntrants || 0) + rebuys);
+        if (idle && this.tables.length && chips !== expect) bad(`칩 총량 ${chips} ≠ ${expect}`);
+        const places = this.eliminated.map(e => e.place);
+        if (new Set(places).size !== places.length) bad(`순위 중복 ${places.join(',')}`);
+        this.eliminated.forEach(e => { if (seen[e.nick]) bad(`탈락했는데 앉아 있음 ${e.nick}`); });
+        this._devChecks = (this._devChecks || 0) + 1;
+    }
+    _autoEnd(why) {
+        this._endAgreed = true; this._endWhy = why;
+        this.tables.forEach(rid => io.to(rid).emit('gameMessage', `🏁 ${why} 대회를 정리합니다 — 진행 중인 판이 끝나면 남은 사람은 칩 순서대로 순위가 정해집니다.`));
+        if (this.watchers) this.watchers.forEach((w, sid) => io.to(sid).emit('gameMessage', `🏁 ${why} 대회를 정리합니다.`));
+    }
     tryAgreedFinish() {
         if (!this._endAgreed || this.finished) return;
         const busy = this.tables.some(rid => { const r = rooms.get(rid); return r && r.gameStage >= 1 && r.gameStage <= 4; });
@@ -5793,7 +5828,7 @@ class MTTManager {
         if (process.env.DEV_MTTLOG) console.log(`[MTTLOG] agreed-finish ${JSON.stringify(ranking.slice(0, 8).map(r => r.place + ':' + r.nick))}`);
         this.tables.forEach(rid => {
             io.to(rid).emit('mttFinished', { champion, totalEntrants: this.totalEntrants, ranking, agreed: true });
-            io.to(rid).emit('gameMessage', `🤝 합의 종료 — 남은 ${alive.length}명은 칩 순서대로 순위가 정해졌습니다 (1위 ${champion}).`);
+            io.to(rid).emit('gameMessage', `${this._endWhy ? '🏁 ' + this._endWhy + ' 정리' : '🤝 합의 종료'} — 남은 ${alive.length}명은 칩 순서대로 순위가 정해졌습니다 (1위 ${champion}).`);
         });
         setTimeout(() => {
             this.tables.forEach(rid => { if (rooms.has(rid)) destroyRoom(rid); });
@@ -5876,6 +5911,7 @@ class MTTManager {
 
         const live = this.livePlayers();
         this.updateHold();
+        if (process.env.DEV_MTTCHECK) this._devCheck();
 
         // 2) 우승 판정 (생존자 1명) — 핸드 비진행 상태일 때만 확정
         if (live.length === 1) {
@@ -5886,6 +5922,16 @@ class MTTManager {
         }
         if (live.length === 0) return; // 비정상(곧 정리됨)
 
+        // 🏁 [딥스택] 사람이 모두 탈락했으면 바로, 남은 사람이 모두 10분 넘게 접속해 있지 않으면 그때 — 칩 순서로 순위를 정하고 끝낸다.
+        //    (봇끼리 끝까지 돌면 실제 시간으로 몇 시간이 걸리고, 그동안 아무도 새 딥스택을 열 수 없다. 상금은 사람이 우승하지 않았으니 넘어간다.)
+        if (this.fn && !this._endAgreed) {
+            const humans = live.filter(p => !p.isBot);
+            const anyOn = humans.some(p => p.socketId && io.sockets.sockets.get(p.socketId));
+            if (!humans.length) this._autoEnd('사람 참가자가 모두 탈락해서');
+            else if (!anyOn) { this._goneSince = this._goneSince || Date.now(); if (Date.now() - this._goneSince > (DEV_FAST ? 20000 : 600000)) this._autoEnd('남은 사람이 10분 넘게 접속해 있지 않아서'); }
+            else this._goneSince = 0;
+            if (this._endAgreed) { this.tryAgreedFinish(); return; }
+        }
         // 3) 봇만 남았는지 체크 (사람 전원 탈락) — 그래도 끝까지 진행해 우승 봇 확정
         //    단, 아무도 연결 안 됐고 봇도 없는 식의 완전 유령 상태는 과도한 자원낭비 방지로 정리
         const anyHumanConnected = live.some(p => !p.isBot && p.socketId && io.sockets.sockets.get(p.socketId));
@@ -6421,7 +6467,7 @@ io.on('connection', (socket) => {
 
             let activeRoomId = null;
             for (const [roomId, room] of rooms.entries()) {
-                if (room.players[safeNick]) {
+                if (room.players[safeNick] && !room.players[safeNick]._out) {
                     activeRoomId = roomId;
                     const oldSocketId = room.players[safeNick].socketId;
                     room.players[safeNick].socketId = socket.id;
@@ -6470,7 +6516,14 @@ io.on('connection', (socket) => {
                 rejoinedRoomId: activeRoomId
             });
 
-            if (!activeRoomId) {
+            // 🏆 시작 전 대회 대기실에 있던 사람이면(앱이 잠깐 꺼졌다 켜짐 등) 대기실로 돌려보낸다
+            let _lobbyMtt = null;
+            if (!activeRoomId) mtts.forEach(m => { if (!_lobbyMtt && !m.started && !m.finished) { const e = m.entrants.find(x => x.nick === safeNick && !x.isBot); if (e) { e.socketId = socket.id; e._goneAt = 0; _lobbyMtt = m; } } });
+            if (_lobbyMtt) {
+                socket._mttId = _lobbyMtt.mttId;
+                socket.emit('mttJoined', { mttId: _lobbyMtt.mttId, name: _lobbyMtt.name });
+                _lobbyMtt.broadcastLobby();
+            } else if (!activeRoomId) {
                 socket.emit('roomList', roomListArray());
                 enterLobby(socket); // 🏛️ 대기자 명단 + 로비 채팅 합류
             }
@@ -6486,14 +6539,16 @@ io.on('connection', (socket) => {
         });
 
         // 💡 [수정 #8] 방 이름 길이 제한
-        const roomId = (typeof data === 'string' ? data : String(data.roomId || '')).trim().slice(0, 20);
+        // 🐛 대회 테이블 이름("mtt_…#FINAL")은 20자를 넘는다 — 자르면 재접속할 때 엉뚱한 빈 방이 새로 생겨 결승에 못 돌아왔다. 이미 있는 방이면 그대로 쓴다.
+        const _rawRoom = (typeof data === 'string' ? data : String(data.roomId || '')).trim();
+        const roomId = rooms.has(_rawRoom) ? _rawRoom : _rawRoom.slice(0, 20);
         if (!roomId) return socket.emit('joinError', '방 이름을 정확히 입력해주세요.');
 
         // 🚪 [버그픽스] 한 사람이 두 방에 동시에 들어갈 수 있었다. 재접속으로 원래 방에 복귀한 상태에서
         //    다른 방(초대 링크 등)에 또 들어가면 두 테이블의 화면 갱신이 번갈아 와서 테이블이 깜빡이고,
         //    한쪽 방에는 자리만 차지한 유령이 남았다. 다른 방에 자리가 있으면 먼저 나가게 한다.
         for (const [rid, r] of rooms) {
-            if (rid !== roomId && r.players[socket.nickname] && !r.players[socket.nickname].isBot) {
+            if (rid !== roomId && r.players[socket.nickname] && !r.players[socket.nickname].isBot && !r.players[socket.nickname]._out) {      // 대회에서 탈락한 자리(_out)는 빈자리로 본다
                 return socket.emit('joinError', `이미 [${rid}] 방에 있습니다. 먼저 그 방에서 나가세요.`);
             }
         }
@@ -6508,6 +6563,8 @@ io.on('connection', (socket) => {
 
         const room = rooms.get(roomId);
         const nick = socket.nickname;
+        // 🏆 대회 테이블은 그 대회 참가자만(재접속) 들어온다. 탈락한 사람은 관전으로.
+        if (room._mtt && (!room.players[nick] || room.players[nick]._out)) return socket.emit('joinError', '대회 테이블입니다. 진행 중인 대회는 열린 방 목록에서 관전할 수 있습니다.');
 
         // 🤖 컴까기 방은 주인 혼자 치는 방이다 (재접속한 주인만 다시 들어올 수 있다)
         if (room._challenge && !room.players[nick]) {   // 이미 멤버(재접속)면 통과
@@ -7625,12 +7682,7 @@ io.on('connection', (socket) => {
         const mtt = mtts.get(socket._mttId);
         if (!mtt) return;
         if (!mtt.started) {
-            mtt.removeEntrant(socket.nickname);
-            // 호스트가 나가면 토너먼트 취소
-            if (mtt.hostNick === socket.nickname) {
-                mtt.entrants.forEach(e => { if (e.socketId) io.to(e.socketId).emit('mttCancelled'); });
-                mtts.delete(mtt.mttId);
-            }
+            mtt.dropFromLobby(socket.nickname);      // 호스트가 나가면 토너먼트 취소(남은 사람들도 로비로)
             socket._mttId = null;
             enterLobby(socket);
             io.emit('mttList', mttListArray());
@@ -7886,6 +7938,14 @@ io.on('connection', (socket) => {
             }
             leaveLobby(socket); // 🏛️ 로비에 있었으면 대기자 명단에서 제거
             if (socket._watchMtt) { const m = mtts.get(socket._watchMtt); if (m) m.removeWatcher(socket.id); }
+            if (socket._mttId) {
+                const m = mtts.get(socket._mttId), sid = socket.id, nk = socket.nickname;
+                const e = m && !m.started && m.entrants.find(x => x.nick === nk);
+                if (e && e.socketId === sid) {
+                    e._goneAt = Date.now();
+                    setTimeout(() => { const m2 = mtts.get(m.mttId); const e2 = m2 && !m2.started && m2.entrants.find(x => x.nick === nk); if (e2 && e2.socketId === sid) m2.dropFromLobby(nk); }, 90000);
+                }
+            }
             const roomId = socket.currentRoom;
             const room = rooms.get(roomId);
             if (room && socket.nickname && room.players[socket.nickname]) {
