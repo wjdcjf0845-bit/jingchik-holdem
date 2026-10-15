@@ -131,7 +131,10 @@ const BOT_TURN_DEFAULT = true;
 //   조언·채점·문제와 같은 계산을 쓰게 하려고 켠다.
 const BOT_JAM_DEFAULT = true;
 // 🏁 봇이 20~30bb 대에서 "직접 푼 대회용 프리플랍 자료"(lib/preflop_mtt.json.gz)를 쓸지 — 맞대결 스위치 BOT_AB11.
-const BOT_MTT_DEFAULT = true;   // 운영자 결정(2026-10-11): 맞대결 측정 없이 켠다
+const BOT_MTT_DEFAULT = true;
+// 🧮 고수 봇이 프리플랍 "모든 자리"(3벳·4벳 받기, 림프 뒤, 올인 받기[헤즈업])를 대회용 솔버 표로 칠지 — 맞대결 스위치 BOT_AB12
+//   측정(2026-10-15, 30bb 시작 · 1분 레벨 · 24테이블 178,669핸드): 새 − 옛 = +8.9 ± 4.6 bb/100 (t = 1.94) — 강해진 쪽으로 나왔다(경계선).
+const BOT_SOLVERPRE_DEFAULT = true;   // 운영자 결정(2026-10-11): 맞대결 측정 없이 켠다
 const OPEN_PRIOR = {};                          // 자리별 오픈 범위(패마다 여는 확률) — jamInfo 가 채워 쓴다
 const BOT_RIVER_DEFAULT = false;                // 고수 봇이 리버 계산을 쓸지 — 맞대결 측정 전(botV9)
 const GtoAdvice = require('./lib/gtoadvice');   // 🎓 학습모드 조언 — 상대 수·포지션·스택 깊이별
@@ -1799,9 +1802,13 @@ class GameRoom {
                 }
                 // ⚔️ [헤즈업 — 솔버 자료] 둘만 남으면(대회 결승) HRC 로 직접 푼 헤즈업 표대로 친다:
                 //    버튼은 오픈·림프·올인·폴드, BB 는 림프에 레이즈·체크 · 오픈에 3벳·콜·폴드, 버튼은 3벳에 올인·콜·폴드. 올인을 받는 자리는 아래 숏스택 계산이 맡는다.
-                if (_huBot && persona.proStrategy && this.botV11(nick) && _effB > 12 && Ranges.mttDepth(_effB, 2)) {
-                    const hb = this.huSolverPick(nick, code, _effB);
-                    if (hb) { if (process.env.DEV_BOTSRC) console.log('BOTSRC hu ' + hb.type); return hb; }
+                {
+                    const _np = this.playerOrder.length;
+                    const _gen = this.botV12(nick), _hu = _huBot && this.botV11(nick);
+                    if (persona.proStrategy && (_gen || _hu) && _effB > 12 && Ranges.mttDepth(_effB, _np)) {
+                        const hb = (_gen || _np === 2) ? this.huSolverPick(nick, code, _effB, _np, _gen) : null;
+                        if (hb) { if (process.env.DEV_BOTSRC) console.log('BOTSRC ' + (_np === 2 ? 'hu' : 'p' + _np) + ' ' + hb.type); return hb; }
+                    }
                 }
                 if (_huBot && !facingRaise && rt.tier !== 'raise' && rt.score > Quiz.HU_OPEN_SCORE) rt = { tier: 'raise', label: '오픈 레이즈', score: rt.score };
 
@@ -2272,7 +2279,9 @@ class GameRoom {
         return ab === '2' ? !bit : bit;
     }
     // ⚔️ 헤즈업 프리플랍을 HRC 로 푼 표(lib/preflop_mtt.json.gz 의 p2_*)에서 고른다. 표에 없는 자리(올인을 받는 자리 등)면 null.
-    huSolverPick(nick, code, effBB) {
+    //    n: 테이블 인원(2~6). all: 모든 자리(아니면 헤즈업의 예전 범위만). 헤즈업에서는 올인을 받는 자리도 표대로(상금이 걸린 3명 이상은 ICM 이 있는 올인 계산에 맡긴다).
+    huSolverPick(nick, code, effBB, n, all) {
+        n = n || 2;
         const p = this.players[nick], bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
         if (!p) return null;
         let hi = bb; const tok = [], inPot = new Set();
@@ -2283,21 +2292,31 @@ class GameRoom {
             else if (a.type === 'call' || a.type === 'allin') { tok.push(ps + ':C'); inPot.add(a.nick); }
             else if (a.type === 'fold' && inPot.has(a.nick)) tok.push(ps + ':F');
         });
-        if (tok.some(t => t.endsWith(':A'))) return null;
+        if (tok.some(t => t.endsWith(':A')) && !(n === 2 && all)) return null;
         const key = tok.join(',') + '>' + Ranges.dataPos(p.position || '');
-        const f = Ranges.lookup({ seqA: key, depth: effBB, players: 2, heroPos: p.position || '', raises: 1 }, code);
+        const f = Ranges.lookup({ seqA: key, depth: effBB, players: n, heroPos: p.position || '', raises: 1 }, code);
         if (!f || !f.mtt) return null;
         const toCall = this.currentHighestBet - p.currentBet, allIn = p.currentBet + p.chips, nR = tok.filter(t => t.endsWith(':R')).length;
+        const blind = /SB|BB/.test(p.role || '') || p.position === 'SB' || p.position === 'BB';
         const x = Math.random() * 100;
         if (x < (f.jam || 0)) return allIn > this.currentHighestBet ? { type: 'raise', amount: allIn } : { type: 'call' };
         if (x < f.raise) {
             // 크기: HRC 계산에 쓴 것 — 오픈 2.3bb · 림프에 레이즈 4.5bb · 3벳 2.6배 · 그 위는 올인
-            let to = nR === 0 ? (toCall > 0 ? 2.3 * bb : 4.5 * bb) : nR === 1 ? this.currentHighestBet * 2.6 : allIn;
+            // (3명 이상: SB 가 먼저 열면 3.5bb · 블라인드의 3벳 3.3배 · 포지션 있는 3벳 2.5배 — 계산에 쓴 Advanced 설정)
+            const limpers = tok.filter(t => t.endsWith(':C')).length;
+            let to = nR === 0 ? (toCall > 0 ? ((n > 2 && p.position === 'SB') ? 3.5 * bb : 2.3 * bb + limpers * bb) : (4.5 + Math.max(0, limpers - 1)) * bb)
+                : nR === 1 ? this.currentHighestBet * (n === 2 ? 2.6 : blind ? 3.3 : 2.5) : allIn;
             to = Math.min(allIn, Math.max(Math.round(to), this.currentHighestBet + (this.lastFullRaiseAmount || bb)));
             return to > this.currentHighestBet ? { type: 'raise', amount: to } : (toCall > 0 ? { type: 'call' } : { type: 'check' });
         }
         if (x < f.raise + f.call) return toCall > 0 ? { type: 'call' } : { type: 'check' };
         return toCall > 0 ? { type: 'fold' } : { type: 'check' };
+    }
+    botV12(nick) {
+        const ab = process.env.BOT_AB12;
+        if (!ab) return BOT_SOLVERPRE_DEFAULT;
+        const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
+        return ab === '2' ? !bit : bit;
     }
     botV11(nick) {
         const ab = process.env.BOT_AB11;
