@@ -51,6 +51,10 @@ ADMIN_SECRET=
 FN_PAYEE=
 FN_ACCOUNT=
 MAX_PLAYERS=
+# 폰 알림(선택): 폰에 ntfy 앱을 깔고 남이 못 맞힐 주제 이름을 정해 구독한 뒤 같은 이름을 적는다 — 서버가 갑자기 꺼지거나 멈추거나 오류가 나면 알린다
+ALERT_NTFY=
+# 동시에 열 수 있는 딥스택 연습 수(비우면 3)
+FN_MAX=
 '@ | Set-Content -Encoding UTF8 $EnvFile
     Write-Host "설정 파일을 만들었습니다: $EnvFile — 메모장이 열리면 Render 의 값을 붙여 넣고 저장한 뒤 닫으세요." -ForegroundColor Yellow
     Start-Process notepad.exe $EnvFile -Wait

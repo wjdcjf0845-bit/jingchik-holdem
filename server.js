@@ -1,5 +1,7 @@
+let OPS = null;   // 🛠️ 운영 도우미(lib/ops.js) — 백업·알림·멈춤 감시. 서버가 켜질 때 만든다
 process.on('uncaughtException', (err) => {
     console.error('🚨 [서버 크래시 방어] Uncaught Exception:', err);
+    try { if (OPS) OPS.alert('uncaught', '서버 오류(계속 돌고 있음): ' + String(err && err.message || err).slice(0, 120)); } catch (e) {}
     // 메모리 손상 전에 전적 긴급 저장 시도 (MockDB가 초기화된 경우만)
     try { if (typeof MockDB !== 'undefined' && MockDB.flush) MockDB.flush(); } catch (e) {}
 });
@@ -6021,6 +6023,7 @@ class MTTManager {
             this._tickInner();
         } catch (e) {
             console.error('[MTT tick 오류]', e && e.message);
+            try { if (OPS) OPS.alert('mtttick', '대회 진행 오류: ' + String(e && e.message).slice(0, 120)); } catch (e2) {}
         } finally {
             this._tickBusy = false;
         }
@@ -6357,6 +6360,8 @@ class MTTManager {
 //    시작 40,000칩 · 1레벨 100/100 · 3레벨부터 BB 앤티 · 32레벨까지 · 리바인 없음(운영자 결정). 테이블 9인 · 정원 50명.
 //    실제 매장은 레벨 20분 · 4레벨마다 15분 휴식 · 작은 칩 정리(color-up)가 있지만, 앱은 휴식·칩 정리 없이 레벨만 3분으로 진행한다.
 //    입상: 6위까지(운영자 결정 — 실제 대회는 107명+ 에 13위까지, 약 12%). 상금 비율은 실제 대회 1~6위 상금(405·255·188·150·112·90만 원)의 비율.
+// 동시에 열 수 있는 딥스택 연습 수(server.env 의 FN_MAX 로 바꾼다)
+const FN_MAX = Math.max(1, Number(process.env.FN_MAX) || 3);
 const FN_MTT = {
     // 레벨은 3분: 앱은 판이 서너 배 빨리 돌아서 짧게 잡는다(운영자 결정 — 긴 진행은 없앰)
     entrants: 50, tableSize: 9, startingChips: 40000, blindUpInterval: 180, paid: 6, payouts: [4050, 2550, 1880, 1500, 1120, 900], rebuys: 0, rebuyUntilLevel: 0, normalBots: 3,
@@ -7513,12 +7518,16 @@ io.on('connection', (socket) => {
     // 🏁 [파이널나인 딥스택 연습] 50인 MTT 를 연다 — 친구들은 MTT 목록에서 들어오고, 시작하면 빈자리는 봇이 채운다
     socket.on('createFnMtt', (data) => {
         if (!socket.nickname || socket.currentRoom || socket._mttId) return;
-        // 🖥️ [서버 부하] 딥스택 연습(정원 50명 · 봇 포함)은 한 번에 하나만 — 진행 중인 것이 끝나야 새로 열 수 있다
-        const busy = [...mtts.values()].find(m => m.fn && !m.finished);
-        if (busy) {
-            socket.emit('gameMessage', busy.started
-                ? `🚫 ${busy.hostNick} 님의 딥스택 연습이 진행 중입니다. 서버 부하 때문에 끝난 뒤에 새로 열 수 있습니다 — 열린 방 목록에서 관전할 수 있습니다.`
-                : `🚫 ${busy.hostNick} 님이 연 딥스택 연습이 참가자를 모으는 중입니다 — 열린 방 목록에서 참가하세요.`);
+        // 🖥️ [서버 부하] 딥스택 연습은 동시에 FN_MAX 개(기본 3)까지 — 미니 PC 로 옮긴 뒤 50인 하나가 CPU 코어 하나의 10% 도 안 써서 하나만 막을 이유가 없어졌다.
+        //    단, 참가자를 모으는 중인 딥스택이 있으면 새로 열지 말고 거기에 들어가게 한다(친구들이 여러 대회로 흩어지지 않게).
+        const live = [...mtts.values()].filter(m => m.fn && !m.finished);
+        const gathering = live.find(m => !m.started);
+        if (gathering) {
+            socket.emit('gameMessage', `🚫 ${gathering.hostNick} 님이 연 딥스택 연습이 참가자를 모으는 중입니다 — 열린 방 목록에서 참가하세요.`);
+            return;
+        }
+        if (live.length >= FN_MAX) {
+            socket.emit('gameMessage', `🚫 딥스택 연습이 이미 ${live.length}개 진행 중입니다(동시에 ${FN_MAX}개까지). 하나가 끝나면 열 수 있습니다 — 열린 방 목록에서 관전할 수 있습니다.`);
             return;
         }
 
@@ -8258,6 +8267,12 @@ MockDB.initRemote().catch(e => console.error('🌐 원격 초기화 오류:', e 
         console.error(e && e.code === 'EADDRINUSE' ? `🚨 포트 ${PORT} 를 다른 프로그램이 쓰고 있습니다 — 예전 서버 창이 켜져 있으면 닫으세요.` : '🚨 서버 시작 실패: ' + (e && e.message));
         process.exit(1);
     });
+    // 🛠️ 운영 도우미: 매일 전적 백업 · (ALERT_NTFY 가 있으면) 폰 알림 · 감시기 아래에서 돌 때만 멈춤 감시
+    try {
+        OPS = require('./lib/ops').createOps({ dataDir: DATA_DIR, dataFile: DATA_FILE, flush: () => MockDB.flush(), topic: process.env.ALERT_NTFY || '' });
+        if (process.send || process.env.WATCHDOG) OPS.startWatchdog(Number(process.env.WATCHDOG_MS) || 60000);
+        if (MockDB._remote && !MockDB._remoteLoadOk) OPS.alert('turso', 'Turso(전적 DB)를 불러오지 못했습니다 — 전적이 이 PC 에만 저장됩니다.');
+    } catch (e) { console.error('🛠️ 운영 도우미 시작 실패(게임에는 영향 없음):', e && e.message); }
     server.listen(PORT, () => {
         console.log(`✅ [Master Server] 치명 버그 수정 + 보안 패치 + 방 정리 시스템 적용 완료! (포트 ${PORT})`);
         // 🛡️ 관리자 로그인이 안 될 때 원인을 찾기 쉽게 — 어떤 방식으로 비밀번호를 확인하는지만 남긴다(값은 남기지 않는다)
@@ -8297,6 +8312,7 @@ function gracefulShutdown(signal) {
     if (_shuttingDown) return;
     _shuttingDown = true;
     console.log(`\n🛑 ${signal} 수신 — 전적 저장 후 종료합니다...`);
+    try { if (OPS) OPS.cleanExit(); } catch (e) {}
     try { MockDB.flush(); } catch (e) { console.error('종료 저장 실패:', e.message); }
     // 🌐 원격(Turso) 저장까지 완료 대기(최대 3초) 후 종료 — Render 재배포 시 마지막 변경 보존
     try { flushAccessLog(); } catch (e) {}

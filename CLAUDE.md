@@ -21,7 +21,8 @@ Node 20+ · Express · Socket.IO. 사용자와는 한국어(표준어)로 대화
 4. 보고: 무엇을 바꿨는지, 확인한 것/못 한 것. 재시작으로 진행 중이던 판이 끊길 수 있음을 적는다.
 
 - 설정·비밀값은 미니 PC 의 `C:\jingchik-data\server.env` 에만 있다(Turso DB 주소·토큰, 관리자 비밀번호, 계좌). 전적은 Turso 에 저장된다.
-- 서버 로그: 미니 PC `C:\jingchik-data\server.log` · `runner.log`.
+- 서버 로그: 미니 PC `C:\jingchik-data\server.log` · `runner.log` · 멈춤 감시 `watchdog.log`.
+- 전적 백업: 매일 새벽 4시 이후 `C:\jingchik-data\backup\poker_stats-날짜.json.gz`(30일치). 폰 알림은 server.env 의 `ALERT_NTFY`(ntfy 주제) — `lib/ops.js`.
 
 ## 지킬 것
 - **공개 저장소**: 비밀번호·토큰·계좌번호를 코드나 커밋에 절대 넣지 않는다. `access_log.json`·`poker_stats.json` 커밋 금지.
