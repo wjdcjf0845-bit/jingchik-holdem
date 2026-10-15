@@ -8,7 +8,7 @@ test('자료가 있고, 6인 자료는 오픈·방어 표를 갖고 있다', () 
     const D = Ranges.mttData();
     assert.ok(D && D['25'] && D['25'].tables['>BTN'] && D['25'].tables['BTN:R>BB']);
     Object.keys(D).forEach(k => {
-        assert.match(k, /^(\d+|p[2-5]_\d+)$/);
+        assert.match(k, /^(\d+|p[2-5]_\d+|i[3-6]_\d+)$/);
         Object.values(D[k].tables).forEach(T => Object.values(T).forEach(r => {
             assert.ok(r[0] >= 0 && r[1] >= 0 && r[0] + r[1] <= 100, k + ' ' + JSON.stringify(r));
             if (r[2] != null) assert.ok(r[2] <= r[0]);
@@ -43,4 +43,20 @@ test('범위표 판단(preflopRangeTier)이 대회용 자료를 쓰고 이름에
     assert.ok(!(deep.freq && deep.freq.mtt));              // 깊으면 100bb 표
     const hu = PF.preflopRangeTier('K7o', 'BTN', false, { chart: true, depth: 20, players: 2, headsUp: true });
     assert.ok(hu.freq && hu.freq.mtt);                     // 헤즈업도 그 인원 자료
+});
+
+// 🏆 결승 테이블 상금(ICM) 표: icm 을 주면 그 인원의 i<인원>_<깊이> 를 먼저 쓰고, 없으면 칩 기준 표로 돌아간다
+test('결승 상금 표: icm 이면 상금 반영 표 · 아니면 칩 기준 표', () => {
+    const D = Ranges.mttData();
+    if (!D['i4_20']) return;
+    assert.strictEqual(Ranges.mttDepth(20, 4, true), 'i4_20');
+    assert.strictEqual(Ranges.mttDepth(20, 4, false), 'p4_20');
+    assert.strictEqual(Ranges.mttDepth(20, 2, true), 'p2_20');             // 헤즈업은 상금 차이가 없다
+    assert.strictEqual(Ranges.mttDepth(45, 4, true), 'p4_40');             // 상금 표의 깊이 밖이면 칩 기준
+    const f = Ranges.lookup({ seqA: '>CO', depth: 20, players: 4, icm: true, heroPos: 'CO', raises: 1 }, 'AKs');
+    assert.ok(f && f.mtt && f.icm && /상금 반영/.test(f.name));
+    // 버블에서는 올인을 받는 범위가 칩 기준보다 좁다
+    const w = (d, k) => Ranges.ALL.reduce((a, c) => a + ((D[d].tables[k] || {})[c] || [0, 0])[1] * Ranges.combos(c), 0);
+    const key = Object.keys(D['i4_20'].tables).find(k => /^[A-Z]+:A>BB$/.test(k) && D['p4_20'].tables[k]);
+    if (key) assert.ok(w('i4_20', key) < w('p4_20', key), key);
 });

@@ -192,6 +192,21 @@ module.exports = function createAdminRouter(deps) {
         res.json({ ok: true, nick, before, after: u.bankroll });
     });
 
+    // 🎯 홀인원 상금 장부 — 참가비 입금 확인 · 잘못된 참가 기록 지우기 · 상금 보냄 표시. 한 건 한 건 접속 기록에 남긴다.
+    router.get('/api/jackpot', needAuth, (req, res) => {
+        if (!d.MockDB || !d.MockDB.jpLedger) return res.json({ entries: [], wins: [] });
+        res.json(d.MockDB.jpLedger());
+    });
+    router.post('/api/jackpot', needAuth, express.json({ limit: '2kb' }), (req, res) => {
+        const b = req.body || {}, act = String(b.act || ''), nick = String(b.nick || '');
+        if (!['ok', 'unok', 'del', 'out', 'unout'].includes(act)) return res.status(400).json({ error: '알 수 없는 요청입니다.' });
+        if (!d.MockDB || !d.MockDB.jpAdmin(act, nick, b.t)) return res.status(400).json({ error: act === 'del' ? '기록이 없거나 입금 확인된 기록입니다(확인을 먼저 취소하세요).' : '그런 기록이 없습니다.' });
+        const LBL = { ok: '입금 확인', unok: '입금 확인 취소', del: '참가 기록 삭제', out: '상금 보냄', unout: '상금 보냄 취소' };
+        d.accessLog && d.accessLog.push({ type: 'admin', nick: USER, ip: clientIp(req), detail: `홀인원 ${LBL[act]}: ${nick} (${new Date(Number(b.t)).toLocaleString('ko-KR')})` });
+        try { const jv = d.MockDB.jpView(null); d.io.emit('jackpot', { pot: jv.pot, pending: jv.pending, cycle: jv.cycle }); } catch (e) {}
+        res.json({ ok: true });
+    });
+
     router.get('/api/users', needAuth, (req, res) => {
         if (!d.MockDB) return res.json({ rows: [] });
         const q = String(req.query.q || '').toLowerCase();
@@ -300,11 +315,12 @@ function dashboardPage() {
   <button data-v="online">🟢 지금 접속중</button>
   <button data-v="rooms">🎮 열린 방</button>
   <button data-v="users">👤 계정</button>
+  <button data-v="jackpot">🎯 홀인원 장부</button>
 </div>
 
 <div class="card" id="panel"></div>
 <div class="note">기록은 최근 3,000건 · 최대 60일까지만 보관되고 오래된 것부터 자동으로 지워집니다.<br>
-바꿀 수 있는 건 계정 탭의 뱅크롤 지급/회수뿐이고, 한 건 한 건 접속 기록에 남습니다.</div>
+바꿀 수 있는 건 계정 탭의 뱅크롤 지급/회수와 홀인원 장부(입금 확인·상금 보냄)뿐이고, 한 건 한 건 접속 기록에 남습니다.</div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -408,6 +424,37 @@ async function render() {
       td(tr, r.id); td(tr, r.mode === 'cash' ? '캐시' : '토너먼트');
       td(tr, r.stage === 0 ? '대기' : (r.stage === 5 ? '결과' : '진행 ' + r.stage));
       td(tr, String(r.players), 'num'); td(tr, String(r.humans), 'num'); td(tr, r.host || '-');
+    }));
+  } else if (view === 'jackpot') {
+    const r = await fetch('/admin/api/jackpot');
+    if (r.status === 401) { location.reload(); return; }
+    const L = await r.json();
+    const act = async (a, nick, t, msg) => {
+      if (msg && !confirm(msg)) return;
+      const r2 = await fetch('/admin/api/jackpot', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ act: a, nick, t }) });
+      const j = await r2.json().catch(() => ({}));
+      if (!r2.ok) { alert(j.error || '실패했습니다.'); return; }
+      render();
+    };
+    const btn = (label, fn) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = label; b.style.padding = '3px 9px'; b.style.marginRight = '4px'; b.onclick = fn; return b; };
+    const cur = (L.sums || {})[L.cycle] || { ok: 0, wait: 0 };
+    const head = document.createElement('div'); head.className = 'note'; head.style.marginTop = '0';
+    head.textContent = \`지금 \${L.cycle}회차 · 입금 확인된 상금 \${num(cur.ok)}원 · 확인 대기 \${num(cur.wait)}원 — 참가비는 대회가 시작되면 "확인 대기"로 적히고, 입금을 확인해야 상금에 들어갑니다.\`;
+    p.appendChild(head);
+    const h1 = document.createElement('div'); h1.className = 'sub'; h1.style.margin = '12px 0 6px'; h1.textContent = '🏆 우승 (상금 = 그 회차의 입금 확인된 참가비 합)'; p.appendChild(h1);
+    p.appendChild(table(['시각','회차','우승자','상금','확인 대기','참가 인원','보냄'], L.wins, (tr, w) => {
+      td(tr, fmt(w.t)); td(tr, String(w.c), 'num'); td(tr, w.nick); td(tr, num(w.amount) + '원', 'num'); td(tr, w.wait ? num(w.wait) + '원' : '-', 'num'); td(tr, String(w.entrants || '-'), 'num');
+      const c = document.createElement('td');
+      c.appendChild(w.out ? btn('✅ 보냄 (취소)', () => act('unout', w.nick, w.t, w.nick + ' 상금 보냄 표시를 취소할까요?')) : btn('💸 보냄 표시', () => act('out', w.nick, w.t, w.nick + ' 에게 ' + num(w.amount) + '원을 보냈다고 표시할까요?')));
+      tr.appendChild(c);
+    }));
+    const h2 = document.createElement('div'); h2.className = 'sub'; h2.style.margin = '14px 0 6px'; h2.textContent = '💳 참가비 (최근 순)'; p.appendChild(h2);
+    p.appendChild(table(['시각','회차','닉네임','참가비','입금','고치기'], L.entries, (tr, e) => {
+      td(tr, fmt(e.t)); td(tr, String(e.c), 'num'); td(tr, e.nick); td(tr, num(e.fee) + '원', 'num'); td(tr, e.ok ? '✅ 확인' : '⏳ 대기');
+      const c = document.createElement('td');
+      if (e.ok) c.appendChild(btn('확인 취소', () => act('unok', e.nick, e.t, e.nick + ' ' + num(e.fee) + '원 입금 확인을 취소할까요?')));
+      else { c.appendChild(btn('💳 입금 확인', () => act('ok', e.nick, e.t))); c.appendChild(btn('🗑 지우기', () => act('del', e.nick, e.t, e.nick + ' 의 이 참가 기록을 지울까요? (입금하지 않은 참가 등)'))); }
+      tr.appendChild(c);
     }));
   } else {
     const bar = document.createElement('div'); bar.className='filters';

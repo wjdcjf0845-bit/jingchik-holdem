@@ -875,7 +875,9 @@ const MockDB = {
     },
     // 🎯 [홀인원 상금] 딥스택 연습 참가비를 모아 처음 우승한 사람에게 전부 준다(운영자가 직접 받고 주는 돈 — 앱은 장부만 적는다).
     //    회차: 지금까지 나온 우승 수 + 1. 그 회차에 처음 참가하면 5,000원, 같은 회차에 다시 참가하면 1,000원.
-    //    기록은 사람마다 남긴다: u.jpEntries [{c 회차, fee, t, id}] · u.jpWins [{c, amount, t, id, entrants}]. 상금은 그 회차 참가비의 합.
+    //    기록은 사람마다 남긴다: u.jpEntries [{c 회차, fee, t, id, ok}] · u.jpWins [{c, amount, t, id, entrants, out}].
+    //    💳 입금 확인: 참가비는 대회가 시작되면 "확인 대기"로 적히고, 운영자가 관리자 페이지에서 입금을 확인(ok)해야 상금에 들어간다.
+    //       상금 = 그 회차의 "입금 확인된" 참가비 합(우승 뒤에 확인돼도 그 회차 우승자 몫에 더해진다). out = 운영자가 상금을 보냈는지.
     JP_FIRST: 5000, JP_NEXT: 1000,
     jpHumans() { return Array.from(this.users.values()).filter(u => u && u.nickname && !u.nickname.startsWith('🤖')); },
     jpCycle() { return 1 + this.jpHumans().reduce((a, u) => a + (Array.isArray(u.jpWins) ? u.jpWins.length : 0), 0); },
@@ -891,26 +893,59 @@ const MockDB = {
         this.save();
         return fee;
     },
+    // 회차별 입금 확인된 합 · 확인 대기 합
+    jpSums() {
+        const S = {};
+        this.jpHumans().forEach(u => (u.jpEntries || []).forEach(e => { const s = S[e.c] || (S[e.c] = { ok: 0, wait: 0 }); if (e.ok) s.ok += e.fee; else s.wait += e.fee; }));
+        return S;
+    },
     jpView(nick) {
-        const c = this.jpCycle(), entries = [], history = [];
+        const c = this.jpCycle(), entries = [], history = [], S = this.jpSums();
         this.jpHumans().forEach(u => {
-            (u.jpEntries || []).forEach(e => { if (e.c === c) entries.push({ nick: u.nickname, fee: e.fee, t: e.t }); });
-            (u.jpWins || []).forEach(w => history.push({ nick: u.nickname, amount: w.amount, t: w.t, c: w.c, entrants: w.entrants || 0 }));
+            (u.jpEntries || []).forEach(e => { if (e.c === c) entries.push({ nick: u.nickname, fee: e.fee, t: e.t, ok: !!e.ok }); });
+            (u.jpWins || []).forEach(w => history.push({ nick: u.nickname, amount: (S[w.c] || { ok: w.amount }).ok, wait: (S[w.c] || {}).wait || 0, t: w.t, c: w.c, entrants: w.entrants || 0, out: !!w.out }));
         });
         entries.sort((a, b) => a.t - b.t); history.sort((a, b) => b.t - a.t);
-        const pot = entries.reduce((a, e) => a + e.fee, 0);
-        return { cycle: c, pot, entries, players: new Set(entries.map(e => e.nick)).size, myFee: nick ? this.jpFeeFor(nick, c) : this.JP_FIRST,
+        const pot = (S[c] || {}).ok || 0, pending = (S[c] || {}).wait || 0;
+        return { cycle: c, pot, pending, entries, players: new Set(entries.map(e => e.nick)).size, myFee: nick ? this.jpFeeFor(nick, c) : this.JP_FIRST,
             first: this.JP_FIRST, next: this.JP_NEXT, payee: process.env.FN_PAYEE || '정철', account: process.env.FN_ACCOUNT || '', history: history.slice(0, 30) };
     },
-    // 사람이 우승하면 그 회차 상금을 전부 준다(기록). 반환: 준 금액(0 이면 상금 없음)
+    // 사람이 우승하면 그 회차 상금을 전부 준다(기록). 반환: { amount 입금 확인된 상금, pending 확인 대기 } — 그 회차에 참가 기록이 없으면 null
     jpAward(nick, mttId, entrants) {
         const u = this.users.get(nick);
-        if (!u || nick.startsWith('🤖')) return 0;
+        if (!u || nick.startsWith('🤖')) return null;
         const v = this.jpView(nick);
-        if (!(v.pot > 0)) return 0;
+        if (!(v.pot + v.pending > 0)) return null;
         u.jpWins = (Array.isArray(u.jpWins) ? u.jpWins : []).concat([{ c: v.cycle, amount: v.pot, t: Date.now(), id: mttId, entrants }]);
         this.save();
-        return v.pot;
+        return { amount: v.pot, pending: v.pending };
+    },
+    // 🛡️ [관리자] 장부 전체(최근 회차부터) — 참가 기록과 우승 기록
+    jpLedger() {
+        const entries = [], wins = [], S = this.jpSums();
+        this.jpHumans().forEach(u => {
+            (u.jpEntries || []).forEach(e => entries.push({ nick: u.nickname, c: e.c, fee: e.fee, t: e.t, ok: !!e.ok, id: e.id || '' }));
+            (u.jpWins || []).forEach(w => wins.push({ nick: u.nickname, c: w.c, amount: (S[w.c] || { ok: w.amount }).ok, wait: (S[w.c] || {}).wait || 0, t: w.t, out: !!w.out, entrants: w.entrants || 0 }));
+        });
+        entries.sort((a, b) => b.t - a.t); wins.sort((a, b) => b.t - a.t);
+        return { cycle: this.jpCycle(), sums: S, entries: entries.slice(0, 500), wins };
+    },
+    // 🛡️ [관리자] 장부 고치기 — act: ok(입금 확인) · unok(확인 취소) · del(참가 기록 지움) · out(상금 보냄) · unout. 대상은 닉네임 + 기록 시각(t).
+    jpAdmin(act, nick, t) {
+        const u = this.users.get(nick); t = Number(t);
+        if (!u || !t) return null;
+        if (act === 'out' || act === 'unout') {
+            const w = (u.jpWins || []).find(x => x.t === t); if (!w) return null;
+            w.out = act === 'out';
+        } else {
+            const i = (u.jpEntries || []).findIndex(x => x.t === t); if (i < 0) return null;
+            const e = u.jpEntries[i];
+            if (act === 'ok') e.ok = true; else if (act === 'unok') e.ok = false;
+            else if (act === 'del') { if (e.ok) return null; u.jpEntries.splice(i, 1); }   // 입금 확인된 기록은 먼저 확인을 취소해야 지운다(실수 방지)
+            else return null;
+        }
+        this.save();
+        return true;
     },
     // 🎞️ [대회 복기] 연습 대회에서 친 판을 결정째로 남긴다 — 최근 3개 대회, 대회당 400판까지.
     //    쓰레기 패를 맞게 접은 판처럼 볼 것이 없는 판은 개수만 센다(trivial).
@@ -1775,7 +1810,7 @@ class GameRoom {
                     if (!_threeBetPlus && this.botV6(nick)) {
                         // 🏁 유효 스택이 대회용 자료의 범위 안이면(그리고 스위치가 켜져 있으면) 그 깊이의 표를 쓴다
                         const _dep = this.botV11(nick) && !_huBot ? _effB : 0;
-                        const rtC = preflopRangeTier(code, p.position || '', true, { chart: true, raises: 1, openerPos: _opnPos, closing: !!isBB, potOdds, depth: _dep, players: this.playerOrder.length });
+                        const rtC = preflopRangeTier(code, p.position || '', true, { chart: true, raises: 1, openerPos: _opnPos, closing: !!isBB, potOdds, depth: _dep, players: this.playerOrder.length, icm: this.icmTableOn() });
                         if (rtC.freq && rtC.freq.mtt) { _mttBot = true; if (process.env.DEV_BOTSRC) console.log('BOTSRC mtt-defend'); if (Math.random() * 100 < rtC.freq.jam) return { type: 'raise', amount: p.currentBet + p.chips }; }
                         if (rtC.freq) {
                             const x = Math.random() * 100;
@@ -1789,7 +1824,7 @@ class GameRoom {
                 if (!facingRaise && persona.proStrategy && !_huBot && !isBB && toCall > 0 && this.botV6(nick)) {
                     const _of = Ranges.openFreq(p.position || '', code);
                     const _limped = this.playerOrder.some(n => n !== nick && this.players[n] && !this.players[n].isFolded && (this.players[n].currentBet || 0) === bb && !(this.players[n].role && /SB|BB/.test(this.players[n].role)));
-                    const _mo = this.botV11(nick) && !_limped && _effB > 12 ? Ranges.mttOpen(p.position || '', code, _effB, this.playerOrder.length) : null;
+                    const _mo = this.botV11(nick) && !_limped && _effB > 12 ? Ranges.mttOpen(p.position || '', code, _effB, this.playerOrder.length, this.icmTableOn()) : null;
                     if (_mo) {
                         // 🏁 대회용 자료: 올인 · 오픈 · 림프(SB) · 폴드를 그 빈도대로
                         const x = Math.random() * 100; _mttBot = true;
@@ -1807,7 +1842,7 @@ class GameRoom {
                     const _gen = this.botV12(nick), _hu = _huBot && this.botV11(nick);
                     if (persona.proStrategy && (_gen || _hu) && _effB > 12 && Ranges.mttDepth(_effB, _np)) {
                         const hb = (_gen || _np === 2) ? this.huSolverPick(nick, code, _effB, _np, _gen) : null;
-                        if (hb) { if (process.env.DEV_BOTSRC) console.log('BOTSRC ' + (_np === 2 ? 'hu' : 'p' + _np) + ' ' + hb.type); return hb; }
+                        if (hb) { if (process.env.DEV_BOTSRC) console.log('BOTSRC ' + (_np === 2 ? 'hu' : 'p' + _np) + ' ' + hb.type + (this._mtt ? ` [icm=${this.icmTableOn()} lv=${this._mtt.blindLevel}/${this._mtt.rebuyUntilLevel} rb=${this._mtt.rebuyMax} paid=${this._mtt.paid} t=${(this._mtt.tables || []).length} eff=${Math.round(_effB)} st=${this.playerOrder.map(n => this.players[n] ? (this.players[n].chips + (this.players[n].currentBet || 0)) + (this.players[n]._out ? 'x' : '') : '?').join('/')}]` : '')); return hb; }
                     }
                 }
                 if (_huBot && !facingRaise && rt.tier !== 'raise' && rt.score > Quiz.HU_OPEN_SCORE) rt = { tier: 'raise', label: '오픈 레이즈', score: rt.score };
@@ -2292,10 +2327,13 @@ class GameRoom {
             else if (a.type === 'call' || a.type === 'allin') { tok.push(ps + ':C'); inPot.add(a.nick); }
             else if (a.type === 'fold' && inPot.has(a.nick)) tok.push(ps + ':F');
         });
-        if (tok.some(t => t.endsWith(':A')) && !(n === 2 && all)) return null;
+        const icm = n >= 3 && this.icmTableOn();
+        // 올인을 받는 자리: 헤즈업이거나 상금을 반영해 푼 표(결승)일 때만 표대로 — 아니면 ICM 이 있는 올인 계산에 맡긴다
+        if (tok.some(t => t.endsWith(':A')) && !(n === 2 && all) && !(icm && all && /^i/.test(Ranges.mttDepth(effBB, n, true) || ''))) return null;
         const key = tok.join(',') + '>' + Ranges.dataPos(p.position || '');
-        const f = Ranges.lookup({ seqA: key, depth: effBB, players: n, heroPos: p.position || '', raises: 1 }, code);
+        const f = Ranges.lookup({ seqA: key, depth: effBB, players: n, heroPos: p.position || '', raises: 1, icm }, code);
         if (!f || !f.mtt) return null;
+        if (process.env.DEV_BOTSRC && f.icm) console.log('BOTSRC icm ' + n + ' ' + key);
         const toCall = this.currentHighestBet - p.currentBet, allIn = p.currentBet + p.chips, nR = tok.filter(t => t.endsWith(':R')).length;
         const blind = /SB|BB/.test(p.role || '') || p.position === 'SB' || p.position === 'BB';
         const x = Math.random() * 100;
@@ -2415,6 +2453,16 @@ class GameRoom {
         return { req: r.req, chip: r.chip, tax: r.tax, alive: others.length + 2, paid: m.paid };
     }
 
+    // 🏆 [ICM 표] 대회 결승 테이블(남은 사람이 모두 이 테이블 · 3~6명)이고 리바인이 끝났으면, 상금(50/30/20)을 반영해 HRC 로 푼 표(i<인원>_<깊이>)를 쓴다.
+    //    그 표는 스택이 모두 같다고 놓고 푼 것이라, 스택 차이가 크면(가장 큰 스택 > 가장 작은 스택 × 3) 칩 기준 표 + 올인 ICM 계산에 맡긴다.
+    icmTableOn() {
+        const m = this._mtt;
+        if (!m || !(m.paid > 0) || (m.tables || []).length !== 1) return false;
+        if (m.rebuyMax > 0 && m.blindLevel < m.rebuyUntilLevel) return false;
+        const st = this.playerOrder.map(n => this.players[n]).filter(q => q && !q._out).map(q => (q.chips || 0) + (q.currentBet || 0));
+        if (st.length < 3 || st.length > 6) return false;
+        return Math.max(...st) <= (Number(process.env.DEV_ICM_RATIO) || 3) * Math.min(...st);       // (DEV_ICM_RATIO: 시험용으로 이 배수를 바꾼다)
+    }
     // 🏆 [ICM] 내가 먼저 올인(푸시)하는 범위가 상금 기준으로 몇 배가 되나(1 = 그대로). 대상이 아니면 null.
     //    base: 칩 기준 푸시 범위(0~1), behind: 내 뒤에 남은 사람들. 계산은 lib/icm.js 의 pushShift(칩 기준·상금 기준을 같은 모형으로 풀어 그 비율만 쓴다).
     icmPush(nick, base, behind) {
@@ -4664,7 +4712,7 @@ class GameRoom {
             const _ctx = { seq: _seqKey, numActive: opponents + 1, threeBetPlus: (this.raiseCountThisStreet || 0) >= 2,
                 headsUp: _huTable, openerPos: _opnPos, closing: !!isBB, potOdds: facingRaise ? potOdds : 0,   // potOdds: 오픈 크기·앤티에 따라 방어 폭이 달라진다
                 chart: true, raises: this.raiseCountThisStreet || 1, iRaised: _iRaised, inPosition: this.isInPosition(nick),
-                depth: effBB, seqA: _seqA, players: this.playerOrder.length };      // 🏁 유효 스택이 대회용 자료(직접 푼 것)의 범위 안이면 그 인원·깊이의 표를 쓴다
+                depth: effBB, seqA: _seqA, players: this.playerOrder.length, icm: this.icmTableOn() };      // 🏁 유효 스택이 대회용 자료(직접 푼 것)의 범위 안이면 그 인원·깊이의 표를 쓴다
             const rt = preflopRangeTier(code, p.position || '', facingRaise, _ctx);
             if (rt.freq && rt.freq.mtt) { _mttF = rt.freq; notes.push('대회용 자료(직접 푼 계산)'); }
             // 문구: 처음 연 것이면 '오픈', 누가 림프한 뒤 올린 것(내가 림프했거나 블라인드가 올림)이면 '레이즈', 두 번째 레이즈부터는 '리레이즈'
@@ -5596,8 +5644,8 @@ class MTTManager {
             const paid = this.entrants.filter(e => !e.isBot).map(e => ({ nick: e.nick, fee: MockDB.jpEnter(e.nick, this.mttId) })).filter(x => x.fee > 0);
             const jv = MockDB.jpView(null);
             this._jpCycle = jv.cycle;
-            this.entrants.forEach(e => { if (e.socketId) io.to(e.socketId).emit('gameMessage', `🎯 홀인원 상금 ${jv.pot.toLocaleString()}원 — 이번 대회 참가비: ${paid.map(x => `${x.nick} ${x.fee.toLocaleString()}원`).join(' · ')}. 사람이 우승하면 상금을 전부 받습니다.`); });
-            io.emit('jackpot', { pot: jv.pot, cycle: jv.cycle });
+            this.entrants.forEach(e => { if (e.socketId) io.to(e.socketId).emit('gameMessage', `🎯 홀인원 상금 ${jv.pot.toLocaleString()}원 — 이번 대회 참가비: ${paid.map(x => `${x.nick} ${x.fee.toLocaleString()}원`).join(' · ')}(입금이 확인되면 상금에 더해집니다). 사람이 우승하면 상금을 전부 받습니다.`); });
+            io.emit('jackpot', { pot: jv.pot, pending: jv.pending, cycle: jv.cycle });
         }
         this.totalEntrants = this.entrants.length;
         this.humanEntrants = this.entrants.filter(e => !e.isBot).length; // 🏆 토큰 지급 판정용
@@ -5810,12 +5858,12 @@ class MTTManager {
             const seated = r.playerOrder.filter(n => r.players[n] && (r.players[n].chips > 0 || (r.gameStage >= 1 && r.gameStage <= 4 && r.players[n].isAllIn)));
             if (seated.length > this.tableSize) bad(`정원 초과 ${rid} ${seated.length}`);
             seated.forEach(n => { if (seen[n]) bad(`두 테이블 ${n} ${seen[n]} ${rid}`); seen[n] = rid; });
-            // 판이 끝난 테이블(5)은 팟을 이미 나눠 준 뒤라 다음 판 시작 때까지 pot 값만 남아 있다 — 세지 않는다
-            chips += (r.gameStage === 5 ? 0 : (r.pot || 0)) + Object.values(r.players).reduce((a, p) => a + (p.chips || 0) + (p.currentBet || 0), 0);
+            // 판이 끝난 테이블(5·0)은 팟을 이미 나눠 준 뒤라 다음 판 시작 때까지 pot 값만 남아 있다 — 진행 중(1~4)일 때만 센다
+            chips += (r.gameStage >= 1 && r.gameStage <= 4 ? (r.pot || 0) : 0) + Object.values(r.players).reduce((a, p) => a + (p.chips || 0) + (p.currentBet || 0), 0);
         });
         const rebuys = Object.values(this.rebuys || {}).reduce((a, b) => a + b, 0);
         const expect = this.startingChips * ((this.totalEntrants || 0) + rebuys);
-        if (idle && this.tables.length && chips !== expect) bad(`칩 총량 ${chips} ≠ ${expect}`);
+        if (idle && this.tables.length && chips !== expect) bad(`칩 총량 ${chips} ≠ ${expect} ` + JSON.stringify(this.tables.map(rid => { const r = rooms.get(rid); return r ? { rid, st: r.gameStage, pot: r.pot, hand: r.handId, P: Object.keys(r.players).map(n => [n.slice(0, 6), r.players[n].chips, r.players[n].currentBet, r.players[n]._out ? 'out' : '']) } : rid; })) + ' rebuys=' + JSON.stringify(this.rebuys) + ' elim=' + this.eliminated.length);
         const places = this.eliminated.map(e => e.place);
         if (new Set(places).size !== places.length) bad(`순위 중복 ${places.join(',')}`);
         this.eliminated.forEach(e => { if (seen[e.nick]) bad(`탈락했는데 앉아 있음 ${e.nick}`); });
@@ -6070,8 +6118,8 @@ class MTTManager {
         if (this.fn) { if (!winner.isBot) MockDB.recordFnResult(champion, { t: Date.now(), place: 1, total: this.totalEntrants, id: this.mttId, paid: this.paid, level: this.blindLevel + 1 }); }
         // 🎯 [홀인원 상금] 사람이 우승하면 이번 회차 상금을 전부 받는다(봇 우승이면 다음 대회로 넘어간다). 합의 종료는 우승으로 치지 않는다.
         if (this.fn && !winner.isBot) {
-            const amt = MockDB.jpAward(champion, this.mttId, this.totalEntrants);
-            if (amt > 0) { io.emit('gameMessage', `🎯 홀인원! ${champion} 님이 딥스택 연습 우승 — 상금 ${amt.toLocaleString()}원을 받습니다!`); io.emit('jackpot', { pot: 0, cycle: MockDB.jpCycle(), winner: champion, amount: amt }); }
+            const aw = MockDB.jpAward(champion, this.mttId, this.totalEntrants);
+            if (aw) { io.emit('gameMessage', `🎯 홀인원! ${champion} 님이 딥스택 연습 우승 — 상금 ${aw.amount.toLocaleString()}원을 받습니다!${aw.pending ? ` (입금 확인 대기 ${aw.pending.toLocaleString()}원은 확인되면 더해집니다)` : ''}`); io.emit('jackpot', { pot: 0, pending: 0, cycle: MockDB.jpCycle(), winner: champion, amount: aw.amount }); }
         } else if (this.fn) io.emit('gameMessage', `🎯 봇이 우승해서 홀인원 상금 ${MockDB.jpView(null).pot.toLocaleString()}원은 다음 대회로 넘어갑니다.`);
         else if (!winner.isBot) MockDB.addMttWin(champion, this.totalEntrants, (this.humanEntrants || 0) >= TOKEN_MIN_HUMANS);
 
@@ -6210,7 +6258,7 @@ function broadcastLobby() {
     io.to('lobby').emit('lobbyUsers', lobbyListArray());
 }
 function enterLobby(socket) {
-    try { const jv = MockDB.jpView(null); socket.emit('jackpot', { pot: jv.pot, cycle: jv.cycle }); } catch (e) {}
+    try { const jv = MockDB.jpView(null); socket.emit('jackpot', { pot: jv.pot, pending: jv.pending, cycle: jv.cycle }); } catch (e) {}
     if (!socket.nickname) return;
     socket.join('lobby');
     lobbyUsers.set(socket.id, { nick: socket.nickname });
@@ -7352,7 +7400,7 @@ io.on('connection', (socket) => {
         const name = `🏁 파이널나인 딥스택 연습 (${socket.nickname})`;
         const mtt = new MTTManager(mttId, socket.nickname, { name, fn: true, tableSize: FN_MTT.tableSize, startingChips: FN_MTT.startingChips,
             blindUpInterval: Number(process.env.DEV_FN_LEVEL) || FN_MTT.blindUpInterval, maxEntrants: Number(process.env.DEV_FN_ENTRANTS) || FN_MTT.entrants, structure: FN_MTT.structure, paid: FN_MTT.paid,
-            rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel });
+            rebuys: FN_MTT.rebuys, rebuyUntilLevel: process.env.DEV_FN_REBUY_LV != null ? Number(process.env.DEV_FN_REBUY_LV) : FN_MTT.rebuyUntilLevel });
         mtts.set(mttId, mtt);
         mtt.addEntrant(socket.nickname, socket.id, false);
         socket._mttId = mttId;
