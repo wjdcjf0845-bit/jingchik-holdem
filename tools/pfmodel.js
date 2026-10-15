@@ -131,14 +131,15 @@ function solve(P, cfg) {
 }
 
 // 자리 설정: O 가 열고 D 가 받는 판의 숫자들. env: { S, ante(죽은 앤티), open, openSB, tbIP·tbOOP(3벳 배수), fbMul(4벳 배수), jam0, rake, rakeCap }
-function spot(env, O, D) {
+function spot(env, O, D, pos) {
+    pos = pos || POS;
     const postO = O === 'SB' ? 0.5 : 0, postD = D === 'SB' ? 0.5 : D === 'BB' ? 1 : 0;
     const open = O === 'SB' ? env.openSB : env.open;
     const dIP = !(D === 'SB' || D === 'BB');            // 블라인드가 받으면 연 사람이 포지션, 그 밖엔 받는 사람이 포지션(SB 오픈 대 BB 는 BB 가 포지션)
     const dPos = O === 'SB' ? true : dIP;
     const tb = open * (dPos ? env.tbIP : env.tbOOP);
     return { S: env.S, open, postO, postD, dead: 1.5 + (env.ante || 0) - postO - postD, tb, fb: env.fbMul ? tb * env.fbMul : null,
-        jam0: !!env.jam0, dIP: dPos, rake: env.rake || 0, rakeCap: env.rakeCap || 0, behind: Math.max(0, 5 - POS.indexOf(D)) };
+        jam0: !!env.jam0, dIP: dPos, rake: env.rake || 0, rakeCap: env.rakeCap || 0, behind: Math.max(0, pos.length - 1 - pos.indexOf(D)) };
 }
 
 const ENV100 = { S: 100, ante: 0, open: 2.5, openSB: 3.0, tbIP: 3.4, tbOOP: 4.4, fbMul: 2.2, jam0: false, rake: 0.05, rakeCap: 0.6 };
@@ -149,15 +150,17 @@ function envMtt(S, ante) {
 
 // 오픈 범위까지 같이 맞춘다: 오픈 범위 → 각 수비자와의 판 → 오픈의 기대값 → 오픈 범위 … 를 되풀이.
 // 반환: { open: { POS: Float64Array(169) }, vs: { 'O>D': solve 결과 } }
+//   opt.pos: 자리 목록(기본 6인 POS). 9인이면 ['UTG','UTG1','UTG2','LJ','HJ','CO','BTN','SB','BB'] — 마지막 둘이 블라인드여야 한다.
 function solveAll(P, env, opt) {
     opt = opt || {};
+    const pos = opt.pos || POS, nO = pos.length - 1;
     const open = {}, vs = {};
-    POS.slice(0, 5).forEach(O => { open[O] = opt.open && opt.open[O] ? Float64Array.from(opt.open[O]) : new Float64Array(N).fill(0.3); });
+    pos.slice(0, nO).forEach(O => { open[O] = opt.open && opt.open[O] ? Float64Array.from(opt.open[O]) : new Float64Array(N).fill(0.3); });
     const rounds = opt.fixedOpen ? 1 : (opt.rounds || 4);
     for (let r = 0; r < rounds; r++) {
-        POS.slice(0, 5).forEach((O, oi) => {
-            const defs = POS.slice(oi + 1), postO = O === 'SB' ? 0.5 : 0, winAll = 1.5 + (env.ante || 0) - postO;
-            const res = defs.map(D => (vs[O + '>' + D] = solve(P, Object.assign(spot(env, O, D), { prior: open[O], iters: opt.iters || 150 }))));
+        pos.slice(0, nO).forEach((O, oi) => {
+            const defs = pos.slice(oi + 1), postO = O === 'SB' ? 0.5 : 0, winAll = 1.5 + (env.ante || 0) - postO;
+            const res = defs.map(D => (vs[O + '>' + D] = solve(P, Object.assign(spot(env, O, D, pos), { prior: open[O], iters: opt.iters || 150 }))));
             if (opt.fixedOpen) return;
             // 오픈의 기대값: 앞사람부터 접으면 다음 사람과의 판. (둘 이상이 같이 들어오는 경우는 무시)
             const nw = new Float64Array(N);

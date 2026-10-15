@@ -1798,7 +1798,7 @@ class GameRoom {
         const os = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded).map(n => this.players[n].chips + (this.players[n].currentBet || 0));
         const effBB = os.length ? Math.min(p.chips + p.currentBet, Math.max(...os)) / bb : 0;
         const n = this.playerOrder.length, key = this.pfSeqA(nick);
-        const f = Ranges.lookup({ seqA: key, seq: n > 2 && key.indexOf(':A') < 0 ? key : null, depth: effBB, players: n, heroPos: p.position || '', raises: 1, icm: n >= 3 && this.icmTableOn() }, handToCode(p.hand));
+        const f = Ranges.lookup({ seqA: key, seq: n > 2 && key.indexOf(':A') < 0 ? key : null, depth: effBB, players: n, heroPos: p.position || '', raises: 1, icm: n >= 3 && this.icmTableOn(), extra: p.posExtra || 0 }, handToCode(p.hand));
         const allin = decision.type === 'allin' || (decision.type === 'raise' && decision.amount >= p.chips + p.currentBet);
         const act = decision.type === 'fold' ? 'F' : allin ? 'A' : decision.type === 'raise' ? 'R' : 'C';   // check 도 C(그냥 보기)
         console.log('PFCHECK ' + JSON.stringify({ n, pos: p.position, key, code: handToCode(p.hand), eff: Math.round(effBB), free: this.currentHighestBet <= (p.currentBet || 0), src: f ? (f.mtt ? 'mtt' : f.data ? '100bb' : 'chart') : null, lvl: (p._persona && p._persona.proStrategy) ? 'pro' : 'other',
@@ -1902,9 +1902,9 @@ class GameRoom {
                 }
                 // 📊 [먼저 여는 범위 — 고수 봇] 솔버 프리플랍 자료의 오픈 빈도대로 연다(UTG~SB). 측정 스위치는 블라인드 방어 범위표와 같다(botV6).
                 if (!facingRaise && persona.proStrategy && !_huBot && !isBB && toCall > 0 && this.botV6(nick)) {
-                    const _of = Ranges.openFreq(p.position || '', code);
+                    const _of = Ranges.openFreq(p.position || '', code, p.posExtra || 0);
                     const _limped = this.playerOrder.some(n => n !== nick && this.players[n] && !this.players[n].isFolded && (this.players[n].currentBet || 0) === bb && !(this.players[n].role && /SB|BB/.test(this.players[n].role)));
-                    const _mo = this.botV11(nick) && !_limped && _effB > 12 ? Ranges.mttOpen(p.position || '', code, _effB, this.playerOrder.length, this.icmTableOn()) : null;
+                    const _mo = this.botV11(nick) && !_limped && _effB > 12 ? Ranges.mttOpen(p.position || '', code, _effB, this.playerOrder.length, this.icmTableOn(), p.posExtra || 0) : null;
                     if (_mo) {
                         // 🏁 대회용 자료: 올인 · 오픈 · 림프(SB) · 폴드를 그 빈도대로
                         const x = Math.random() * 100; _mttBot = true;
@@ -2474,7 +2474,7 @@ class GameRoom {
                 prior = OPEN_PRIOR[tag];
                 if (!prior) {
                     const x = hu ? 0.76 : ShortStack.openPct(q.position || '');
-                    prior = Float64Array.from(Ranges.ALL.map(c => { const f = hu ? null : Ranges.openFreq(q.position || '', c); return f != null ? f / 100 : (ShortStack.handPercentile(c) <= x ? 1 : 0); }));
+                    prior = Float64Array.from(Ranges.ALL.map(c => { const f = hu ? null : Ranges.openFreq(q.position || '', c, q.posExtra || 0); return f != null ? f / 100 : (ShortStack.handPercentile(c) <= x ? 1 : 0); }));
                     OPEN_PRIOR[tag] = prior;
                 }
             }
@@ -3604,7 +3604,7 @@ class GameRoom {
         // 🎯 포지션 라벨: 표준 표기 — UTG, UTG+1, …, LJ, HJ, CO, BTN, SB, BB
         //    버튼 기준 상대 포지션. GTO 레인지·조언·봇 의사결정이 이 라벨로 정확한 오픈 레인지를 고른다.
         //    (이전 버그 #1: BTN/SB/BB에 라벨 미부여→CO 레인지로 폴백, #2: 얼리 라벨 off-by-one으로 CO 누락)
-        this.playerOrder.forEach(nick => { this.players[nick].position = ''; });
+        this.playerOrder.forEach(nick => { this.players[nick].position = ''; this.players[nick].posExtra = 0; });
         const _setPos = (idx, label) => { const pl = this.players[this.playerOrder[idx]]; if (pl) pl.position = label; };
         if (n === 2) {
             // 헤즈업: 딜러가 버튼(SB 겸), 상대가 BB
@@ -3617,14 +3617,16 @@ class GameRoom {
             // BB 다음(UTG)부터 버튼 직전(CO)까지 — 버튼에 가까울수록 넓은 레인지
             const afterBB = (bbIndex + 1) % n;
             const m = (this.dealerIndex - afterBB + n) % n; // 블라인드·버튼 제외 좌석 수
+            // 🪑 7~9인(m ≥ 4): 끝에서 셋째 자리가 LJ(= 6인의 UTG 자리), 그보다 앞은 UTG · UTG+1 · UTG+2. posExtra = LJ 보다 몇 칸 앞인가(오픈 범위를 그만큼 좁힌다 — lib/ranges.js earlyRow)
             for (let i = 0; i < m; i++) {
                 const fromEnd = m - 1 - i; // 0 = 버튼 직전(CO)
                 let label;
                 if (fromEnd === 0) label = 'CO';
                 else if (fromEnd === 1) label = 'HJ';
-                else if (fromEnd === 2 && m >= 5) label = 'LJ';
+                else if (fromEnd === 2 && m >= 4) label = 'LJ';
                 else label = (i === 0) ? 'UTG' : `UTG+${i}`;
                 _setPos((afterBB + i) % n, label);
+                if (fromEnd >= 3) { const pl = this.players[this.playerOrder[(afterBB + i) % n]]; if (pl) pl.posExtra = fromEnd - 2; }
             }
         }
 
@@ -4764,7 +4766,7 @@ class GameRoom {
             const _ctx = { seq: _seqKey, numActive: opponents + 1, threeBetPlus: (this.raiseCountThisStreet || 0) >= 2,
                 headsUp: _huTable, openerPos: _opnPos, closing: !!isBB, potOdds: facingRaise ? potOdds : 0,   // potOdds: 오픈 크기·앤티에 따라 방어 폭이 달라진다
                 chart: true, raises: this.raiseCountThisStreet || 1, iRaised: _iRaised, inPosition: this.isInPosition(nick),
-                depth: effBB, seqA: _seqA, players: this.playerOrder.length, icm: this.icmTableOn() };      // 🏁 유효 스택이 대회용 자료(직접 푼 것)의 범위 안이면 그 인원·깊이의 표를 쓴다
+                depth: effBB, seqA: _seqA, players: this.playerOrder.length, icm: this.icmTableOn(), extra: p.posExtra || 0 };      // 🏁 유효 스택이 대회용 자료(직접 푼 것)의 범위 안이면 그 인원·깊이의 표를 쓴다
             const rt = preflopRangeTier(code, p.position || '', facingRaise, _ctx);
             if (rt.freq && rt.freq.mtt) { _mttF = rt.freq; notes.push('대회용 자료(직접 푼 계산)'); }
             // 문구: 처음 연 것이면 '오픈', 누가 림프한 뒤 올린 것(내가 림프했거나 블라인드가 올림)이면 '레이즈', 두 번째 레이즈부터는 '리레이즈'
