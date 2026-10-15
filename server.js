@@ -7337,6 +7337,8 @@ io.on('connection', (socket) => {
         mtts.set(mttId, mtt);
         mtt.addEntrant(socket.nickname, socket.id, false);
         socket._mttId = mttId;
+        // ⏱ 딥스택 대기실은 한 번에 하나만 열 수 있어서, 30분 동안 시작하지 않으면 취소한다(켜 둔 채 잊으면 아무도 새로 못 연다)
+        setTimeout(() => { const m = mtts.get(mttId); if (m && !m.started && !m.finished) { m.entrants.forEach(e => { if (e.socketId) io.to(e.socketId).emit('gameMessage', '⏱ 30분 동안 시작하지 않아 딥스택 대기실을 닫았습니다.'); }); m.dropFromLobby(m.hostNick); } }, Number(process.env.DEV_FN_LOBBY_MS) || 30 * 60000);
         leaveLobby(socket);
         socket.emit('mttCreated', { mttId, name });
         mtt.broadcastLobby();
