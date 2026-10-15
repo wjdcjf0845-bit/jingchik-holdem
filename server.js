@@ -194,6 +194,8 @@ const io = new Server(server);
 
 // 🩺 헬스체크 / 킵얼라이브 — UptimeRobot가 5분마다 가볍게 노크해 무료 인스턴스가 잠들지 않게 (271KB HTML 대신 "ok"만 응답)
 app.get('/healthz', (req, res) => res.status(200).send('ok'));
+// 🔖 지금 돌고 있는 배포 버전(Render 가 넣어 주는 커밋) — 배포가 실제로 반영됐는지 확인용
+app.get('/version', (req, res) => res.status(200).type('text/plain').send(String(process.env.RENDER_GIT_COMMIT || 'local').slice(0, 12)));
 
 // 🛗 승강설비 현장조회 — /manual 만 Basic 인증 (MANUAL_USER / MANUAL_PASS).
 //    환경변수 미설정 시 503으로 막히고 포커 게임(/)은 그대로 인증 없이 열린다.
