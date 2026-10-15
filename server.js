@@ -8136,6 +8136,11 @@ const PORT = process.env.PORT || 3000;
 //    원격 미설정이면 initRemote()는 즉시 반환 — 기존 동작 그대로.
 MockDB.initRemote().catch(e => console.error('🌐 원격 초기화 오류:', e && e.message)).finally(() => {
     try { MockDB.purgeCheckAccounts(); MockDB.applyStatsEpoch(); MockDB.migrateEvNorm(); } catch (e) { console.error('통계 기점 적용 오류:', e && e.message); }
+    // 🐛 포트를 다른 프로그램(예: 예전 서버 창)이 잡고 있으면 아무것도 못 받는 채로 떠 있지 말고 분명히 알리고 끝낸다 — 감시기가 다시 시도한다
+    server.once('error', e => {
+        console.error(e && e.code === 'EADDRINUSE' ? `🚨 포트 ${PORT} 를 다른 프로그램이 쓰고 있습니다 — 예전 서버 창이 켜져 있으면 닫으세요.` : '🚨 서버 시작 실패: ' + (e && e.message));
+        process.exit(1);
+    });
     server.listen(PORT, () => {
         console.log(`✅ [Master Server] 치명 버그 수정 + 보안 패치 + 방 정리 시스템 적용 완료! (포트 ${PORT})`);
     });
