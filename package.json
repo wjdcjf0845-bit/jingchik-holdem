@@ -16,6 +16,7 @@
   "type": "commonjs",
   "dependencies": {
     "@libsql/client": "^0.17.4",
+    "compression": "^1.8.1",
     "express": "^5.2.1",
     "pokersolver": "^2.1.4",
     "qrcode": "^1.5.4",

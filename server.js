@@ -197,6 +197,10 @@ app.set('trust proxy', 1);
 const server = http.createServer(app);
 const io = new Server(server);
 
+// 🗜️ [응답 압축] 첫 화면(index.html 약 750KB)을 gzip 으로 줄여 보낸다(약 180KB) — 폰 데이터·바깥 인터넷에서 처음 여는 시간이 준다.
+//    mp3 같은 이미 압축된 파일은 건드리지 않는다. 패키지가 없으면(미니 PC 설치 실패 등) 압축 없이 그대로 돈다.
+try { app.use(require('compression')()); } catch (e) { console.error('🗜️ 압축 패키지가 없어 압축 없이 보냅니다:', e && e.message); }
+
 // 🩺 헬스체크 / 킵얼라이브 — UptimeRobot가 5분마다 가볍게 노크해 무료 인스턴스가 잠들지 않게 (271KB HTML 대신 "ok"만 응답)
 app.get('/healthz', (req, res) => res.status(200).send('ok'));
 // 🔖 지금 돌고 있는 배포 버전(Render 가 넣어 주는 커밋) — 배포가 실제로 반영됐는지 확인용
