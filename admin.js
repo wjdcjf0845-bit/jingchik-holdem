@@ -143,9 +143,21 @@ module.exports = function createAdminRouter(deps) {
             rooms,
             totalUsers: d.MockDB ? d.MockDB.users.size : 0,
             uptimeSec: Math.floor(process.uptime()),
-            capacity: (d.capacity && d.onlineNicks) ? d.capacity.view(d.onlineNicks(), now) : null
+            capacity: (d.capacity && d.onlineNicks) ? d.capacity.view(d.onlineNicks(), now) : null,
+            ops: opsView()
         });
     });
+
+    // 🛠️ 운영 정보(미니 PC): 최근 전적 백업 · 밤 봇 맞대결 결과 · 멈춤 감시 기록 — 파일이 없으면 빈 값
+    function opsView() {
+        const fs = require('fs'), path = require('path'), dir = d.dataDir;
+        if (!dir) return null;
+        const tail = (f, n) => { try { return fs.readFileSync(f, 'utf8').trim().split(/\r?\n/).filter(Boolean).slice(-n); } catch (e) { return []; } };
+        let backups = [];
+        try { backups = fs.readdirSync(path.join(dir, 'backup')).filter(f => /^poker_stats-.*\.json\.gz$/.test(f)).sort(); } catch (e) {}
+        return { lastBackup: backups[backups.length - 1] || null, backups: backups.length,
+            ab: tail(path.join(dir, 'ab', 'summary.log'), 7).reverse(), watchdog: tail(path.join(dir, 'watchdog.log'), 3).reverse() };
+    }
 
     // 🚦 정원 바꾸기 (0 = 제한 없음). 서버가 켜져 있는 동안만 유지 — 재시작하면 환경변수 MAX_PLAYERS 값으로 돌아간다.
     router.post('/api/capacity', needAuth, express.json({ limit: '1kb' }), (req, res) => {
@@ -308,7 +320,8 @@ function dashboardPage() {
   <div class="note" style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <span>🚦 동시 접속 정원</span><input id="cap-max" type="number" min="0" max="5000" style="width:90px;">
     <button class="btn" id="cap-go">적용</button><span id="cap-info"></span>
-  </div></div>
+  </div>
+  <div class="note" id="ops" style="margin-top:10px;white-space:pre-line;"></div></div>
 
 <div class="tabs">
   <button data-v="log" class="on">📋 접속 기록</button>
@@ -376,6 +389,12 @@ async function loadOverview() {
     $('#cap-info').textContent = (over.capacity.max ? '' : '제한 없음 · ') + '0을 넣으면 제한 없음 · 재시작하면 환경변수 MAX_PLAYERS 값으로 돌아갑니다'
       + (over.capacity.waiting.length ? ' · 대기: ' + over.capacity.waiting.map(w => w.nick).join(', ') : '');
   }
+  const o = over.ops, NL = String.fromCharCode(10);
+  $('#ops').textContent = o ? [
+    '💾 전적 백업: ' + (o.lastBackup ? o.lastBackup.replace('poker_stats-', '').replace('.json.gz', '') + ' (보관 ' + o.backups + '개)' : '아직 없음(매일 새벽 4시 이후)'),
+    '🌙 밤 봇 맞대결(새 전략 vs 지금 봇): ' + (o.ab.length ? NL + '  ' + o.ab.join(NL + '  ') : '아직 없음(새벽 3시 · 접속자 없을 때)'),
+    '🚨 멈춤 감시: ' + (o.watchdog.length ? NL + '  ' + o.watchdog.join(NL + '  ') : '기록 없음')
+  ].join(NL) : '';
   if (view === 'online' || view === 'rooms') render();
 }
 $('#cap-go').onclick = async () => {

@@ -1865,6 +1865,20 @@ class GameRoom {
                         }
                     }
                 }
+                // 🔬 [BOT_AB13 측정] 깊은 스택(48bb 넘게)에서 3벳 이상을 받으면 100bb 솔버 표의 빈도대로 폴드·콜·레이즈.
+                //    운영 봇은 여기서 표보다 훨씬 많이 계속한다(4벳에 폴드 7% vs 표 59% — 2026-10-16 측정). 표대로가 더 센지 밤마다 맞대결로 잰다(tools/minipc/nightab.js).
+                if (facingRaise && _threeBetPlus && !_huBot && persona.proStrategy && this.botV13(nick) && _effB > 48) {
+                    const key = this.pfSeqA(nick);
+                    const f = key.indexOf(':A') < 0 ? Ranges.lookup({ seq: key, heroPos: p.position || '', raises: _rc }, code) : null;
+                    if (f && f.data && !f.mtt) {
+                        const x = Math.random() * 100;
+                        if (x >= f.raise + f.call) return { type: 'fold' };
+                        if (x >= f.raise) return { type: 'call' };
+                        const allIn = p.currentBet + p.chips, want = Math.round(this.currentHighestBet * 2.3);
+                        const to = want > p.currentBet + p.chips * 0.4 ? allIn : Math.max(want, this.currentHighestBet + (this.lastFullRaiseAmount || bb));
+                        return to > this.currentHighestBet ? { type: 'raise', amount: Math.min(allIn, to) } : { type: 'call' };
+                    }
+                }
                 // 📊 [먼저 여는 범위 — 고수 봇] 솔버 프리플랍 자료의 오픈 빈도대로 연다(UTG~SB). 측정 스위치는 블라인드 방어 범위표와 같다(botV6).
                 if (!facingRaise && persona.proStrategy && !_huBot && !isBB && toCall > 0 && this.botV6(nick)) {
                     const _of = Ranges.openFreq(p.position || '', code);
@@ -2394,6 +2408,13 @@ class GameRoom {
         }
         if (x < f.raise + f.call) return toCall > 0 ? { type: 'call' } : { type: 'check' };
         return toCall > 0 ? { type: 'fold' } : { type: 'check' };
+    }
+    // BOT_AB13: 깊은 스택에서 3벳 이상을 받을 때 100bb 솔버 표대로(측정용 — 운영은 꺼짐)
+    botV13(nick) {
+        const ab = process.env.BOT_AB13;
+        if (!ab) return false;
+        const bit = ((this.hashNick(nick) >> 4) & 1) === 1;
+        return ab === '2' ? !bit : bit;
     }
     botV12(nick) {
         const ab = process.env.BOT_AB12;
@@ -8243,7 +8264,7 @@ io.on('connection', (socket) => {
 
 // 🛡️ 관리자 페이지 — MockDB·rooms·io 가 다 만들어진 뒤에 붙인다(위에서 붙이면 참조가 비어 있다)
 try {
-    adminRouter = require('./admin')({ accessLog, MockDB, rooms, io, adminNick: ADMIN_NICK, verify: verifyAdmin, capacity, onlineNicks, drainCapacity });
+    adminRouter = require('./admin')({ accessLog, MockDB, rooms, io, dataDir: DATA_DIR, adminNick: ADMIN_NICK, verify: verifyAdmin, capacity, onlineNicks, drainCapacity });
     app.use('/admin', adminRouter);
 } catch (e) {
     console.error('🛡️ [관리자] 마운트 실패(게임에는 영향 없음):', e && e.message);
@@ -8273,6 +8294,23 @@ MockDB.initRemote().catch(e => console.error('🌐 원격 초기화 오류:', e 
         if (process.send || process.env.WATCHDOG) OPS.startWatchdog(Number(process.env.WATCHDOG_MS) || 60000);
         if (MockDB._remote && !MockDB._remoteLoadOk) OPS.alert('turso', 'Turso(전적 DB)를 불러오지 못했습니다 — 전적이 이 PC 에만 저장됩니다.');
     } catch (e) { console.error('🛠️ 운영 도우미 시작 실패(게임에는 영향 없음):', e && e.message); }
+    // 🌙 밤 봇 맞대결: 새벽 3시대에 하루 한 번, 접속자도 진행 중인 대회도 없으면 tools/minipc/nightab.js 를 따로 띄운다.
+    //    (감시기 아래에서만 · server.env 의 NIGHT_AB=0 이면 끔 · 시험 서버 두 대는 운영보다 낮은 우선순위로 돈다)
+    if (process.send && process.env.NIGHT_AB !== '0') {
+        let abDay = '';
+        setInterval(() => {
+            const now = new Date(), day = now.toDateString();
+            if (now.getHours() !== 3 || abDay === day) return;
+            const online = io.engine ? io.engine.clientsCount : 0, busyMtt = [...mtts.values()].some(m => m.started && !m.finished);
+            if (online > 0 || busyMtt) return;
+            abDay = day;
+            try {
+                require('child_process').spawn(process.execPath, [path.join(__dirname, 'tools', 'minipc', 'nightab.js')],
+                    { cwd: __dirname, env: Object.assign({}, process.env, { JINGCHIK_HOME: DATA_DIR }), detached: true, stdio: 'ignore', windowsHide: true }).unref();
+                console.log('🌙 [밤 맞대결] 시작 — 결과는 ' + path.join(DATA_DIR, 'ab', 'summary.log'));
+            } catch (e) { console.error('🌙 밤 맞대결 시작 실패:', e && e.message); }
+        }, 5 * 60 * 1000).unref();
+    }
     server.listen(PORT, () => {
         console.log(`✅ [Master Server] 치명 버그 수정 + 보안 패치 + 방 정리 시스템 적용 완료! (포트 ${PORT})`);
         // 🛡️ 관리자 로그인이 안 될 때 원인을 찾기 쉽게 — 어떤 방식으로 비밀번호를 확인하는지만 남긴다(값은 남기지 않는다)
