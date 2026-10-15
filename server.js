@@ -5834,7 +5834,7 @@ class MTTManager {
         });
         setTimeout(() => {
             this.tables.forEach(rid => { if (rooms.has(rid)) destroyRoom(rid); });
-            mtts.delete(this.mttId); this.dropWatchers(true); io.emit('mttList', mttListArray());
+            mtts.delete(this.mttId); this.dropWatchers(true); this.releaseEntrants(); io.emit('mttList', mttListArray());
         }, 8000);
     }
 
@@ -6080,7 +6080,7 @@ class MTTManager {
         });
         setTimeout(() => {
             this.tables.forEach(rid => { if (rooms.has(rid)) destroyRoom(rid); });
-            mtts.delete(this.mttId); this.dropWatchers(false); io.emit('mttList', mttListArray());
+            mtts.delete(this.mttId); this.dropWatchers(false); this.releaseEntrants(); io.emit('mttList', mttListArray());
         }, 8000);
     }
 
@@ -6091,7 +6091,7 @@ class MTTManager {
         if (this._heartbeat) clearInterval(this._heartbeat);
         if (this._blindTimer) { clearInterval(this._blindTimer); this._blindTimer = null; }
         this.tables.forEach(rid => { if (rooms.has(rid)) destroyRoom(rid); });
-        mtts.delete(this.mttId); this.dropWatchers(true); io.emit('mttList', mttListArray());
+        mtts.delete(this.mttId); this.dropWatchers(true); this.releaseEntrants(); io.emit('mttList', mttListArray());
     }
 
     broadcastStatus() {
@@ -6123,6 +6123,16 @@ class MTTManager {
         const sock = io.sockets.sockets.get(sid);
         if (sock) { if (w.roomId) sock.leave(w.roomId); if (sock.currentRoom === w.roomId) sock.currentRoom = null; sock._watchMtt = null; }
         this.watchers.delete(sid);
+    }
+    // 대회가 끝나면 참가자들의 "대회 중" 표시를 지우고 로비 명단에 넣는다(결과 창은 화면에 그대로 남는다)
+    releaseEntrants() {
+        // 재접속하면 소켓이 바뀌므로 참가 명단 대신 지금 접속한 소켓 전부에서 이 대회 표시를 찾는다
+        io.sockets.sockets.forEach(sk => {
+            if (sk._mttId !== this.mttId && !(sk.currentRoom && String(sk.currentRoom).indexOf(this.mttId + '#') === 0)) return;
+            if (sk._mttId === this.mttId) sk._mttId = null;
+            if (sk.currentRoom && String(sk.currentRoom).indexOf(this.mttId + '#') === 0) { sk.leave(sk.currentRoom); sk.currentRoom = null; }
+            if (!sk.currentRoom) enterLobby(sk);
+        });
     }
     // 대회가 끝나거나 취소되면 관전자를 놓아 준다(취소면 로비로 돌려보낸다)
     dropWatchers(sendLeft) {
@@ -6346,6 +6356,8 @@ function destroyRoom(roomId) {
         try { room.finishRunFloor(false, true); } catch (e) { console.error('run settle on destroy:', e); }
     }
     room.stopAllTimers();
+    // 🐛 이 방에 들어가 있던 소켓의 "지금 방" 표시를 지운다 — 안 지우면 방이 없어진 뒤에도 새 대회 만들기·참가·관전이 조용히 막혔다
+    try { const ids = io.sockets.adapter.rooms.get(roomId); if (ids) [...ids].forEach(sid => { const sk = io.sockets.sockets.get(sid); if (sk && sk.currentRoom === roomId) sk.currentRoom = null; }); } catch (e) {}
     rooms.delete(roomId);
     io.emit('roomList', roomListArray());
     console.log(`🧹 방 정리됨: ${roomId}`);
