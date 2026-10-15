@@ -111,6 +111,8 @@ const { Capacity } = require('./lib/capacity');  // 🚦 서버 정원 · 입장
 const Blunder = require('./lib/blunder');       // 💥 리포트의 '치명적 플레이' 기록
 const Ranges = require('./lib/ranges');         // 📊 프리플랍 범위표(레이즈를 받았을 때 패마다 3벳·콜·폴드 빈도)
 const Jam = require('./lib/jam');               // 🧨 프리플랍 올인 승부(푸시·리쉬브)를 패 대 패 승률표로 직접 푼 균형
+// ICM 계산 비용 한도(lib/icm.js 의 cost) — 넘으면 상금 압박을 계산하지 않는다. 40000 ≈ 입상 6명이면 14명 남았을 때, 3명이면 42명까지
+const ICM_COST_MAX = 40000;
 const Icm = require('./lib/icm');               // 🏆 대회 상금 기준(ICM) — 입상권 근처의 올인 콜
 const EvLoss = require('./lib/evloss');         // 📉 결정마다 잃은 기대값(bb) — 실력 점수의 단위
 const Freqs = require('./lib/freqs');           // 📊 상황별 빈도(오픈·방어·3벳·c벳…)를 기준과 비교
@@ -1698,7 +1700,8 @@ class GameRoom {
         // 봇 차례엔 다른 누구도 액션할 수 없으므로, 미리 계산해도 그 사이 상태가 바뀌지 않는다.
         let decision = null;
         try { decision = this.botDecide(expectedNick); } catch (e) { decision = null; }
-        const toCall = Math.max(0, this.currentHighestBet - (p.currentBet || 0));
+        if (process.env.DEV_PFCHECK && decision) this._devPfCheck(expectedNick, decision);
+        const toCall =Math.max(0, this.currentHighestBet - (p.currentBet || 0));
         const potNow = this.pot + Object.values(this.players).reduce((s, x) => s + (x.currentBet || 0), 0);
         const thinkMs = this.botThinkTime(expectedNick, decision, toCall, potNow);
 
@@ -1747,6 +1750,33 @@ class GameRoom {
     }
 
     // 🤖 봇 의사결정: 몬테카를로 승률 추정 → 팟 오즈와 비교 (+ 보드텍스처 + 상대성향 익스플로잇)
+    // 🔬 개발용(DEV_PFCHECK): 봇의 프리플랍 결정을 대회용 솔버 자료(lib/preflop_mtt.json.gz)의 그 자리 빈도와 나란히 한 줄씩 남긴다 — tools 쪽에서 모아 비교한다
+    // 대회용 솔버 자료의 열쇠: 이번 프리플랍 행동(자리:R 레이즈 · A 올인 레이즈 · C 콜 · F 들어왔다가 접음)>내 자리
+    pfSeqA(nick) {
+        const p = this.players[nick], bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+        let hi = bb; const tok = [], inPot = new Set();
+        (this.actionLog || []).filter(a => a.street === 1).forEach(a => {
+            if (a.type === 'sb' || a.type === 'bb' || a.type === 'ante' || a.type === 'check') return;
+            const ps = Ranges.dataPos((this.players[a.nick] || {}).position || '');
+            if ((a.type === 'raise' || a.type === 'allin') && a.amount > hi) { tok.push(ps + (a.type === 'allin' ? ':A' : ':R')); hi = a.amount; inPot.add(a.nick); }
+            else if (a.type === 'call' || a.type === 'allin') { tok.push(ps + ':C'); inPot.add(a.nick); }
+            else if (a.type === 'fold' && inPot.has(a.nick)) tok.push(ps + ':F');
+        });
+        return tok.join(',') + '>' + Ranges.dataPos((p && p.position) || '');
+    }
+    _devPfCheck(nick, decision) {
+        const p = this.players[nick];
+        if (!p || !p.hand || p.hand.length !== 2 || (this.communityCards || []).length) return;
+        const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+        const os = this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded).map(n => this.players[n].chips + (this.players[n].currentBet || 0));
+        const effBB = os.length ? Math.min(p.chips + p.currentBet, Math.max(...os)) / bb : 0;
+        const n = this.playerOrder.length, key = this.pfSeqA(nick);
+        const f = Ranges.lookup({ seqA: key, seq: n > 2 && key.indexOf(':A') < 0 ? key : null, depth: effBB, players: n, heroPos: p.position || '', raises: 1, icm: n >= 3 && this.icmTableOn() }, handToCode(p.hand));
+        const allin = decision.type === 'allin' || (decision.type === 'raise' && decision.amount >= p.chips + p.currentBet);
+        const act = decision.type === 'fold' ? 'F' : allin ? 'A' : decision.type === 'raise' ? 'R' : 'C';   // check 도 C(그냥 보기)
+        console.log('PFCHECK ' + JSON.stringify({ n, pos: p.position, key, code: handToCode(p.hand), eff: Math.round(effBB), free: this.currentHighestBet <= (p.currentBet || 0), src: f ? (f.mtt ? 'mtt' : f.data ? '100bb' : 'chart') : null, lvl: (p._persona && p._persona.proStrategy) ? 'pro' : 'other',
+            mtt: !!(f && f.mtt), depth: f && f.mtt ? f.name : null, r: f ? f.raise : null, c: f ? f.call : null, j: f ? (f.jam || 0) : null, act }));
+    }
     botDecide(nick) {
         const p = this.players[nick];
         const toCall = Math.min(this.currentHighestBet - p.currentBet, p.chips);
@@ -1872,7 +1902,7 @@ class GameRoom {
 
                 // 🤖 [숏스택·올인] 스택이 짧거나 올인을 마주하면 일반 로직보다 먼저 푸시/폴드 판단을 한다
                 if (persona.proStrategy && this.botV2(nick)) {
-                    const ssd = this.shortStackDecision(nick, { code, toCall, bb, totalPot, facingRaise, isBB, mtt: _mttBot });
+                    const ssd = this.shortStackDecision(nick, { code, toCall, bb, totalPot, facingRaise, isBB, mtt: _mttBot, pro: !!persona.proStrategy && this.botV11(nick) && !_huBot });
                     if (ssd) return ssd;
                 }
 
@@ -2457,8 +2487,10 @@ class GameRoom {
             const r = rooms.get(rid); if (!r) return;
             r.playerOrder.forEach(n => { if (n === nick || n === vn) return; const q = r.players[n], s = q ? (q.chips || 0) + (q.currentBet || 0) : 0; if (s > 0) others.push(s); });
         });
-        if (others.length > 40) return null;
-        const r = Icm.callReq({ hero: p.chips, vill: v.chips, toCall, potAfter, others, payouts: Icm.payoutsFor(m.paid) });
+        // 남은 사람이 많으면 계산이 무겁고(입상 6명이면 특히) 상금 압박도 작다 — 비용이 크면 건너뛴다
+        const pay = m.payouts || Icm.payoutsFor(m.paid);
+        if (Icm.cost(others.length + 2, pay.length) > ICM_COST_MAX) return null;
+        const r = Icm.callReq({ hero: p.chips, vill: v.chips, toCall, potAfter, others, payouts: pay });
         return { req: r.req, chip: r.chip, tax: r.tax, alive: others.length + 2, paid: m.paid };
     }
 
@@ -2467,6 +2499,7 @@ class GameRoom {
     icmTableOn() {
         const m = this._mtt;
         if (!m || !(m.paid > 0) || (m.tables || []).length !== 1) return false;
+        if (m.paid !== 3) return false;     // 결승 ICM 표(i<인원>_)는 3명 입상 · 50/30/20 으로 푼 것이라 입상 인원이 다르면 맞지 않는다(그때는 칩 기준 표 + 아래 ICM 올인 계산)
         if (m.rebuyMax > 0 && m.blindLevel < m.rebuyUntilLevel) return false;
         const st = this.playerOrder.map(n => this.players[n]).filter(q => q && !q._out).map(q => (q.chips || 0) + (q.currentBet || 0));
         if (st.length < 3 || st.length > 6) return false;
@@ -2483,12 +2516,13 @@ class GameRoom {
             const r = rooms.get(rid); if (!r) return;
             r.playerOrder.forEach(n => { if (inHand.has(n) && r === this) return; const q = r.players[n], s = q ? (q.chips || 0) + (r === this ? 0 : (q.currentBet || 0)) : 0; if (s > 0) others.push(s); });
         });
-        if (others.length + behind.length + 1 <= 2 || others.length > 40) return null;      // 헤즈업은 차이가 없다
+        // 헤즈업은 차이가 없다 · 남은 사람이 많으면 계산이 무겁다(푸시 계산은 ICM 을 수백 번 부른다)
+        if (others.length + behind.length + 1 <= 2 || Icm.cost(others.length + behind.length + 1, (m.payouts || Icm.payoutsFor(m.paid)).length) > ICM_COST_MAX / 8) return null;
         const dead = this.pot + Object.keys(this.players).reduce((a, n) => a + (this.players[n].currentBet || 0), 0);
         if (!this._icmHands) this._icmHands = Ranges.ALL.map(code => ({ code, w: Ranges.combos(code) }));
         const r = Icm.pushShift({ stack: p.chips + (p.currentBet || 0), posted: p.currentBet || 0, dead,
             callers: behind.map(n => ({ stack: this.players[n].chips + (this.players[n].currentBet || 0), posted: this.players[n].currentBet || 0 })),
-            others, payouts: Icm.payoutsFor(m.paid), base, hands: this._icmHands, eqVs: ShortStack.equityVs });
+            others, payouts: m.payouts || Icm.payoutsFor(m.paid), base, hands: this._icmHands, eqVs: ShortStack.equityVs });
         const ratio = Math.max(0.35, Math.min(2.5, r.ratio));
         if (process.env.DEV_ICMLOG) console.log('ICMLOG push ' + JSON.stringify({ n: nick, base: Math.round(base * 100), chip: Math.round(r.chip * 100), icm: Math.round(r.icm * 100), ratio: Math.round(ratio * 100) / 100, alive: others.length + behind.length + 1 }));
         return { ratio, alive: others.length + behind.length + 1, paid: m.paid };
@@ -2541,6 +2575,16 @@ class GameRoom {
             // 🏆 입상이 걸린 대회에서는 봇도 상금 기준(ICM)으로 받는다 — 버블에서 아무 올인이나 받아 주지 않게
             let icmTax = 0;
             try { const tc = Math.min(toCall, p.chips), ic = this.icmCall(nick, tc, totalPot + tc); if (ic) icmTax = Math.max(0, ic.tax); if (ic && process.env.DEV_ICMLOG) console.log('ICMLOG bot ' + JSON.stringify(Object.assign({ n: nick, call: tc, chips: p.chips }, ic))); } catch (e) {}
+            // 📊 고수 봇: 상금 압박(ICM)이 없고 대회용 솔버 자료에 이 자리가 있으면 표의 빈도대로 받는다.
+            //    아래 어림 계산은 "대회라서 +2.5%p · 뒤에 남은 사람마다 +2%p" 를 더 요구해서, 솔버가 다 받는 패(예: 17bb 올인에 AQo)도 접었다.
+            if (c.pro && aggrAllIn && icmTax < 0.005) {
+                const f = Ranges.lookup({ seqA: this.pfSeqA(nick), depth: effBB, players: this.playerOrder.length, heroPos: p.position || '', raises: 1 }, code);
+                if (f && f.mtt) {
+                    if (process.env.DEV_BOTSRC) console.log('BOTSRC mtt-vsjam');
+                    const r = Math.random() * 100;
+                    return r < f.raise ? shove() : r < f.raise + f.call ? { type: 'call' } : { type: 'fold' };
+                }
+            }
             const edge = Math.max(isTourney ? 0.025 : 0, icmTax) + behind * 0.02;
             const res = ShortStack.shouldCallShove(code, Math.min(1, x), potOdds, edge);
             this._lastBotEdge = res.equity - potOdds - edge;
@@ -3238,6 +3282,8 @@ class GameRoom {
         if (this.gameStage >= 1 && this.gameStage <= 4) return;
         // 🏆 [MTT] 테이블을 합쳐야 할 때(파이널 테이블 구성 등)는 새 판을 돌리지 않고 기다린다 — 매니저가 합친 뒤 다시 시작시킨다
         if (this._mtt && (this._mtt.hold || this._mtt._endAgreed) && !this._mtt.finished) return;
+        // ⚖️ [MTT 밸런싱] 이 테이블에서 한 명을 옮기려고 작은 테이블의 판이 끝나기를 기다리는 중(최대 60초)
+        if (this._mtt && this._balWait && Date.now() - this._balWait < 60000) return;
         // 🤖 [컴까기] 끝난 도전방은 더 딜하지 않는다. 사람이 칩을 다 잃었으면 봇끼리 계속 칠 이유가 없으니 바로 실패 처리.
         if (this._challenge) {
             if (this._challenge.done || this._challenge.waiting) return;
@@ -5543,15 +5589,18 @@ class MTTManager {
     constructor(mttId, hostNick, settings) {
         this.mttId = mttId;
         this.hostNick = hostNick;
-        this.tableSize = Math.max(2, Math.min(6, settings.tableSize || 6));
+        this.tableSize = Math.max(2, Math.min(9, settings.tableSize || 6));   // 일반 MTT 는 만들 때 6 이하로 묶고, 딥스택 연습만 9인 테이블
         this.startingChips = settings.startingChips || 5000;
         this.blindUpInterval = settings.blindUpInterval || 300;
         this.name = settings.name || mttId;
-        // 🏁 파이널나인 딥스택 연습: 정원 20 · 전용 블라인드 구조 · 상위 3명 입상 · 기록은 전용 상자(fnStats)에만
+        // 🏁 파이널나인 딥스택 연습: 정원 50 · 9인 테이블 · 전용 블라인드 구조 · 상위 3명 입상 · 기록은 전용 상자(fnStats)에만
         this.fn = !!settings.fn;
         this.maxEntrants = settings.maxEntrants || this.tableSize * 6;
         this.structure = settings.structure || null;
         this.paid = settings.paid || 0;
+        // 🏆 상금 비율(%) — ICM 계산에 쓴다. 따로 주지 않으면 입상 인원에 맞춘 기본값
+        this.payouts = Array.isArray(settings.payouts) && settings.payouts.length === this.paid
+            ? (t => settings.payouts.map(x => x / t * 100))(settings.payouts.reduce((a, b) => a + b, 0)) : Icm.payoutsFor(this.paid);
         this.rebuyMax = settings.rebuys || 0;                 // 한 사람이 다시 들어올 수 있는 횟수
         this.rebuyUntilLevel = settings.rebuyUntilLevel || 0; // 이 레벨까지만 리바인 가능
         this.rebuys = {};                                     // nick → 쓴 횟수
@@ -5798,6 +5847,7 @@ class MTTManager {
         this.updateHold();
         // 결과를 볼 시간(3초)이 지나자마자 한 번 점검해서 바로 합친다 (4초 하트비트를 기다리지 않는다)
         if (this.hold) setTimeout(() => this.tick(), DEV_FAST ? 150 : 3100);
+        else this.tryBalanceMove();
     }
     // ═══ 🗳️ [MTT 합의 종료] 봇이 아닌 사람들끼리 전원 동의하면 지금 끝낸다 ═══
     //   투표자: 모든 테이블에서 칩이 남아 있고 접속 중인 사람(봇은 투표하지 않는다). 사람이 한 명뿐이면 그 사람의 제안만으로 끝난다.
@@ -6002,7 +6052,7 @@ class MTTManager {
 
         // 🏁 [딥스택] 사람이 모두 탈락했으면 바로, 남은 사람이 모두 10분 넘게 접속해 있지 않으면 그때 — 칩 순서로 순위를 정하고 끝낸다.
         //    (봇끼리 끝까지 돌면 실제 시간으로 몇 시간이 걸리고, 그동안 아무도 새 딥스택을 열 수 없다. 상금은 사람이 우승하지 않았으니 넘어간다.)
-        if (this.fn && !this._endAgreed) {
+        if (this.fn && !this._endAgreed && !process.env.DEV_FN_KEEPGOING) {     // (DEV_FN_KEEPGOING: 시험에서 봇끼리 끝까지 — 파이널 테이블·입상까지 보려고)
             const humans = live.filter(p => !p.isBot);
             const anyOn = humans.some(p => p.socketId && io.sockets.sockets.get(p.socketId));
             if (!humans.length) this._autoEnd('사람 참가자가 모두 탈락해서');
@@ -6056,9 +6106,70 @@ class MTTManager {
             return;
         }
 
-        // (C) 균형 OK → 멈춘 테이블(대기0/핸드종료5) 재가동
+        // (C) 테이블 수는 맞다 → 인원 차이가 크면 한 명 옮기고, 멈춘 테이블(대기0/핸드종료5) 재가동
+        this.tryBalanceMove();
         info.forEach(t => { if ((t.stage === 0 || t.stage === 5) && t.alive.length >= 2) this.kick(t.rid); });
         this.broadcastStatus();
+    }
+
+    // ⚖️ [테이블 밸런싱 — 한 자리 옮기기] 테이블 수는 맞는데 인원 차이가 3명 이상이면(예: 9명 대 6명) 가장 많은 테이블에서 한 명을 가장 적은 테이블로 옮긴다.
+    //    예전엔 테이블 수가 넘치거나 1명만 남은 테이블이 생길 때만 다시 나눠서, 9명 테이블 옆에서 3명이 계속 짧은 판을 쳤다.
+    //    실제 대회처럼: 큰 테이블에서 "다음 판 BB 를 낼 사람"이 작은 테이블의 "다음 판 BB 자리"로 간다(블라인드를 건너뛰지도 두 번 내지도 않는다).
+    //    두 테이블이 모두 판과 판 사이일 때만 옮긴다 — 큰 테이블이 먼저 쉬면 작은 테이블의 판이 끝날 때까지 새 판을 미룬다(최대 60초).
+    tryBalanceMove() {
+        if (this.finished || this.hold || this._endAgreed) return false;
+        const idle = r => r.gameStage === 0 || r.gameStage === 5;
+        const aliveOf = r => r.playerOrder.filter(x => r.players[x] && r.players[x].chips > 0);
+        const info = this.tables.map(rid => rooms.get(rid)).filter(Boolean).map(r => ({ r, n: aliveOf(r).length }));
+        const release = () => info.forEach(t => { if (t.r._balWait) { t.r._balWait = 0; this.kick(t.r.roomId); } });
+        if (info.length < 2) { release(); return false; }
+        info.sort((a, b) => b.n - a.n);
+        const L = info[0], S = info[info.length - 1];
+        if (L.n - S.n < 3) { release(); return false; }
+        info.forEach(t => { if (t !== L && t.r._balWait) { t.r._balWait = 0; this.kick(t.r.roomId); } });
+        if (!idle(L.r)) return false;
+        // 결과창을 볼 시간(3초)은 준다 — 옮겨지는 사람이 방금 판의 결과를 못 보고 넘어가지 않게
+        const fresh = L.r.gameStage === 5 && Date.now() - (L.r._handEndedAt || 0) < 3000;
+        if (fresh || !idle(S.r)) {
+            if (!L.r._balWait) L.r._balWait = Date.now();
+            if (fresh) setTimeout(() => this.tick(), DEV_FAST ? 150 : 3100);
+            return false;
+        }
+        // 옮길 사람: 큰 테이블에서 지금 BB 다음 사람(= 다음 판 BB). 접속이 끊긴 사람은 되도록 피한다.
+        const order = aliveOf(L.r), bbNow = order.find(x => (L.r.players[x].role || '').includes('BB'));
+        let k = bbNow ? (order.indexOf(bbNow) + 1) % order.length : 0;
+        for (let i = 0; i < order.length && L.r.players[order[k]].isDisconnected; i++) k = (k + 1) % order.length;
+        const mover = order[k], p = L.r.players[mover];
+        if (p._botTimer) clearTimeout(p._botTimer);
+        if (p._botTankTimer) clearTimeout(p._botTankTimer);
+        const i = L.r.playerOrder.indexOf(mover);
+        L.r.playerOrder.splice(i, 1);
+        if (i < L.r.dealerIndex) L.r.dealerIndex--;
+        delete L.r.players[mover];
+        // 작은 테이블: 지금 BB 바로 다음 자리(= 다음 판 BB)
+        const pl = makeFreshPlayer(mover, p.socketId, p.isBot, p.chips);
+        pl.chips = p.chips;
+        if (p.isBot) pl._persona = p._persona || S.r.assignPersona(mover, this.fn ? ((this.botLevel || {})[mover] || 'hard') : 'hard');
+        S.r.players[mover] = pl;
+        const bbS = S.r.playerOrder.find(x => S.r.players[x] && (S.r.players[x].role || '').includes('BB'));
+        const j = bbS ? S.r.playerOrder.indexOf(bbS) + 1 : S.r.playerOrder.length;
+        S.r.playerOrder.splice(j, 0, mover);
+        if (j <= S.r.dealerIndex) S.r.dealerIndex++;
+        if (p.socketId) {
+            const sock = io.sockets.sockets.get(p.socketId);
+            if (sock) {
+                sock.leave(L.r.roomId); sock.join(S.r.roomId); sock.currentRoom = S.r.roomId;
+                sock.emit('mttSeated', { roomId: S.r.roomId, mttId: this.mttId, finalTable: false, moved: true });
+            }
+        }
+        const tn = rid => rid.split('#')[1] || rid;
+        io.to(L.r.roomId).emit('gameMessage', `⚖️ 테이블 밸런싱 — ${mover} 님이 ${tn(S.r.roomId)} 테이블로 옮깁니다 (${L.n}명 → ${L.n - 1}명)`);
+        io.to(S.r.roomId).emit('gameMessage', `⚖️ 테이블 밸런싱 — ${mover} 님이 ${tn(L.r.roomId)} 테이블에서 왔습니다 (${S.n}명 → ${S.n + 1}명)`);
+        if (process.env.DEV_MTTLOG) console.log(`[MTTLOG] balance ${mover} ${tn(L.r.roomId)}(${L.n})→${tn(S.r.roomId)}(${S.n}) wait=${L.r._balWait ? Date.now() - L.r._balWait : 0}ms`);
+        L.r._balWait = 0;
+        L.r.sendState(); S.r.sendState();
+        this.kick(L.r.roomId); this.kick(S.r.roomId);
+        return true;
     }
 
     // 적정 테이블 수 (각 테이블 최소 2명 보장)
@@ -6238,15 +6349,17 @@ class MTTManager {
     }
 }
 
-// 🏁 [파이널나인 딥스택 연습] 구조 — 운영자가 알려 준 값(2026-10-10): 1레벨 10,000/20,000 · 시작 3,000,000칩(150bb) · 레벨 10분(앱에서는 3분으로 진행) ·
-//    3레벨(30,000/60,000)부터 BB 앤티 · 리바인 1회. (얼리버드 추가 칩 340만~400만은 넣지 않았다.)
-//    ⚠️ 알려 주지 않은 부분은 가정이다: 4레벨 이후의 블라인드, 리바인 마감(6레벨까지로 둠), 입상 인원(20명 중 3명). 테이블은 이 게임의 최대인 6인(실제 매장은 9인).
+// 🏁 [파이널나인 딥스택 연습] 구조 — 파이널나인 CHAMPIONS CUP in BUSAN(2026-10-25) 구조표 그대로(운영자가 보낸 대회 안내, 2026-10-16):
+//    시작 40,000칩 · 1레벨 100/100 · 3레벨부터 BB 앤티 · 32레벨까지 · 리바인 없음(운영자 결정). 테이블 9인 · 정원 50명.
+//    실제 매장은 레벨 20분 · 4레벨마다 15분 휴식 · 작은 칩 정리(color-up)가 있지만, 앱은 휴식·칩 정리 없이 레벨만 3분으로 진행한다.
+//    입상: 6위까지(운영자 결정 — 실제 대회는 107명+ 에 13위까지, 약 12%). 상금 비율은 실제 대회 1~6위 상금(405·255·188·150·112·90만 원)의 비율.
 const FN_MTT = {
-    // 레벨은 3분: 실제 매장은 10분이지만 앱은 판이 서너 배 빨리 돌아서, 한 레벨에 치는 판 수를 실제와 비슷하게 맞춘 값이다(운영자 결정 — 10분 진행은 없앰)
-    // 칩 단위는 실제 매장(1레벨 10,000/20,000 · 300만 칩)의 100분의 1 로 줄였다 — 숫자가 너무 커서 적응이 안 된다는 운영자 요청. bb 로 보면 똑같다(150bb 시작).
-    entrants: 30, tableSize: 6, startingChips: 30000, blindUpInterval: 180, paid: 3, rebuys: 1, rebuyUntilLevel: 6, normalBots: 3,
-    structure: [[100, 200], [200, 400], [300, 600], [400, 800], [500, 1000], [600, 1200], [800, 1600], [1000, 2000], [1500, 3000], [2000, 4000],
-        [3000, 6000], [4000, 8000], [6000, 12000], [8000, 16000], [10000, 20000], [15000, 30000], [20000, 40000], [30000, 60000], [50000, 100000]]
+    // 레벨은 3분: 앱은 판이 서너 배 빨리 돌아서 짧게 잡는다(운영자 결정 — 긴 진행은 없앰)
+    entrants: 50, tableSize: 9, startingChips: 40000, blindUpInterval: 180, paid: 6, payouts: [4050, 2550, 1880, 1500, 1120, 900], rebuys: 0, rebuyUntilLevel: 0, normalBots: 3,
+    structure: [[100, 100], [100, 200], [100, 200], [200, 400], [300, 600], [400, 800], [500, 1000], [600, 1200],
+        [800, 1600], [1000, 2000], [1200, 2400], [1500, 3000], [2000, 4000], [2500, 5000], [3000, 6000], [4000, 8000],
+        [5000, 10000], [6000, 12000], [8000, 16000], [10000, 20000], [15000, 30000], [20000, 40000], [25000, 50000], [30000, 60000],
+        [40000, 80000], [50000, 100000], [60000, 120000], [75000, 150000], [100000, 200000], [150000, 300000], [200000, 400000], [300000, 600000]]
         .map((x, i) => ({ level: i + 1, sb: x[0], bb: x[1], ante: i < 2 ? 0 : x[1] }))
 };
 // 새 플레이어 객체 생성 헬퍼 (MTT 착석용)
@@ -7393,10 +7506,10 @@ io.on('connection', (socket) => {
         io.emit('mttList', mttListArray());
     });
 
-    // 🏁 [파이널나인 딥스택 연습] 20인 MTT 를 연다 — 친구들은 MTT 목록에서 들어오고, 시작하면 빈자리는 봇이 채운다
+    // 🏁 [파이널나인 딥스택 연습] 50인 MTT 를 연다 — 친구들은 MTT 목록에서 들어오고, 시작하면 빈자리는 봇이 채운다
     socket.on('createFnMtt', (data) => {
         if (!socket.nickname || socket.currentRoom || socket._mttId) return;
-        // 🖥️ [서버 부하] 딥스택 연습(정원 30명 · 봇 포함)은 한 번에 하나만 — 진행 중인 것이 끝나야 새로 열 수 있다
+        // 🖥️ [서버 부하] 딥스택 연습(정원 50명 · 봇 포함)은 한 번에 하나만 — 진행 중인 것이 끝나야 새로 열 수 있다
         const busy = [...mtts.values()].find(m => m.fn && !m.finished);
         if (busy) {
             socket.emit('gameMessage', busy.started
@@ -7408,7 +7521,7 @@ io.on('connection', (socket) => {
         const mttId = 'mtt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
         const name = `🏁 파이널나인 딥스택 연습 (${socket.nickname})`;
         const mtt = new MTTManager(mttId, socket.nickname, { name, fn: true, tableSize: FN_MTT.tableSize, startingChips: FN_MTT.startingChips,
-            blindUpInterval: Number(process.env.DEV_FN_LEVEL) || FN_MTT.blindUpInterval, maxEntrants: Number(process.env.DEV_FN_ENTRANTS) || FN_MTT.entrants, structure: FN_MTT.structure, paid: FN_MTT.paid,
+            blindUpInterval: Number(process.env.DEV_FN_LEVEL) || FN_MTT.blindUpInterval, maxEntrants: Number(process.env.DEV_FN_ENTRANTS) || FN_MTT.entrants, structure: FN_MTT.structure, paid: FN_MTT.paid, payouts: FN_MTT.payouts,
             rebuys: FN_MTT.rebuys, rebuyUntilLevel: process.env.DEV_FN_REBUY_LV != null ? Number(process.env.DEV_FN_REBUY_LV) : FN_MTT.rebuyUntilLevel });
         mtts.set(mttId, mtt);
         mtt.addEntrant(socket.nickname, socket.id, false);
@@ -7451,7 +7564,7 @@ io.on('connection', (socket) => {
                 lv1: FN_MTT.structure[0].sb + '/' + FN_MTT.structure[0].bb, paid: FN_MTT.paid, tableSize: FN_MTT.tableSize, rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel, normalBots: FN_MTT.normalBots, anteLevel: 3 },
             ev: evView(F), summary: sum(F), results: (u.fnResults || []).slice(-20).reverse(), jackpot: MockDB.jpView(socket.nickname),
             depth: per(F, dk, 'evDn_', 'evDl_'), phases: per(F, pk, 'evTn_', 'evTl_'),
-            icm: { n: F.evIn || 0, ok: F.evIk || 0, loss: Math.round((F.evIl || 0) * 10) / 10, payouts: Icm.payoutsFor(FN_MTT.paid) },
+            icm: { n: F.evIn || 0, ok: F.evIk || 0, loss: Math.round((F.evIl || 0) * 10) / 10, payouts: FN_MTT.payouts.map(x => x / FN_MTT.payouts.reduce((a, b) => a + b, 0) * 100) },
             freqs: Freqs.summarize(F), leaks, blunders: Blunder.top(F.blunders, 0, 5).map(Blunder.describe),
             stats: { vpip: F.preflopOpps > 0 ? Math.round((F.vpipHands || 0) / F.preflopOpps * 100) : null, pfr: F.preflopOpps > 0 ? Math.round((F.pfrHands || 0) / F.preflopOpps * 100) : null, hands: F.handsPlayed || 0 },
             board
@@ -7758,7 +7871,7 @@ io.on('connection', (socket) => {
         if (!mtt || mtt.hostNick !== socket.nickname || mtt.started) return;
         // 🏁 파이널나인 연습은 빈자리를 봇으로 채워 항상 정원(FN_MTT.entrants)으로 시작한다
         if (mtt.fn) {
-            let guard = 0; while (mtt.entrants.length < mtt.maxEntrants && guard++ < 40) mtt.addBot();
+            let guard = 0; while (mtt.entrants.length < mtt.maxEntrants && guard++ < mtt.maxEntrants) mtt.addBot();   // guard: 이름이 겹쳐 못 넣는 경우의 무한 반복 방지(예전엔 40 고정이라 정원 50을 못 채웠다)
             // 상대 구성: 봇 가운데 중수 3명, 나머지는 전부 고수 (운영자 지정)
             const bots = mtt.entrants.filter(e => e.isBot).map(e => e.nick);
             for (let i = bots.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bots[i], bots[j]] = [bots[j], bots[i]]; }
@@ -8143,6 +8256,12 @@ MockDB.initRemote().catch(e => console.error('🌐 원격 초기화 오류:', e 
     });
     server.listen(PORT, () => {
         console.log(`✅ [Master Server] 치명 버그 수정 + 보안 패치 + 방 정리 시스템 적용 완료! (포트 ${PORT})`);
+        // 🛡️ 관리자 로그인이 안 될 때 원인을 찾기 쉽게 — 어떤 방식으로 비밀번호를 확인하는지만 남긴다(값은 남기지 않는다)
+        const _au = MockDB.users.get(ADMIN_NICK);
+        console.log(`🛡️ [관리자] 아이디 "${ADMIN_NICK}" · 비밀번호: ` + (process.env.ADMIN_PASS
+            ? `server.env 의 ADMIN_PASS (${process.env.ADMIN_PASS.length}자리${/^\d{4}$/.test(process.env.ADMIN_PASS) ? '' : ' — ⚠️ 숫자 4자리가 아니라 게임 화면 로그인으로는 못 들어갑니다'})`
+            : (_au && _au.pinHash ? 'DB 에 처음 등록된 비밀번호(ADMIN_PASS 없음)' : '아직 없음 — 처음 admin 으로 로그인한 비밀번호가 등록됩니다'))
+            + ` · 전적 DB: ${MockDB._remote ? (MockDB._remoteLoadOk ? 'Turso 연결됨' : '⚠️ Turso 불러오기 실패') : '이 PC 파일'}`);
     });
 });
 

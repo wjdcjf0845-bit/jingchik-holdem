@@ -105,3 +105,24 @@ test('푸시: 대회 초반(20명)에는 거의 그대로', () => {
 test('상금 비율의 합은 100', () => {
     [1, 2, 3, 4, 5, 8].forEach(n => near(Icm.payoutsFor(n).reduce((a, b) => a + b, 0), 100));
 });
+
+test('ICM: 묶음 방식 계산이 순서를 하나하나 따라간 Malmuth–Harville 과 같고, 6명 입상 · 많은 인원에서도 빨리 끝난다', () => {
+    const old = (stacks, idx, payouts) => {
+        const n = stacks.length, places = Math.min(payouts.length, n), used = new Array(n).fill(false);
+        const walk = (place, remain, prob) => { let ev = prob * (stacks[idx] / remain) * payouts[place]; if (place + 1 >= places) return ev;
+            for (let j = 0; j < n; j++) { if (j === idx || used[j]) continue; used[j] = true; ev += walk(place + 1, remain - stacks[j], prob * stacks[j] / remain); used[j] = false; } return ev; };
+        return walk(0, stacks.reduce((a, b) => a + b, 0), 1);
+    };
+    let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let t = 0; t < 120; t++) {
+        const n = 2 + Math.floor(rnd() * 7), st = Array.from({ length: n }, () => 1 + Math.floor(rnd() * 90000));
+        const pay = Icm.payoutsFor(1 + Math.floor(rnd() * 6)), i = Math.floor(rnd() * n);
+        assert.ok(Math.abs(old(st, i, pay) - Icm.equity(st, i, pay)) < 1e-9);
+    }
+    // 예전 방식이면 6명 입상 · 13명에서 수백만 가지 순서 — 서버가 멈췄다
+    const st = Array.from({ length: 13 }, (_, k) => 20000 + k * 5000), pay6 = [4050, 2550, 1880, 1500, 1120, 900].map(x => x / 120);
+    const t0 = Date.now(), sum = Icm.equities(st, pay6).reduce((a, b) => a + b, 0);
+    assert.ok(Math.abs(sum - 100) < 1e-6, '모두의 기대값 합 = 상금 전체');
+    assert.ok(Date.now() - t0 < 500, '13명 · 6명 입상이 0.5초 안에');
+    assert.ok(Icm.cost(15, 6) > Icm.cost(14, 6) && Icm.cost(9, 3) < Icm.cost(9, 6));
+});
