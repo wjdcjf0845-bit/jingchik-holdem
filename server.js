@@ -119,6 +119,8 @@ const Icm = require('./lib/icm');               // 🏆 대회 상금 기준(ICM
 const EvLoss = require('./lib/evloss');         // 📉 결정마다 잃은 기대값(bb) — 실력 점수의 단위
 const Freqs = require('./lib/freqs');           // 📊 상황별 빈도(오픈·방어·3벳·c벳…)를 기준과 비교
 const VRange = require('./lib/vrange');         // 🔍 상대의 프리플랍 행동 → 들고 있을 만한 패의 무게
+const EqMC = require('./lib/equitymc');      // 🎲 플랍 이후 승률(몬테카를로)
+const EqPool = require('./lib/eqpool');      // 🧵 사람 결정의 정밀 승률을 따로 도는 스레드에서
 const FlopSolve = require('./lib/flopsolve');   // 🧮 솔버로 미리 풀어 둔 플랍 전략 조회
 const RiverSolve = require('./lib/riversolve'); // 🌊 리버를 범위 대 범위로 그 자리에서 푼다
 const RangeTrack = require('./lib/rangetrack'); // 🧭 리버까지 쳐 온 행동으로 양쪽 범위를 만든다
@@ -1649,9 +1651,28 @@ class GameRoom {
                         if ((this._learnMode || process.env.DEV_ADVICE === '1') && advice && cp.socketId) io.to(cp.socketId).emit('gtoAdvice', advice);   // DEV_ADVICE: 검증용(일반 방에서도 조언을 내보냄)
                     } catch (e) {}
                 };
-                if (this._learnMode) run(); else setTimeout(run, 40);      // 일반 게임은 화면 갱신을 먼저 내보낸 뒤에 계산
+                // 🎯 플랍 이후: 승률을 따로 도는 스레드에서 4000번(표준편차 약 0.008 — 본 스레드 500번의 절반 이하)으로 계산해 둔 뒤 조언을 만든다.
+                //    게임 진행은 멈추지 않는다. 사람이 그 전에 버튼을 누르면 예전처럼 본 스레드에서 500번으로 계산한다(대개 0.1~0.2초면 돌아온다).
+                const args = this.communityCards.length >= 3 ? this.eqArgs(expectedNick) : null;
+                if (args) {
+                    EqPool.request(Object.assign(args, { iters: 4000 }), 2500).then(v => {
+                        if (typeof v === 'number' && this.advKey(expectedNick) === key) this._eqPrecise = { nick: expectedNick, key, v };
+                        run();
+                    });
+                } else if (this._learnMode) run(); else setTimeout(run, 40);      // 일반 게임은 화면 갱신을 먼저 내보낸 뒤에 계산
             }
         }
+    }
+    // 승률 계산 재료: 내 패 · 보드 · 상대마다 범위의 최소 강도(사람이면 읽기 없이 0 — estimateBotEquity 와 같은 기준)
+    eqArgs(nick) {
+        const p = this.players[nick];
+        if (!p || !p.hand || p.hand.length !== 2) return null;
+        const oppNicks = this.playerOrder.filter(n => n !== nick && !this.players[n].isFolded);
+        if (!oppNicks.length) return null;
+        const persona = p.isBot ? (p._persona || (p._persona = this.assignPersona(nick, p.difficulty))) : null;
+        const skill = (persona && persona.skillFactor != null) ? persona.skillFactor : 0;
+        return { hand: p.hand.slice(), board: this.communityCards.slice(),
+            oppMin: oppNicks.map(n => HandRead.villainMinStrength(HandRead.summarizeVillain(this.actionLog, n), skill)) };
     }
     // 조언을 계산한 시점의 상황과 지금이 같은지 확인하는 열쇠
     advKey(nick) {
@@ -3188,65 +3209,14 @@ class GameRoom {
         const oppMinStrength = oppNicks.map(n =>
             HandRead.villainMinStrength(HandRead.summarizeVillain(this.actionLog, n), skill));
 
-        // 포스트플랍: 몬테카를로
-        const known = new Set([...this.communityCards, ...p.hand]);
-        const pool = FULL_DECK.filter(c => !known.has(c));
-        const need = 5 - this.communityCards.length;
-        const ITER = 500; // 120→500: 표준편차 0.041→0.017로 안정화 (GTO 평가 정확도 ↑)
-        const MAX_TRIES = 4; // 레인지 표본 재추첨 상한 — 못 찾으면 그냥 수용 (성능·표본 고갈 방지)
-        let win = 0;
-
-        for (let it = 0; it < ITER; it++) {
-            const shuffled = pool.slice();
-            for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
-            let idx = 0;
-            const board = this.communityCards.concat(shuffled.slice(idx, idx += need));
-
-            // 상대 핸드를 레인지에 맞게 추첨 (거절 샘플링, 시도 횟수 제한)
-            const oppHands = [];
-            for (let o = 0; o < opponents; o++) {
-                const min = oppMinStrength[o];
-                let hand = null;
-                for (let t = 0; t < MAX_TRIES; t++) {
-                    if (idx + 1 >= shuffled.length) break; // 덱 소진 — 마지막 후보 사용
-                    const cand = [shuffled[idx++], shuffled[idx++]];
-                    hand = cand;
-                    if (min <= 0) break; // 안 좁히는 상대 → 첫 추첨 그대로 (기존 동작)
-                    if (HandRead.acceptOppHand(this.preflopStrength(cand), min)) break;
-                }
-                oppHands.push(hand || [shuffled[idx++], shuffled[idx++]]);
-            }
-
-            try {
-                const mine = Hand.solve(p.hand.concat(board));
-                const all = [mine, ...oppHands.map(oh => Hand.solve(oh.concat(board)))];
-                const winners = Hand.winners(all);
-                if (winners.includes(mine)) win += 1 / winners.length;
-            } catch (e) { win += 0.3; }
-        }
-        return win / ITER;
+        // 🎯 사람 결정: 차례가 왔을 때 따로 도는 스레드가 4000번으로 계산해 둔 값이 있으면 그것(같은 상황일 때만)
+        if (!p.isBot && this._eqPrecise && this._eqPrecise.nick === nick && this._eqPrecise.key === this.advKey(nick)) return this._eqPrecise.v;
+        // 포스트플랍: 몬테카를로(lib/equitymc.js) — 500번: 표준편차 약 0.017
+        return EqMC.mcEquity({ hand: p.hand, board: this.communityCards, oppMin: oppMinStrength, iters: 500 });
     }
 
     // 프리플랍 핸드 강도 0~1
-    preflopStrength(hand) {
-        const order = '23456789TJQKA';
-        const v1 = order.indexOf(hand[0][0]), v2 = order.indexOf(hand[1][0]);
-        const hi = Math.max(v1, v2), lo = Math.min(v1, v2);
-        const suited = hand[0][1] === hand[1][1];
-        const pair = v1 === v2;
-        const gap = hi - lo;
-
-        let s = 0;
-        if (pair) s = 0.5 + hi * 0.035;            // 페어: 22=0.5 ~ AA=0.92
-        else {
-            s = 0.18 + hi * 0.028 + lo * 0.012;    // 하이카드 가중
-            if (suited) s += 0.07;
-            if (gap === 1) s += 0.05;              // 커넥터
-            else if (gap === 2) s += 0.02;
-            else if (gap > 4) s -= 0.05;
-        }
-        return Math.max(0.05, Math.min(0.95, s));
-    }
+    preflopStrength(hand) { return EqMC.preflopStrength(hand); }   // 계산은 lib/equitymc.js(승률 계산 스레드와 같은 함수)
 
     stopTurnTimer() {
         if (this.turnTimeout) clearTimeout(this.turnTimeout);
