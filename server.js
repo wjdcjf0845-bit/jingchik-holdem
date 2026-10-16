@@ -5814,7 +5814,7 @@ class MTTManager {
         const roomId = `${this.mttId}#${tag}`;
         const room = new GameRoom(roomId, {
             startingChips: this.startingChips, blindUpInterval: this.blindUpInterval,
-            mode: 'tournament', maxRebuys: 0, turnTimeLimit: this.fn ? 30 : undefined      // 딥스택: 액션마다 30초(파이널나인 규칙)
+            mode: 'tournament', maxRebuys: 0
         });
         room._mtt = this;
         room._mttFreeChips = true;
