@@ -4401,6 +4401,16 @@
         .hl-banner .hl-k { font-size: 11px; color: rgba(255,255,255,0.65); margin-top: 6px; }
         @keyframes hlIn { 0% { opacity: 0; transform: translateX(-50%) scale(0.6); } 10% { opacity: 1; transform: translateX(-50%) scale(1.08); } 16% { transform: translateX(-50%) scale(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) translateY(-14px); } }
         @media screen and (max-width: 960px) { .hl-banner .hl-t { font-size: 22px; } .hl-banner .hl-s { font-size: 12px; } }
+    
+        /* 🧑‍🏫 AI 코치 */
+        .ai-coach { margin: 8px 0 10px; padding: 10px 12px; border-radius: 12px; background: rgba(120,90,255,0.10); border: 1px solid rgba(160,140,255,0.35); font-size: 13px; }
+        .ai-coach small { display: block; margin-top: 6px; color: rgba(255,255,255,0.6); font-size: 11.5px; }
+        .ai-btn { font-family: inherit; font-weight: 800; font-size: 12px; color: #fff; cursor: pointer; border-radius: 9px; padding: 4px 9px; margin-top: 5px;
+            background: linear-gradient(180deg, #5b46c9, #3a2b8a); border: 1px solid rgba(190,170,255,0.55); }
+        .ai-btn.big { font-size: 14px; padding: 8px 14px; }
+        .ai-txt { margin-top: 6px; line-height: 1.6; color: #eee; font-size: 13px; }
+        .ai-ex .ai-txt { background: rgba(120,90,255,0.08); border-radius: 9px; padding: 7px 9px; font-size: 12.5px; }
+        .ai-wait { color: #c8bcff; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -8149,13 +8159,14 @@
         hands.sort(_fnRvSort === 'loss' ? ((a, b) => b.loss - a.loss || a.n - b.n) : ((a, b) => a.n - b.n));
         const mixTxt = m => Object.keys(m).filter(k => m[k] > 0).sort((a, b) => m[b] - m[a]).map(k => `${actKo[k] || k} ${m[k]}%`).join(' · ');
         const cards = hands.map(h => {
-            const ds = h.d.map(x => { const g = SK_GRADE[x.g] || SK_GRADE.best, bad = x.loss > 0;
+            const ds = h.d.map((x, di) => { const g = SK_GRADE[x.g] || SK_GRADE.best, bad = x.loss > 0;
                 const did = (actKo[x.act] || x.act) + (x.amt > 0 && x.act !== 'fold' && x.act !== 'check' ? ` ${x.amt}bb` : '');
                 return `<div class="frv-d${bad ? ' bad' : ''}">
                     <span class="frv-g" style="background:${g[1]};">${bad ? '−' + x.loss : '✓'}</span>
                     <span class="frv-t"><b>${stKo[x.st]}</b> · 팟 ${x.pot}bb${x.call > 0 ? ` · 콜 ${x.call}bb` : ''} · 내 선택 <b>${esc(did)}</b>${x.g === 'best' ? ' <u>= 권장</u>' : ` → 권장 <b class="g">${actKo[x.best] || x.best}</b>`}${x.sv ? ' <i>🧮</i>' : ''}${x.ic ? (x.ic[2] ? ` <i title="상금 기준(ICM) 푸시 범위">🏆 푸시 ${x.ic[0]}→${x.ic[1]}%</i>` : ` <i title="상금 기준(ICM) 필요 승률">🏆 ${x.ic[0]}→${x.ic[1]}%</i>`) : ''}
                         <small>${esc(mixTxt(x.mix || {}))}${x.size && x.g !== 'best' ? ' · 크기 ' + esc(x.size) : ''}</small>
-                        ${bad ? `<em><b style="color:${g[1]};">${g[0]}</b>${x.k && d.kinds[x.k] ? ' · ' + esc(d.kinds[x.k].name) : ''} — ${esc(x.why || '')}</em>` : (x.g === 'good' ? `<em>섞어 치는 범위 안이라 손실 없음.</em>` : '')}</span>
+                        ${bad ? `<em><b style="color:${g[1]};">${g[0]}</b>${x.k && d.kinds[x.k] ? ' · ' + esc(d.kinds[x.k].name) : ''} — ${esc(x.why || '')}</em>` : (x.g === 'good' ? `<em>섞어 치는 범위 안이라 손실 없음.</em>` : '')}
+                        ${bad && d.aiOn ? `<div class="ai-ex" id="aiex-${h.n}-${di}">${x.ai ? aiFmt(x.ai) : `<button type="button" class="ai-btn" onclick="askAiExplain('${c.id}', ${h.n}, ${di})">🤖 왜?</button>`}</div>` : ''}</span>
                 </div>`; }).join('');
             return `<div class="frv-h">
                 <div class="frv-top"><span class="frv-no">#${h.n}</span><span>Lv.${h.lv} · ${esc(h.pos || '-')} · ${h.stk}bb · ${h.seats}인 테이블 · 남은 ${h.alive}명</span><b class="${h.net >= 0 ? 'up' : 'down'}">${h.net >= 0 ? '+' : ''}${h.net}bb</b></div>
@@ -8165,6 +8176,7 @@
             <div class="skx-head"><b>🎞️ 대회 복기</b>${c.place ? `<span>${c.place}<small>위 / ${c.entrants}명</small></span>` : ''}</div>
             <div class="frv-tabs">${tabs}</div>
             <div class="gd-text" style="font-size:12px; margin:8px 0;">이 대회에서 ${c.played}판을 쳤고, 그중 ${c.shown}판을 남겼습니다(쓰레기 패를 맞게 접은 ${c.skipped}판은 생략). 권장과 달랐던 결정은 <b>${c.mistakes}번</b>, 잃은 기대값은 모두 <b>${c.loss}bb</b>입니다. 손실이 큰 판부터 보고, "왜 그게 권장인지"를 읽어 보세요. 🧮 표시는 솔버 계산에서 나온 권장입니다.</div>
+            ${d.aiOn ? `<div class="ai-coach" id="ai-coach">${c.ai && c.ai.text ? '<b>🧑‍🏫 AI 코치</b>' + aiFmt(c.ai.text) : `<button type="button" class="ai-btn big" onclick="askAiCoach('${c.id}')">🧑‍🏫 AI 코치 리포트 받기</button><small>${esc(d.aiBy || 'AI')}가 앱의 판정(솔버·기대값)을 근거로 이 대회를 풀어서 설명합니다 — 판단을 새로 하지는 않습니다.</small>`}</div>` : ''}
             <div class="frv-ctl">
                 <button type="button" class="${_fnRvSort === 'loss' ? 'on' : ''}" onclick="fnRvSet('sort','loss')">손실 큰 순</button><button type="button" class="${_fnRvSort === 'time' ? 'on' : ''}" onclick="fnRvSet('sort','time')">친 순서</button>
                 <span></span>
@@ -8174,6 +8186,22 @@
             <div class="bl-foot" style="margin-top:8px;">권장은 칩 기준이고, 리바인이 끝난 뒤 올인을 받는 결정에는 상금 기준(ICM)을 씁니다 — 그런 결정에는 🏆 칩 기준→상금 기준 필요 승률이 붙습니다.판의 결과(+/−bb)와 결정의 좋고 나쁨은 별개입니다: 이긴 판에도 틀린 결정이 있고, 진 판에도 맞는 결정이 있습니다.</div>`;
         list.scrollTop = 0;
     }
+
+    // 🧑‍🏫 AI 코치 · 🤖 왜? — 서버가 AI 에게 묻고 돌려준 글을 보여 준다(한 번 받은 것은 저장돼 다시 열면 바로 보인다)
+    function aiFmt(t) { return '<div class="ai-txt">' + esc(String(t)).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>') + '</div>'; }
+    function askAiCoach(id) { const b = document.getElementById('ai-coach'); if (b) b.innerHTML = '<span class="ai-wait">🧑‍🏫 AI 코치가 이 대회를 읽는 중… (10~40초)</span>'; socket.emit('aiCoach', { id }); }
+    function askAiExplain(id, n, i) { const b = document.getElementById('aiex-' + n + '-' + i); if (b) b.innerHTML = '<span class="ai-wait">🤖 생각하는 중…</span>'; socket.emit('aiExplain', { id, n, i }); }
+    socket.on('aiResult', r => {
+        if (!r) return;
+        if (r.error) { showCenterMessage('🤖 ' + r.error); document.querySelectorAll('.ai-wait').forEach(w => w.remove()); return; }
+        if (r.kind === 'coach') {
+            const b = document.getElementById('ai-coach'); if (b) b.innerHTML = '<b>🧑‍🏫 AI 코치</b>' + aiFmt(r.text);
+            if (_fnRv && _fnRv.cur && _fnRv.cur.id === r.id) _fnRv.cur.ai = { text: r.text };
+        } else if (r.kind === 'explain') {
+            const b = document.getElementById('aiex-' + r.n + '-' + r.i); if (b) b.innerHTML = aiFmt(r.text);
+            try { const hh = _fnRv.cur.hands.find(x => x.n === r.n); if (hh) hh.d[r.i].ai = r.text; } catch (e) {}
+        }
+    });
 
     // ═══════ 🏆 MTT 생성/참가/대기실 ═══════
     function openMttCreate() { document.getElementById('mttcreate-modal').style.display = 'flex'; }

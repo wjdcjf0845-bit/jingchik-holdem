@@ -23,6 +23,7 @@ Node 20+ · Express · Socket.IO. 사용자와는 한국어(표준어)로 대화
 - 설정·비밀값은 미니 PC 의 `C:\jingchik-data\server.env` 에만 있다(Turso DB 주소·토큰, 관리자 비밀번호, 계좌). 전적은 Turso 에 저장된다.
 - 서버 로그: 미니 PC `C:\jingchik-data\server.log` · `runner.log` · 멈춤 감시 `watchdog.log`.
 - 전적 백업: 매일 새벽 4시 이후 `C:\jingchik-data\backup\poker_stats-날짜.json.gz`(30일치). 폰 알림은 server.env 의 `ALERT_NTFY`(ntfy 주제) — `lib/ops.js`.
+- AI(선택): `lib/ai.js` — server.env 에 `ANTHROPIC_API_KEY`(Claude, 기본 claude-opus-5-5) 또는 `OLLAMA_URL` 이 있을 때만 켜진다. 대회 복기 AI 코치·"왜?"(`lib/aicoach.js`)와 봇 말투. 포커 판단은 AI 가 하지 않고 앱의 솔버·기대값 계산을 설명만 한다.
 
 ## 지킬 것
 - **공개 저장소**: 비밀번호·토큰·계좌번호를 코드나 커밋에 절대 넣지 않는다. `access_log.json`·`poker_stats.json` 커밋 금지.

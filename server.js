@@ -123,6 +123,8 @@ const EvLoss = require('./lib/evloss');         // 📉 결정마다 잃은 기�
 const Freqs = require('./lib/freqs');           // 📊 상황별 빈도(오픈·방어·3벳·c벳…)를 기준과 비교
 const VRange = require('./lib/vrange');         // 🔍 상대의 프리플랍 행동 → 들고 있을 만한 패의 무게
 const Field = require('./lib/fieldstyle');   // 🎭 매장형 상대 스타일(딥스택 섞기)
+const AI = require('./lib/ai').createAI();     // 🤖 AI(코치 설명 · 봇 말투) — server.env 의 ANTHROPIC_API_KEY 또는 OLLAMA_URL 이 있을 때만
+const AICoach = require('./lib/aicoach');
 const Highlights = require('./lib/highlights'); // 🎬 명장면 연출(배드비트·쿨러·리버 역전·큰 팟·포카드 이상) — 저장·다시 보기는 없앴다(운영자 요청)
 const EqMC = require('./lib/equitymc');      // 🎲 플랍 이후 승률(몬테카를로)
 const EqPool = require('./lib/eqpool');      // 🧵 사람 결정의 정밀 승률을 따로 도는 스레드에서
@@ -3212,9 +3214,21 @@ class GameRoom {
         p._lastChat = now;
         // 입장은 더 넓게 분산(0.4~2.4초), 그 외는 0.4~1.2초 지연 후 발화
         const delay = event === 'join' ? (400 + Math.random() * 2000) : (400 + Math.random() * 800);
-        setTimeout(() => {
-            if (rooms.get(this.roomId)) io.to(this.roomId).emit('chatMessage', { nick, msg, bot: true });
-        }, delay);
+        const say = line => { if (rooms.get(this.roomId)) io.to(this.roomId).emit('chatMessage', { nick, msg: line, bot: true }); };
+        // 🤖 [AI 말투] 큰 순간(이김·짐·큰 베팅·블러프·장고·재촉)에는 AI 가 그 판에 맞는 한마디를 만든다.
+        //    사람이 앉아 있는 테이블에서만, 한 테이블에 1분에 한 번 — 실패하거나 늦으면(5초) 정해 둔 대사를 그대로 쓴다.
+        if (AI.enabled() && ['win', 'lose', 'bigbet', 'bluff', 'tank', 'taunt'].includes(event) && now - (this._aiChatAt || 0) > 60000
+            && Object.values(this.players).some(q => q && !q.isBot && q.socketId)) {
+            this._aiChatAt = now;
+            const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+            const potBB = Math.round((this.pot + Object.values(this.players).reduce((a, q) => a + (q.currentBet || 0), 0)) / bb);
+            const pr = AICoach.botPrompt({ nick, style: arche, event, potBB, street: ['프리플랍', '프리플랍', '플랍', '턴', '리버', '결과'][this.gameStage] || '', opp: extra && extra.nick });
+            const t0 = Date.now();
+            AI.text({ system: pr.system, user: pr.user, maxTokens: 300, effort: 'low', timeoutMs: 5000, bucket: 'chat' })
+                .then(t => setTimeout(() => say(AICoach.cleanLine(t) || msg), Math.max(0, delay - (Date.now() - t0))));
+            return;
+        }
+        setTimeout(() => say(msg), delay);
     }
 
     hashNick(nick) {
@@ -7674,7 +7688,48 @@ io.on('connection', (socket) => {
             loss: Math.round(r.hands.reduce((a, h) => a + (h.loss || 0), 0) * 10) / 10, mistakes: r.hands.reduce((a, h) => a + h.d.filter(x => x.loss > 0).length, 0) });
         const cur = all.find(r => r.id === (data && data.id)) || all[0] || null;
         const kinds = {}; Blunder.KIND_KEYS.forEach(k => { kinds[k] = { name: Blunder.KINDS[k].name, tip: Blunder.KINDS[k].tip }; });
-        socket.emit('fnReview', { list: all.map(meta), cur: cur ? Object.assign(meta(cur), { hands: cur.hands.map(h => Object.assign({}, h, { d: h.d.map(x => Object.assign({}, x, { why: Blunder.std(x.why) })) })) }) : null, kinds });
+        socket.emit('fnReview', { list: all.map(meta), cur: cur ? Object.assign(meta(cur), { ai: cur.ai || null, hands: cur.hands.map(h => Object.assign({}, h, { d: h.d.map(x => Object.assign({}, x, { why: Blunder.std(x.why) })) })) }) : null, kinds,
+            aiOn: AI.enabled(), aiBy: AI.provider === 'claude' ? 'Claude' : AI.provider === 'ollama' ? '미니 PC AI' : null });
+    });
+    // 🧑‍🏫 [AI 코치] 대회 하나의 코칭 리포트 · 결정 하나의 "왜?" — 앱의 판정(솔버·기대값)을 근거로 AI 가 설명만 한다. 한 번 만든 것은 저장해 두고 다시 쓴다.
+    const _aiKinds = () => { const k = {}; Blunder.KIND_KEYS.forEach(x => { k[x] = { name: Blunder.KINDS[x].name }; }); return k; };
+    const aiGate = () => {
+        if (!AI.enabled()) { socket.emit('aiResult', { error: 'AI 가 설정되지 않았습니다(관리자가 server.env 에 넣어야 합니다).' }); return false; }
+        if (socket._aiBusy) { socket.emit('aiResult', { error: '이미 AI 가 답을 쓰는 중입니다. 잠시만 기다려 주세요.' }); return false; }
+        return true;
+    };
+    socket.on('aiCoach', async (data) => {
+        if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
+        const u = MockDB.users.get(socket.nickname), rv = (u.fnReviews || []).find(r => r.id === (data && data.id));
+        if (!rv) return;
+        if (rv.ai && rv.ai.text) { socket.emit('aiResult', { kind: 'coach', id: rv.id, text: rv.ai.text }); return; }
+        if (!aiGate()) return;
+        socket._aiBusy = true;
+        try {
+            const pr = AICoach.coachPrompt(rv, { kinds: _aiKinds(), entrants: FN_MTT.entrants });
+            if (!pr.decisions) { socket.emit('aiResult', { kind: 'coach', id: rv.id, text: '이 대회에서는 권장과 다른 결정이 없었습니다. 👍 지금처럼 치면 됩니다.' }); return; }
+            const t = await AI.text({ system: pr.system, user: pr.user, maxTokens: 3000, effort: 'medium', timeoutMs: 90000, bucket: 'coach' });
+            if (!t) { socket.emit('aiResult', { error: 'AI 가 답하지 못했습니다. 잠시 뒤 다시 눌러 주세요.' }); return; }
+            rv.ai = { text: t, t: Date.now(), by: AI.model }; MockDB.save();
+            socket.emit('aiResult', { kind: 'coach', id: rv.id, text: t });
+        } finally { socket._aiBusy = false; }
+    });
+    socket.on('aiExplain', async (data) => {
+        if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
+        const u = MockDB.users.get(socket.nickname), rv = (u.fnReviews || []).find(r => r.id === (data && data.id));
+        const h = rv && rv.hands.find(x => x.n === Number(data.n)), x = h && h.d[Number(data.i)];
+        if (!x) return;
+        const key = { kind: 'explain', id: rv.id, n: h.n, i: Number(data.i) };
+        if (x.ai) { socket.emit('aiResult', Object.assign({ text: x.ai }, key)); return; }
+        if (!aiGate()) return;
+        socket._aiBusy = true;
+        try {
+            const pr = AICoach.explainPrompt(h, Object.assign({}, x, { why: Blunder.std(x.why) }), { kinds: _aiKinds() });
+            const t = await AI.text({ system: pr.system, user: pr.user, maxTokens: 1500, effort: 'medium', timeoutMs: 60000, bucket: 'coach' });
+            if (!t) { socket.emit('aiResult', { error: 'AI 가 답하지 못했습니다. 잠시 뒤 다시 눌러 주세요.' }); return; }
+            x.ai = t; MockDB.save();
+            socket.emit('aiResult', Object.assign({ text: t }, key));
+        } finally { socket._aiBusy = false; }
     });
     // 🏁 [파이널나인 연습 기록] 이 모드에서 친 것만 모은 점수·피드백·대회 결과 + 친구들 비교
     socket.on('getFnReport', () => {
@@ -8426,6 +8481,7 @@ MockDB.initRemote().catch(e => console.error('🌐 원격 초기화 오류:', e 
             ? `server.env 의 ADMIN_PASS (${process.env.ADMIN_PASS.length}자리${/^\d{4}$/.test(process.env.ADMIN_PASS) ? '' : ' — ⚠️ 숫자 4자리가 아니라 게임 화면 로그인으로는 못 들어갑니다'})`
             : (_au && _au.pinHash ? 'DB 에 처음 등록된 비밀번호(ADMIN_PASS 없음)' : '아직 없음 — 처음 admin 으로 로그인한 비밀번호가 등록됩니다'))
             + ` · 전적 DB: ${MockDB._remote ? (MockDB._remoteLoadOk ? 'Turso 연결됨' : '⚠️ Turso 불러오기 실패') : '이 PC 파일'}`);
+        console.log('🤖 [AI] ' + (AI.enabled() ? `${AI.provider === 'claude' ? 'Claude' : 'Ollama'} · 모델 ${AI.model} · 하루 대사 ${AI.limits.chat}번 · 코치 ${AI.limits.coach}번까지` : '꺼짐(server.env 에 ANTHROPIC_API_KEY 또는 OLLAMA_URL 이 없음)'));
     });
 });
 

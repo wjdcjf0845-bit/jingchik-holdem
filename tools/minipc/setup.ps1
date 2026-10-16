@@ -55,6 +55,12 @@ MAX_PLAYERS=
 ALERT_NTFY=
 # 동시에 열 수 있는 딥스택 연습 수(비우면 3)
 FN_MAX=
+# 🤖 AI(선택): 대회 복기 AI 코치 · 봇 말투. 둘 중 하나만 — Claude 를 쓰려면 API 키, 미니 PC 에서 직접 돌리려면 Ollama 주소
+ANTHROPIC_API_KEY=
+OLLAMA_URL=
+# 하루 한도(비우면 대사 150 · 코치 100)
+AI_CHAT_LIMIT=
+AI_COACH_LIMIT=
 '@ | Set-Content -Encoding UTF8 $EnvFile
     Write-Host "설정 파일을 만들었습니다: $EnvFile — 메모장이 열리면 Render 의 값을 붙여 넣고 저장한 뒤 닫으세요." -ForegroundColor Yellow
     Start-Process notepad.exe $EnvFile -Wait
