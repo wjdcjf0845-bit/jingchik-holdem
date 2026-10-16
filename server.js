@@ -1638,30 +1638,38 @@ class GameRoom {
         // 🎓 사람 차례면 GTO 조언을 "차례가 온 순간"에 미리 계산해 둔다.
         //    ⚡ 예전엔 사람이 버튼을 누른 뒤에(액션 처리 직전에) 계산해서, 그 시간만큼(플랍 이후 수십~수백 ms, 서버가 느리면 더) 버튼 반응이 늦었다.
         //    이제 생각하는 동안 계산해 두고 액션 때는 꺼내 쓰기만 한다. 학습 모드는 그 조언을 화면에도 보낸다(채점과 화면의 조언이 같은 값이 된다).
-        this._advCache = null;
+        // 🎯 플랍 이후: 승률을 따로 도는 스레드에서 4000번(표준편차 약 0.008 — 본 스레드 500번의 절반 이하)으로 계산해 둔 뒤 조언을 만든다.
+        //    게임 진행은 멈추지 않는다. 사람이 그 전에 버튼을 누르면 예전처럼 본 스레드에서 500번으로 계산한다(대개 0.1~0.2초면 돌아온다).
+        //    정밀 승률은 "그 값이 기대는 것"(판 · 보드 · 남은 상대)으로만 맞춰 보고, 조언은 결과가 돌아온 순간의 상황으로 만든다.
+        //    🐛 처음엔 차례가 시작될 때 잡은 상황 열쇠(팟·벳 포함)와 맞춰 봤는데, 그 열쇠가 차례가 다 정리되기 전에 잡혀서
+        //       돌아온 결과의 40% 가 "상황이 바뀌었다"며 버려졌다 — 학습 모드 화면에 조언이 안 뜨고, 조언대로 치려던 시험 플레이어가 손실을 받았다.
         {
             const cp = this.players[expectedNick];
             if (cp && !cp.isBot && !cp.isFolded && !cp.isAllIn) {
-                const key = this.advKey(expectedNick);
                 const run = () => {
-                    if (this.playerOrder[this.turnIndex] !== expectedNick || this.advKey(expectedNick) !== key) return;
+                    if (this.playerOrder[this.turnIndex] !== expectedNick) return;
+                    const key = this.advKey(expectedNick);
+                    if (this._advCache && this._advCache.nick === expectedNick && this._advCache.key === key) return;     // 이 상황의 조언은 하나만
                     try {
                         const advice = this.getGtoAdvice(expectedNick);
                         this._advCache = { nick: expectedNick, key, advice };
                         if ((this._learnMode || process.env.DEV_ADVICE === '1') && advice && cp.socketId) io.to(cp.socketId).emit('gtoAdvice', advice);   // DEV_ADVICE: 검증용(일반 방에서도 조언을 내보냄)
                     } catch (e) {}
                 };
-                // 🎯 플랍 이후: 승률을 따로 도는 스레드에서 4000번(표준편차 약 0.008 — 본 스레드 500번의 절반 이하)으로 계산해 둔 뒤 조언을 만든다.
-                //    게임 진행은 멈추지 않는다. 사람이 그 전에 버튼을 누르면 예전처럼 본 스레드에서 500번으로 계산한다(대개 0.1~0.2초면 돌아온다).
                 const args = this.communityCards.length >= 3 ? this.eqArgs(expectedNick) : null;
-                if (args) {
+                const ek = args ? this.eqKey(expectedNick) : null;
+                if (args && !(this._eqPrecise && this._eqPrecise.nick === expectedNick && this._eqPrecise.ek === ek)) {
                     EqPool.request(Object.assign(args, { iters: 4000 }), 2500).then(v => {
-                        if (typeof v === 'number' && this.advKey(expectedNick) === key) this._eqPrecise = { nick: expectedNick, key, v };
+                        if (typeof v === 'number' && this.eqKey(expectedNick) === ek) this._eqPrecise = { nick: expectedNick, ek, v };
                         run();
                     });
                 } else if (this._learnMode) run(); else setTimeout(run, 40);      // 일반 게임은 화면 갱신을 먼저 내보낸 뒤에 계산
             }
         }
+    }
+    // 정밀 승률이 기대는 것: 판 · 깔린 보드 · 남은 상대(사람의 승률 계산은 상대 범위를 읽지 않으므로 이것만으로 같다)
+    eqKey(nick) {
+        return [this.handId, nick, this.communityCards.join(''), this.playerOrder.filter(n => n !== nick && this.players[n] && !this.players[n].isFolded).join(',')].join('|');
     }
     // 승률 계산 재료: 내 패 · 보드 · 상대마다 범위의 최소 강도(사람이면 읽기 없이 0 — estimateBotEquity 와 같은 기준)
     eqArgs(nick) {
@@ -3210,7 +3218,7 @@ class GameRoom {
             HandRead.villainMinStrength(HandRead.summarizeVillain(this.actionLog, n), skill));
 
         // 🎯 사람 결정: 차례가 왔을 때 따로 도는 스레드가 4000번으로 계산해 둔 값이 있으면 그것(같은 상황일 때만)
-        if (!p.isBot && this._eqPrecise && this._eqPrecise.nick === nick && this._eqPrecise.key === this.advKey(nick)) return this._eqPrecise.v;
+        if (!p.isBot && this._eqPrecise && this._eqPrecise.nick === nick && this._eqPrecise.ek === this.eqKey(nick)) return this._eqPrecise.v;
         // 포스트플랍: 몬테카를로(lib/equitymc.js) — 500번: 표준편차 약 0.017
         return EqMC.mcEquity({ hand: p.hand, board: this.communityCards, oppMin: oppMinStrength, iters: 500 });
     }
