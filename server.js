@@ -6351,6 +6351,13 @@ class MTTManager {
         if (this.fn && !winner.isBot) {
             const aw = MockDB.jpAward(champion, this.mttId, this.totalEntrants);
             if (aw) { io.emit('gameMessage', `🎯 홀인원! ${champion} 님이 딥스택 연습 우승 — 상금 ${aw.amount.toLocaleString()}원을 받습니다!${aw.pending ? ` (입금 확인 대기 ${aw.pending.toLocaleString()}원은 확인되면 더해집니다)` : ''}`); io.emit('jackpot', { pot: 0, pending: 0, cycle: MockDB.jpCycle(), winner: champion, amount: aw.amount }); }
+            else {
+                // 🎯 딥스택이 동시에 돌 때: 상금은 먼저 우승한 사람이 그때까지 쌓인 것을 전부 가져간다(운영자 결정 — 동시에 돌던 대회의 참가비 포함).
+                //    늦게 끝난 대회의 우승자에게는 남은 상금이 없다 — 예전엔 아무 말 없이 지나가서 상금이 사라진 것처럼 보였다.
+                //    이 우승은 홀인원 기록에 넣지 않는다(회차가 넘어가지 않아, 다음 대회부터 쌓이는 상금은 다음 우승자의 몫).
+                const last = (MockDB.jpView(null).history || [])[0];
+                io.emit('gameMessage', `🎯 ${champion} 님 딥스택 연습 우승! 이번 회차 홀인원 상금은 먼저 우승한 ${last ? last.nick + ' 님이' : '다른 대회 우승자가'} 가져가서 남은 상금이 없습니다 — 다음 대회부터 다시 쌓입니다.`);
+            }
         } else if (this.fn) io.emit('gameMessage', `🎯 봇이 우승해서 홀인원 상금 ${MockDB.jpView(null).pot.toLocaleString()}원은 다음 대회로 넘어갑니다.`);
         else if (!winner.isBot) MockDB.addMttWin(champion, this.totalEntrants, (this.humanEntrants || 0) >= TOKEN_MIN_HUMANS);
 
