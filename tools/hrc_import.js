@@ -8,12 +8,14 @@
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const Ranges = require('../lib/ranges');
 // 인원별 자리 이름(HRC 의 행동 순서 → 게임의 자리 이름). 헤즈업은 버튼이 SB 를 겸한다.
-const POSN = { 2: ['BTN', 'BB'], 3: ['BTN', 'SB', 'BB'], 4: ['CO', 'BTN', 'SB', 'BB'], 5: ['MP', 'CO', 'BTN', 'SB', 'BB'], 6: ['UTG', 'MP', 'CO', 'BTN', 'SB', 'BB'] };
+//   7~9인은 자리를 나눠 적는다(게임의 UTG · UTG+1 · UTG+2 · LJ · HJ → UTG · UTG1 · UTG2 · LJ · HJ — lib/ranges.js seqPos).
+const POSN = { 2: ['BTN', 'BB'], 3: ['BTN', 'SB', 'BB'], 4: ['CO', 'BTN', 'SB', 'BB'], 5: ['MP', 'CO', 'BTN', 'SB', 'BB'], 6: ['UTG', 'MP', 'CO', 'BTN', 'SB', 'BB'],
+    7: ['UTG', 'LJ', 'HJ', 'CO', 'BTN', 'SB', 'BB'], 8: ['UTG', 'UTG1', 'LJ', 'HJ', 'CO', 'BTN', 'SB', 'BB'], 9: ['UTG', 'UTG1', 'UTG2', 'LJ', 'HJ', 'CO', 'BTN', 'SB', 'BB'] };
 
 function importDir(dir) {
     const settings = JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8'));
     const stacks = settings.handdata.stacks, bb = settings.handdata.blinds[0] > settings.handdata.blinds[1] ? settings.handdata.blinds[0] : settings.handdata.blinds[1];
-    const POS = POSN[stacks.length]; if (!POS) throw new Error('2~6인만 지원: ' + stacks.length);
+    const POS = POSN[stacks.length]; if (!POS) throw new Error('2~9인만 지원: ' + stacks.length);
     const tables = {}, reach = {};
     fs.readdirSync(path.join(dir, 'nodes')).forEach(f => {
         const n = JSON.parse(fs.readFileSync(path.join(dir, 'nodes', f), 'utf8'));

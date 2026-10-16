@@ -1836,12 +1836,12 @@ class GameRoom {
         let hi = bb; const tok = [], inPot = new Set();
         (this.actionLog || []).filter(a => a.street === 1).forEach(a => {
             if (a.type === 'sb' || a.type === 'bb' || a.type === 'ante' || a.type === 'check') return;
-            const ps = Ranges.dataPos((this.players[a.nick] || {}).position || '');
+            const ps = Ranges.seqPos((this.players[a.nick] || {}).position || '');
             if ((a.type === 'raise' || a.type === 'allin') && a.amount > hi) { tok.push(ps + (a.type === 'allin' ? ':A' : ':R')); hi = a.amount; inPot.add(a.nick); }
             else if (a.type === 'call' || a.type === 'allin') { tok.push(ps + ':C'); inPot.add(a.nick); }
             else if (a.type === 'fold' && inPot.has(a.nick)) tok.push(ps + ':F');
         });
-        return tok.join(',') + '>' + Ranges.dataPos((p && p.position) || '');
+        return tok.join(',') + '>' + Ranges.seqPos((p && p.position) || '');
     }
     _devPfCheck(nick, decision) {
         const p = this.players[nick];
@@ -2471,15 +2471,15 @@ class GameRoom {
         let hi = bb; const tok = [], inPot = new Set();
         (this.actionLog || []).filter(a => a.street === 1).forEach(a => {
             if (a.type === 'sb' || a.type === 'bb' || a.type === 'ante' || a.type === 'check') return;
-            const ps = Ranges.dataPos((this.players[a.nick] || {}).position || '');
+            const ps = Ranges.seqPos((this.players[a.nick] || {}).position || '');
             if ((a.type === 'raise' || a.type === 'allin') && a.amount > hi) { tok.push(ps + (a.type === 'allin' ? ':A' : ':R')); hi = a.amount; inPot.add(a.nick); }
             else if (a.type === 'call' || a.type === 'allin') { tok.push(ps + ':C'); inPot.add(a.nick); }
             else if (a.type === 'fold' && inPot.has(a.nick)) tok.push(ps + ':F');
         });
         const icm = n >= 3 && this.icmTableOn();
         // 올인을 받는 자리: 헤즈업이거나 상금을 반영해 푼 표(결승)일 때만 표대로 — 아니면 ICM 이 있는 올인 계산에 맡긴다
-        if (tok.some(t => t.endsWith(':A')) && !(n === 2 && all) && !(icm && all && /^i/.test(Ranges.mttDepth(effBB, n, true) || ''))) return null;
-        const key = tok.join(',') + '>' + Ranges.dataPos(p.position || '');
+        if (tok.some(t => t.endsWith(':A')) && !(n === 2 && all) && !(icm && all && Ranges.isIcmDepth(Ranges.mttDepth(effBB, n, icm) || ''))) return null;
+        const key = tok.join(',') + '>' + Ranges.seqPos(p.position || '');
         const f = Ranges.lookup({ seqA: key, depth: effBB, players: n, heroPos: p.position || '', raises: 1, icm }, code);
         if (!f || !f.mtt) return null;
         if (process.env.DEV_BOTSRC && f.icm) console.log('BOTSRC icm ' + n + ' ' + key);
@@ -2613,14 +2613,17 @@ class GameRoom {
 
     // 🏆 [ICM 표] 대회 결승 테이블(남은 사람이 모두 이 테이블 · 3~6명)이고 리바인이 끝났으면, 상금(50/30/20)을 반영해 HRC 로 푼 표(i<인원>_<깊이>)를 쓴다.
     //    그 표는 스택이 모두 같다고 놓고 푼 것이라, 스택 차이가 크면(가장 큰 스택 > 가장 작은 스택 × 3) 칩 기준 표 + 올인 ICM 계산에 맡긴다.
+    //    반환: 'f' = 딥스택(파이널나인 6위 입상 · 실제 상금으로 푼 b7_ · f3~f9_ 표, 3~9명) · 'i' = 3명 입상 50/30/20(i3~i6_ 표, 3~6명) · false = 끔
+    //    (상금이 다르면 그 표가 맞지 않는다 — 그때는 칩 기준 표 + 아래 ICM 올인 계산)
     icmTableOn() {
         const m = this._mtt;
         if (!m || !(m.paid > 0) || (m.tables || []).length !== 1) return false;
-        if (m.paid !== 3) return false;     // 결승 ICM 표(i<인원>_)는 3명 입상 · 50/30/20 으로 푼 것이라 입상 인원이 다르면 맞지 않는다(그때는 칩 기준 표 + 아래 ICM 올인 계산)
+        const kind = m.paid === 3 ? 'i' : (m.fn && m.paid === 6) ? 'f' : null;
+        if (!kind) return false;
         if (m.rebuyMax > 0 && m.blindLevel < m.rebuyUntilLevel) return false;
         const st = this.playerOrder.map(n => this.players[n]).filter(q => q && !q._out).map(q => (q.chips || 0) + (q.currentBet || 0));
-        if (st.length < 3 || st.length > 6) return false;
-        return Math.max(...st) <= (Number(process.env.DEV_ICM_RATIO) || 3) * Math.min(...st);       // (DEV_ICM_RATIO: 시험용으로 이 배수를 바꾼다)
+        if (st.length < 3 || st.length > (kind === 'f' ? 9 : 6)) return false;
+        return Math.max(...st) <= (Number(process.env.DEV_ICM_RATIO) || 3) * Math.min(...st) ? kind : false;       // (DEV_ICM_RATIO: 시험용으로 이 배수를 바꾼다)
     }
     // 🏆 [ICM] 내가 먼저 올인(푸시)하는 범위가 상금 기준으로 몇 배가 되나(1 = 그대로). 대상이 아니면 null.
     //    base: 칩 기준 푸시 범위(0~1), behind: 내 뒤에 남은 사람들. 계산은 lib/icm.js 의 pushShift(칩 기준·상금 기준을 같은 모형으로 풀어 그 비율만 쓴다).
@@ -4847,7 +4850,7 @@ class GameRoom {
             // 📊 솔버 프리플랍 자료의 열쇠: 지금까지의 행동(자리:R 레이즈 · C 콜 · F 들어왔다가 접음)>내 자리
             let _seqKey = null, _seqA = null;
             if (facingRaise) {
-                const _dp = n => Ranges.dataPos((this.players[n] || {}).position || '');
+                const _dp = n => Ranges.seqPos((this.players[n] || {}).position || '');
                 let _hi = bb; const _tok = [], _tokA = [], _in = new Set();
                 (this.actionLog || []).filter(a => a.street === 1).forEach(a => {
                     if (a.type === 'sb' || a.type === 'bb' || a.type === 'ante' || a.type === 'check') return;

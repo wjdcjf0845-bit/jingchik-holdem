@@ -8,7 +8,7 @@ test('자료가 있고, 6인 자료는 오픈·방어 표를 갖고 있다', () 
     const D = Ranges.mttData();
     assert.ok(D && D['25'] && D['25'].tables['>BTN'] && D['25'].tables['BTN:R>BB']);
     Object.keys(D).forEach(k => {
-        assert.match(k, /^(\d+|p[2-5]_\d+|i[3-6]_\d+)$/);
+        assert.match(k, /^(\d+|p[2-5]_\d+|i[3-6]_\d+|[nbf][3-9]_\d+)$/);
         Object.values(D[k].tables).forEach(T => Object.values(T).forEach(r => {
             assert.ok(r[0] >= 0 && r[1] >= 0 && r[0] + r[1] <= 100, k + ' ' + JSON.stringify(r));
             if (r[2] != null) assert.ok(r[2] <= r[0]);
@@ -59,4 +59,32 @@ test('결승 상금 표: icm 이면 상금 반영 표 · 아니면 칩 기준 �
     const w = (d, k) => Ranges.ALL.reduce((a, c) => a + ((D[d].tables[k] || {})[c] || [0, 0])[1] * Ranges.combos(c), 0);
     const key = Object.keys(D['i4_20'].tables).find(k => /^[A-Z]+:A>BB$/.test(k) && D['p4_20'].tables[k]);
     if (key) assert.ok(w('i4_20', key) < w('p4_20', key), key);
+});
+
+// 🪑 9인 표: 자리를 나눠 적은 열쇠(UTG1·UTG2·LJ·HJ)로 찾고, 6인 표로 돌아갈 때는 예전 이름으로 바꿔 찾는다
+test('9인 자리 열쇠: 9인 표는 그대로 · 6인 표는 collapseKey', () => {
+    assert.strictEqual(Ranges.collapseKey('UTG1:R,LJ:C>HJ'), 'UTG:R,UTG:C>MP');
+    assert.strictEqual(Ranges.collapseKey('BTN:R>BB'), 'BTN:R>BB');
+    assert.strictEqual(Ranges.seqPos('UTG+2'), 'UTG2');
+    const D = Ranges.mttData();
+    if (!D['n9_15']) return;
+    assert.strictEqual(Ranges.mttDepth(15, 9), 'n9_15');
+    assert.ok(/^\d+$/.test(Ranges.mttDepth(15, 6)));
+    // 9인 표에서는 앞자리일수록 좁게 연다
+    const open = k => Ranges.ALL.reduce((a, c) => a + ((D['n9_15'].tables[k] || {})[c] || [0])[0] * Ranges.combos(c), 0);
+    assert.ok(open('>UTG') < open('>LJ') && open('>LJ') < open('>CO') && open('>CO') < open('>BTN'));
+    const f = Ranges.lookup({ seqA: 'UTG1:R>BB', depth: 15, players: 9, heroPos: 'BB', raises: 1 }, 'KJo');
+    assert.ok(f && f.mtt && /9명/.test(f.name) && /UTG\+1/.test(f.name));
+    // 9인 자료가 없는 인원(8명)은 6인 표를 예전 이름으로 찾는다
+    const g = Ranges.lookup({ seqA: 'UTG1:R>BB', depth: 15, players: 8, heroPos: 'BB', raises: 1 }, 'KJo');
+    assert.ok(g && g.mtt && !/9명/.test(g.name));
+});
+// 🏆 딥스택 결승(6위 입상 · 실제 상금): icm 'f' 면 7명은 b7_, 나머지는 f<인원>_ — 없으면 칩 기준 표
+test("결승 상금 표 'f': b7 · f<인원> 을 먼저, 없으면 칩 기준", () => {
+    const D = Ranges.mttData();
+    const has = k => Object.keys(D).some(x => x.indexOf(k) === 0);
+    if (has('b7_')) assert.ok(/^b7_/.test(Ranges.mttDepth(20, 7, 'f')));
+    if (has('f5_')) assert.ok(/^f5_/.test(Ranges.mttDepth(20, 5, 'f')));
+    if (!has('f4_')) assert.ok(!/^f/.test(String(Ranges.mttDepth(20, 4, 'f'))));
+    assert.ok(Ranges.isIcmDepth('b7_20') && Ranges.isIcmDepth('f5_20') && Ranges.isIcmDepth('i3_20') && !Ranges.isIcmDepth('n9_20'));
 });
