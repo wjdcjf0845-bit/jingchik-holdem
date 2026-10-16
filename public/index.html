@@ -4322,7 +4322,7 @@
         .frv-t small { display: block; font-size: 10.5px; color: var(--txt-dim); }
         .frv-t em { display: block; font-style: normal; font-size: 11.5px; color: #c9d2e6; margin-top: 2px; }
         .frv-d.bad { background: rgba(255,90,77,0.06); margin: 0 -6px; padding-left: 6px; padding-right: 6px; border-radius: 8px; }
-        .fn-row { display: grid; grid-template-columns: 1.7fr 1fr; gap: 8px; margin: 0 0 12px; }
+        .fn-row { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 8px; margin: 0 0 12px; }
         .fn-btn { font-family: inherit; font-size: 14px; font-weight: 900; color: #fff; padding: 10px 10px 9px; border-radius: 13px; cursor: pointer; text-align: left; line-height: 1.25;
             background: linear-gradient(180deg, #2b3a5c, #1a2238); border: 1px solid rgba(143,211,255,0.4); }
         .fn-btn.go { background: linear-gradient(180deg, #7a4a12, #4a2a08); border-color: rgba(255,217,122,0.65); }
@@ -4629,7 +4629,8 @@
         <div class="lb-sec">🏁 대회 연습</div>
         <div class="fn-row">
             <button type="button" class="fn-btn go" onclick="socket.emit('createFnMtt')">파이널나인 딥스택 연습 <small id="fn-btn-sub">50인 대회 열기 · 친구는 열린 방 목록에서 참가</small></button>
-            <button type="button" class="fn-btn" onclick="socket.emit('getFnReport')">연습 기록 <small>점수 · 복기</small></button>
+            <button type="button" class="fn-btn" onclick="socket.emit('getFnReport')">연습 기록 <small>점수 · 피드백</small></button>
+            <button type="button" class="fn-btn" onclick="socket.emit('getFnReview', {})">🎞️ 대회 복기 <small>판마다 복기</small></button>
         </div>
 
         <div class="lb-sec">🎓 연습 · 학습</div>
