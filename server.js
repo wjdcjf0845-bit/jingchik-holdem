@@ -123,7 +123,7 @@ const EvLoss = require('./lib/evloss');         // 📉 결정마다 잃은 기�
 const Freqs = require('./lib/freqs');           // 📊 상황별 빈도(오픈·방어·3벳·c벳…)를 기준과 비교
 const VRange = require('./lib/vrange');         // 🔍 상대의 프리플랍 행동 → 들고 있을 만한 패의 무게
 const Field = require('./lib/fieldstyle');   // 🎭 매장형 상대 스타일(딥스택 섞기)
-const Highlights = require('./lib/highlights'); // 🎬 명장면(배드비트·쿨러·리버 역전·큰 팟·포카드 이상)
+const Highlights = require('./lib/highlights'); // 🎬 명장면 연출(배드비트·쿨러·리버 역전·큰 팟·포카드 이상) — 저장·다시 보기는 없앴다(운영자 요청)
 const EqMC = require('./lib/equitymc');      // 🎲 플랍 이후 승률(몬테카를로)
 const EqPool = require('./lib/eqpool');      // 🧵 사람 결정의 정밀 승률을 따로 도는 스레드에서
 const FlopSolve = require('./lib/flopsolve');   // 🧮 솔버로 미리 풀어 둔 플랍 전략 조회
@@ -294,7 +294,6 @@ function hashPin(pin) {
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) { console.error('DATA_DIR 생성 실패:', e.message); }
 const DATA_FILE = path.join(DATA_DIR, 'poker_stats.json');
-const HL = Highlights.createStore(DATA_DIR);     // 🎬 명장면 저장소(DATA_DIR/highlights.json)
 
 // 📋 [접속 기록] 관리자 페이지에서 보는 로그. 전적 DB 와 파일을 분리한다 —
 //    로그는 자주 쌓이고 성격도 달라서(개인정보 포함) 같이 두면 서로 발목을 잡는다.
@@ -5400,7 +5399,7 @@ class GameRoom {
     }
 
     // 🎬 [리플레이] 액션로그 + 시작스택 + 공개 홀카드를 묶어 리플레이 데이터 생성
-    // 🎬 명장면: 쇼다운이 볼 만한 판이면(lib/highlights.js detect) 리플레이째 남기고 테이블에 연출을 띄운다
+    // 🎬 명장면: 쇼다운이 볼 만한 판이면(lib/highlights.js detect) 테이블에 연출을 띄운다
     maybeHighlight(contNicks, winners, pot) {
         if (this.ritBoards || this._learnMode) return;
         const board = this.communityCards;
@@ -5425,10 +5424,7 @@ class GameRoom {
         const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
         const h = Highlights.detect({ winners: [...winners], contenders, potBB: pot / bb, allinEq: aq, riverFlip });
         if (!h) return;
-        const replay = this.buildReplay(cs.map(x => ({ nick: x.n, cards: x.p.hand.slice(), rank: Highlights.KO[Hand.solve(x.p.hand.concat(board)).name] || '' })));
-        const mode = this._fnMode ? '딥스택 연습' : this._mtt ? 'MTT' : this.mode === 'cash' ? '캐시' : '토너먼트';
-        const id = HL.add({ kind: h.kind, title: h.title, sub: h.sub, players: contNicks.slice(), mode, potBB: Math.round(pot / bb), replay });
-        io.to(this.roomId).emit('highlight', { id, kind: h.kind, title: h.title, sub: h.sub });
+        io.to(this.roomId).emit('highlight', { kind: h.kind, title: h.title, sub: h.sub });
     }
     buildReplay(showdownHands) {
         const revealed = {};
@@ -8039,14 +8035,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🎬 명장면 목록 · 하나 보기(리플레이 창으로)
-    socket.on('getHighlights', () => { socket.emit('highlights', HL.list(40)); });
-    socket.on('getHighlight', (id) => {
-        const h = HL.get(String(id || ''));
-        if (!h) { socket.emit('replayData', null); return; }
-        socket.emit('replayData', Object.assign({}, h.replay, { hl: { id: h.id, title: h.title, sub: h.sub, mode: h.mode, t: h.t } }));
-    });
-
     // 🏆 [MTT] 목록 요청
     socket.on('getMttList', () => {
         socket.emit('mttList', mttListArray());
@@ -8470,7 +8458,6 @@ function gracefulShutdown(signal) {
     _shuttingDown = true;
     console.log(`\n🛑 ${signal} 수신 — 전적 저장 후 종료합니다...`);
     try { if (OPS) OPS.cleanExit(); } catch (e) {}
-    try { HL.flush(); } catch (e) {}
     try { MockDB.flush(); } catch (e) { console.error('종료 저장 실패:', e.message); }
     // 🌐 원격(Turso) 저장까지 완료 대기(최대 3초) 후 종료 — Render 재배포 시 마지막 변경 보존
     try { flushAccessLog(); } catch (e) {}

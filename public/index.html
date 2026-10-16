@@ -3289,7 +3289,7 @@
         .lb-help { font: inherit; font-size: 12px; font-weight: 800; letter-spacing: 0; color: #aeb9d4; background: none; border: none; padding: 2px 0; cursor: pointer; }
         .lb-help:hover { color: #fff; }
         .lobby-shell .lb-tiles, .lobby-shell .fn-row, .lobby-shell .rank-row, .lobby-shell #skill-mini { margin-bottom: 16px !important; }
-        .lobby-shell .rank-row { display: grid !important; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+        .lobby-shell .rank-row { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 7px; }
         .lobby-shell .rank-btn { position: relative; padding: 9px 2px 8px; }
         .lobby-shell .rank-btn .daily-badge { font-style: normal; top: -5px; right: -5px; }
         .lobby-shell .fn-btn { font-size: 14.5px; padding: 12px 12px 11px; }
@@ -4391,7 +4391,7 @@
         .quick-bubble::after { content: ''; position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #fff; border-bottom: 0; }
         @keyframes quickPop { 0% { opacity: 0; transform: translate(-50%, 8px) scale(0.8); } 10% { opacity: 1; transform: translate(-50%, 0) scale(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -8px); } }
         @media screen and (max-width: 960px) { .quick-pop { left: auto; right: 12px; top: auto; bottom: 110px; transform: none; } }
-        /* 🎬 명장면 연출 */
+        /* 🎬 명장면 연출(테이블에 잠깐 뜬다 — 저장·다시 보기는 없앴다) */
         .hl-banner { position: fixed; left: 50%; top: 18%; transform: translateX(-50%); z-index: 4200; pointer-events: none; text-align: center;
             padding: 14px 26px 12px; border-radius: 18px; background: linear-gradient(135deg, rgba(40,10,60,0.94), rgba(10,20,50,0.94));
             border: 2px solid rgba(255,217,122,0.7); box-shadow: 0 0 40px rgba(255,200,80,0.45), 0 10px 30px rgba(0,0,0,0.6); animation: hlIn 4.2s ease-out forwards; max-width: 92vw; }
@@ -4401,15 +4401,6 @@
         .hl-banner .hl-k { font-size: 11px; color: rgba(255,255,255,0.65); margin-top: 6px; }
         @keyframes hlIn { 0% { opacity: 0; transform: translateX(-50%) scale(0.6); } 10% { opacity: 1; transform: translateX(-50%) scale(1.08); } 16% { transform: translateX(-50%) scale(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) translateY(-14px); } }
         @media screen and (max-width: 960px) { .hl-banner .hl-t { font-size: 22px; } .hl-banner .hl-s { font-size: 12px; } }
-        .hl-modal { position: fixed; inset: 0; z-index: 4300; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
-        .hl-box { width: min(520px, 100%); max-height: 84vh; overflow-y: auto; background: #12162a; border: 1px solid rgba(255,255,255,0.14); border-radius: 16px; padding: 16px; }
-        .hl-box h3 { margin: 0 0 10px; color: #ffd97a; }
-        .hl-item { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid rgba(255,255,255,0.07); }
-        .hl-item .hl-main { flex: 1; min-width: 0; }
-        .hl-item .hl-main b { display: block; font-size: 14px; color: #fff; }
-        .hl-item .hl-main small { display: block; font-size: 11.5px; color: rgba(255,255,255,0.65); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .hl-item button { font-family: inherit; font-size: 12px; font-weight: 800; border-radius: 9px; padding: 6px 9px; cursor: pointer; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color: #fff; }
-        .hl-item button.go { background: linear-gradient(180deg, #7a4a12, #4a2a08); border-color: rgba(255,217,122,0.6); }
     </style>
 </head>
 <body>
@@ -4650,7 +4641,6 @@
             <button class="rank-btn" onclick="socket.emit('getMttChampions')" title="MTT 챔피언">👑<span>챔피언</span></button>
             <button class="rank-btn" onclick="openDaily()" title="출석 · 미션 — 매일 뱅크롤 보상">🎁<span>출석</span><i id="daily-badge" class="daily-badge" style="display:none;">!</i></button>
             <button class="rank-btn" onclick="openShop()" title="꾸미기 상점 — 뒷면 · 아바타 · 칭호">🎨<span>상점</span></button>
-            <button class="rank-btn" onclick="openHighlights()" title="명장면 — 배드비트 · 쿨러 · 리버 역전 · 큰 팟 다시 보기">🎬<span>명장면</span></button>
         </div>
 
         <!-- 📈 실력 순위 — 로비에서 바로 보이게 (누르면 자세한 비교) -->
@@ -7586,37 +7576,11 @@
     socket.on('highlight', d => {
         if (!d) return;
         const b = document.getElementById('hl-banner'); if (!b) return;
-        b.innerHTML = `<div class="hl-t">${esc(d.title)}</div><div class="hl-s">${esc(d.sub || '')}</div><div class="hl-k">🎬 명장면으로 저장 — 로비 › 명장면에서 다시 볼 수 있어요</div>`;
+        b.innerHTML = `<div class="hl-t">${esc(d.title)}</div><div class="hl-s">${esc(d.sub || '')}</div>`;
         b.hidden = false; b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
         clearTimeout(b._t); b._t = setTimeout(() => { b.hidden = true; }, 4300);
         try { const v = sfxVol(); if (d.kind === 'badbeat' || d.kind === 'river') { tone(392, 0.25, 'sawtooth', 0.15 * v); tone(311, 0.5, 'sawtooth', 0.15 * v, 0.24, 262); } else SFX.fanfare(); } catch (e) {}
     });
-    function openHighlights() { socket.emit('getHighlights'); }
-    function closeHighlights() { const m = document.getElementById('hl-modal'); if (m) m.remove(); }
-    const _hlAgo = t => { const s = Math.floor((Date.now() - t) / 1000); return s < 3600 ? Math.max(1, Math.floor(s / 60)) + '분 전' : s < 86400 ? Math.floor(s / 3600) + '시간 전' : Math.floor(s / 86400) + '일 전'; };
-    socket.on('highlights', list => {
-        closeHighlights();
-        const m = document.createElement('div'); m.id = 'hl-modal'; m.className = 'hl-modal';
-        m.onclick = e => { if (e.target === m) closeHighlights(); };
-        const rows = (list || []).map(x => `<div class="hl-item"><div class="hl-main"><b>${esc(x.title)}</b><small>${esc(x.sub || '')}</small>
-            <small>${esc((x.players || []).map(n => n.replace('🤖', '')).join(' · '))} · ${esc(x.mode || '')} · ${_hlAgo(x.t)}</small></div>
-            <button class="go" onclick="watchHighlight('${x.id}')">▶ 보기</button><button onclick="shareHighlight('${x.id}')">🔗</button></div>`).join('');
-        m.innerHTML = `<div class="hl-box"><h3>🎬 명장면</h3>${rows || '<div style="color:rgba(255,255,255,0.6);padding:12px 0;">아직 명장면이 없습니다. 배드비트 · 쿨러 · 리버 역전 · 큰 팟 · 포카드 이상이 나오면 여기에 모입니다.</div>'}
-            <div style="text-align:right;margin-top:12px;"><button class="btn-join" onclick="closeHighlights()">닫기</button></div></div>`;
-        document.body.appendChild(m);
-    });
-    function watchHighlight(id) { closeHighlights(); socket.emit('getHighlight', id); }
-    function shareHighlight(id) {
-        const link = location.origin + location.pathname + '?h=' + id;
-        const done = () => showCenterMessage('🔗 명장면 링크를 복사했습니다!');
-        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done).catch(() => prompt('명장면 링크를 복사하세요:', link));
-        else prompt('명장면 링크를 복사하세요:', link);
-    }
-    // 링크(?h=…)로 들어오면 로그인 뒤 그 명장면을 연다
-    socket.on('loginSuccess', () => {
-        try { const id = new URLSearchParams(location.search).get('h'); if (id && !window._hlOpened) { window._hlOpened = true; setTimeout(() => socket.emit('getHighlight', id), 900); } } catch (e) {}
-    });
-
     socket.on('hallOfFameData', (data) => {
         const list = document.getElementById('hof-list');
         list.innerHTML = '';
@@ -8416,7 +8380,7 @@
         document.getElementById('replay-board').innerHTML =
             (board && board.length ? board.map(replayMiniCard).join('') : '<span style="color:var(--txt-dim);font-size:12px;">프리플랍 (보드 없음)</span>');
         const bl = replayData.blinds;
-        document.getElementById('replay-info').innerText = (replayData.hl ? `🎬 ${replayData.hl.title} — ${replayData.hl.sub || ''}\n` : '') +
+        document.getElementById('replay-info').innerText =
             `핸드 #${replayData.handNo} · 블라인드 ${bl ? bl.sb+'/'+bl.bb : '-'} · ${replayData.seats.length}명`;
         const streetName = ['', '프리플랍', '플랍', '턴', '리버'][act ? act.street : 0] || '';
         const typeKr = { sb:'스몰블라인드', bb:'빅블라인드', fold:'폴드', check:'체크', call:'콜', raise:'레이즈', allin:'올인' }[act ? act.type : ''] || (act ? act.type : '');
