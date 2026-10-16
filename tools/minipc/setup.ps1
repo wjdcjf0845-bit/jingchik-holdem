@@ -58,6 +58,8 @@ FN_MAX=
 # 🤖 AI(선택): 대회 복기 AI 코치 · 봇 말투. 둘 중 하나만 — Claude 를 쓰려면 API 키, 미니 PC 에서 직접 돌리려면 Ollama 주소
 ANTHROPIC_API_KEY=
 OLLAMA_URL=
+# Ollama 모델(비우면 exaone3.5:2.4b — 메모리 약 2GB). 미리 받아 둔다: ollama pull exaone3.5:2.4b
+OLLAMA_MODEL=
 # 하루 한도(비우면 대사 150 · 코치 100)
 AI_CHAT_LIMIT=
 AI_COACH_LIMIT=

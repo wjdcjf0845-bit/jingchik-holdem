@@ -46,3 +46,25 @@ test('AI 한도: 봇 대사와 코치는 따로 센다 — 대사가 한도를 �
     assert.strictEqual(await ai.text({ system: 's', user: 'u', bucket: 'coach' }), null);
     srv.close();
 });
+
+test('AI 왜?: 작은 모델이 보드를 내 패로 읽지 않게 손패와 보드를 따로 적는다', () => {
+    const h = { n: 40, lv: 6, pos: 'BB', stk: 42, seats: 9, alive: 37, h: ['Ah', '7h'], b: ['Kh', '7c', '2d', 'Qs', '3c'] };
+    const p = C.explainPrompt(h, { st: 'river', b: 5, pot: 18, call: 12, act: 'fold', best: 'call', loss: 4.1, why: '필요 승률 29%' }, {});
+    assert.match(p.user, /내 손에 든 패\(2장\): \[A♥ 7♥\]/);
+    assert.match(p.user, /보드\): \[K♥ 7♣ 2♦ Q♠ 3♣\] — 내 패가 아닙니다/);
+    assert.ok(!/친구에게/.test(p.system), '반말 호칭을 부르는 말이 없다');
+});
+
+test('AI Ollama: 기본 모델은 exaone3.5:2.4b · 온도를 주면 그대로 보낸다', async () => {
+    let body = null;
+    const http = require('http');
+    const srv = http.createServer((req, res) => { let b = ''; req.on('data', c => { b += c; }); req.on('end', () => { body = JSON.parse(b); res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ message: { content: '답' } })); }); });
+    await new Promise(r => srv.listen(0, '127.0.0.1', r));
+    const ai = createAI({ OLLAMA_URL: 'http://127.0.0.1:' + srv.address().port });
+    assert.strictEqual(ai.model, 'exaone3.5:2.4b');
+    assert.strictEqual(await ai.text({ system: 's', user: 'u', bucket: 'coach', temperature: 0.3 }), '답');
+    assert.strictEqual(body.options.temperature, 0.3);
+    await ai.text({ system: 's', user: 'u', bucket: 'chat' });
+    assert.ok(!('temperature' in body.options), '안 주면 모델 기본값');
+    srv.close();
+});

@@ -7708,7 +7708,7 @@ io.on('connection', (socket) => {
         try {
             const pr = AICoach.coachPrompt(rv, { kinds: _aiKinds(), entrants: FN_MTT.entrants });
             if (!pr.decisions) { socket.emit('aiResult', { kind: 'coach', id: rv.id, text: '이 대회에서는 권장과 다른 결정이 없었습니다. 👍 지금처럼 치면 됩니다.' }); return; }
-            const t = await AI.text({ system: pr.system, user: pr.user, maxTokens: 3000, effort: 'medium', timeoutMs: 90000, bucket: 'coach' });
+            const t = await AI.text({ system: pr.system, user: pr.user, maxTokens: 3000, effort: 'medium', timeoutMs: 90000, bucket: 'coach', temperature: 0.3 });
             if (!t) { socket.emit('aiResult', { error: 'AI 가 답하지 못했습니다. 잠시 뒤 다시 눌러 주세요.' }); return; }
             rv.ai = { text: t, t: Date.now(), by: AI.model }; MockDB.save();
             socket.emit('aiResult', { kind: 'coach', id: rv.id, text: t });
@@ -7725,7 +7725,7 @@ io.on('connection', (socket) => {
         socket._aiBusy = true;
         try {
             const pr = AICoach.explainPrompt(h, Object.assign({}, x, { why: Blunder.std(x.why) }), { kinds: _aiKinds() });
-            const t = await AI.text({ system: pr.system, user: pr.user, maxTokens: 1500, effort: 'medium', timeoutMs: 60000, bucket: 'coach' });
+            const t = await AI.text({ system: pr.system, user: pr.user, maxTokens: 1500, effort: 'medium', timeoutMs: 60000, bucket: 'coach', temperature: 0.3 });
             if (!t) { socket.emit('aiResult', { error: 'AI 가 답하지 못했습니다. 잠시 뒤 다시 눌러 주세요.' }); return; }
             x.ai = t; MockDB.save();
             socket.emit('aiResult', Object.assign({ text: t }, key));
