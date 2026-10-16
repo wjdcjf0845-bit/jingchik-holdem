@@ -5613,6 +5613,18 @@ function gtoAvg(sum, w, cnt) { return w > 0 ? Math.round(sum / w) : (cnt > 0 ? M
 // 📉 EV 손실 기준 실력 점수 한 묶음 — 순위표·근거 화면·리포트가 같은 계산을 쓴다.
 //   score ± pm (95% 구간 lo~hi) · loss100(100판당 잃은 기대값 bb) · grades(결정 등급별 건수) · streets(스트리트별 손실)
 //   net100 = 실제 결과, adj100 = 올인 뒤의 운을 뺀 결과 (둘 다 100판당 bb, 30판 이상일 때만)
+// 🏁 [딥스택 연습 순위] 사람(봇·관리자 제외)마다 이 모드 실력 점수와 대회 성적. 점수 높은 순 → 점수 없으면 뒤로(우승·입상 많은 순)
+function fnSummary(x) { return { games: x.fnGames || 0, itm: x.fnItm || 0, wins: x.fnWins || 0, avgPlace: x.fnGames > 0 ? Math.round(x.fnPlaceSum / x.fnGames * 10) / 10 : null }; }
+function fnBoard(me) {
+    const board = [];
+    MockDB.users.forEach(x => {
+        if (!x || !x.nickname || x.nickname.startsWith('🤖') || x.nickname === ADMIN_NICK || !x.fnStats) return;
+        const ev = evView(x.fnStats), sm = fnSummary(x.fnStats);
+        if (!ev && !sm.games) return;
+        board.push(Object.assign({ nick: x.nickname, me: x.nickname === me, score: ev ? ev.score : null, pm: ev ? ev.pm : null, hands: ev ? ev.hands : 0, loss100: ev ? ev.raw100 : null }, sm));
+    });
+    return board.sort((a, b) => (b.score == null ? -1 : b.score) - (a.score == null ? -1 : a.score) || b.wins - a.wins || b.itm - a.itm || b.games - a.games);
+}
 function evView(a) {
     const ix = a ? EvLoss.index(a) : null;
     if (!ix) return null;
@@ -7732,21 +7744,18 @@ io.on('connection', (socket) => {
         } finally { socket._aiBusy = false; }
     });
     // 🏁 [파이널나인 연습 기록] 이 모드에서 친 것만 모은 점수·피드백·대회 결과 + 친구들 비교
+    // 🏁 대기실 딥스택 순위(실력 점수 · 우승 · 입상) — 연습 기록의 '친구들' 표와 같은 자료
+    socket.on('getFnBoard', () => {
+        if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
+        socket.emit('fnBoard', { rows: fnBoard(socket.nickname), paid: FN_MTT.paid });
+    });
     socket.on('getFnReport', () => {
         if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
         const u = MockDB.users.get(socket.nickname), F = u.fnStats || {};
         const dk = { d12: '12bb 이하', d25: '13~25bb', d40: '26~40bb', deep: '41bb 이상' }, pk = { early: '초반', mid: '중반', ft: '파이널 테이블', bubble: '버블(입상 직전)', itm: '입상권', hu: '마지막 1대1' };
         const per = (o, keys, n, l) => Object.keys(keys).map(k => ({ id: k, name: keys[k], n: o[n + k] || 0, per: o[n + k] > 0 ? Math.round((o[l + k] || 0) / o[n + k] * 100) / 100 : null })).filter(x => x.n > 0);
         const leaks = Blunder.KIND_KEYS.map(k => ({ name: Blunder.KINDS[k].name, tip: Blunder.KINDS[k].tip, n: F['lkN_' + k] || 0, bb: Math.round((F['lkB_' + k] || 0) * 10) / 10 })).filter(l => l.n > 0).sort((a, b) => b.bb - a.bb);
-        const sum = x => ({ games: x.fnGames || 0, itm: x.fnItm || 0, wins: x.fnWins || 0, avgPlace: x.fnGames > 0 ? Math.round(x.fnPlaceSum / x.fnGames * 10) / 10 : null });
-        const board = [];
-        MockDB.users.forEach(x => {
-            if (!x || !x.nickname || x.nickname.startsWith('🤖') || x.nickname === ADMIN_NICK || !x.fnStats) return;
-            const ev = evView(x.fnStats), sm = sum(x.fnStats);
-            if (!ev && !sm.games) return;
-            board.push(Object.assign({ nick: x.nickname, me: x.nickname === socket.nickname, score: ev ? ev.score : null, pm: ev ? ev.pm : null, hands: ev ? ev.hands : 0, loss100: ev ? ev.raw100 : null }, sm));
-        });
-        board.sort((a, b) => (b.score == null ? -1 : b.score) - (a.score == null ? -1 : a.score));
+        const sum = fnSummary, board = fnBoard(socket.nickname);
         socket.emit('fnReport', {
             cfg: { entrants: FN_MTT.entrants, startChips: FN_MTT.startingChips, startBB: FN_MTT.startingChips / FN_MTT.structure[0].bb, levelSec: FN_MTT.blindUpInterval,
                 lv1: FN_MTT.structure[0].sb + '/' + FN_MTT.structure[0].bb, paid: FN_MTT.paid, tableSize: FN_MTT.tableSize, rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel, normalBots: FN_MTT.normalBots, field: '모두 고수 실력 — 정석 약 절반에 ' + Object.keys(Field.FIELD_MIX).map(k => Field.STYLES[k].name + ' ' + Math.round(Field.FIELD_MIX[k] * 100) + '%').join(' · ') + ' 버릇이 섞임', anteLevel: 3 },
