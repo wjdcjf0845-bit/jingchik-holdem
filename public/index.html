@@ -8148,6 +8148,7 @@
                 <div><span>나간 대회</span><b>${sm.games}</b><small>입상 ${sm.itm}번${sm.games ? ` (${Math.round(sm.itm / sm.games * 100)}%)` : ''} · 우승 ${sm.wins}번${sm.avgPlace != null ? ` · 평균 순위 ${sm.avgPlace}위` : ''} — ${c.entrants}명 중 ${c.paid}명 입상이라 실력이 같다면 입상은 ${Math.round(c.paid / c.entrants * 100)}%쯤이 평균입니다</small></div>
                 ${ev ? `<div class="tot"><span>연습 점수</span><b>${ev.score} <small style="display:inline; font-size:14px; color:#ffe27a;">±${ev.pm}</small></b><small>${ev.hands.toLocaleString()}판 · 100판당 잃은 기대값 ${ev.raw100}bb (6인 기준 환산 ${ev.loss100}bb). 실력 점수와 같은 계산입니다 — 결정마다 권장 플레이 대비 잃은 기대값.</small></div>` : '<div><span>연습 점수</span><b>–</b><small>대회를 한 번 치면 나옵니다.</small></div>'}
             </div>
+            ${aiWeekHtml(d)}
             ${d.jackpot ? `<div class="sr-section-title" style="margin-top:14px;">🎯 홀인원 상금</div>
             <div class="jp-box"><div class="jp-t">지금 상금 <b>${d.jackpot.pot.toLocaleString()}원</b> <small>${d.jackpot.cycle}회차 · ${d.jackpot.players}명 참가 · 다음 참가비 ${d.jackpot.myFee.toLocaleString()}원</small></div>
                 ${d.jackpot.pending ? `<div class="jp-rule">⏳ 입금 확인 대기 ${d.jackpot.pending.toLocaleString()}원 — 운영자가 입금을 확인하면 상금에 더해집니다.</div>` : ''}
@@ -8223,8 +8224,23 @@
     function aiFmt(t) { return '<div class="ai-txt">' + esc(String(t)).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>') + '</div>'; }
     function askAiCoach(id) { const b = document.getElementById('ai-coach'); if (b) b.innerHTML = '<span class="ai-wait">🧑‍🏫 AI 코치가 이 대회를 읽는 중… (10~40초)</span>'; socket.emit('aiCoach', { id }); }
     function askAiExplain(id, n, i) { const b = document.getElementById('aiex-' + n + '-' + i); if (b) b.innerHTML = '<span class="ai-wait">🤖 생각하는 중…</span>'; socket.emit('aiExplain', { id, n, i }); }
+    // 📅 주간 성장 리포트 — 매주 월요일 0시에 지난주 것을 자동으로 만들고, 버튼으로 최근 7일 것을 바로 받을 수도 있다
+    function aiWeekBody(w) {
+        const md = t => { const x = new Date(t); return `${x.getMonth() + 1}/${x.getDate()}`; };
+        const st = s => !s ? '' : `대회 ${s.games}번 · 입상 ${s.itm}번 · 우승 ${s.wins}번${s.score != null ? ` · 점수 ${s.score}` : ''} · ${s.hands}판`;
+        return `<b>📅 ${md(w.from)} ~ ${md(w.to - 1)}</b><small>${st(w.cur)}${w.prev ? ' (그 전 주: ' + st(w.prev) + ')' : ''}</small>${aiFmt(w.text)}`;
+    }
+    function aiWeekHtml(d) {
+        if (!d.week && !d.aiOn) return '';
+        return `<div class="sr-section-title" style="margin-top:14px;">📅 주간 성장 리포트</div>
+            <div class="ai-coach"><div id="ai-week">${d.week ? aiWeekBody(d.week) : '<small>매주 월요일 0시에 지난주(월~일) 리포트를 자동으로 만듭니다. 기록은 오늘부터 쌓입니다.</small>'}</div>
+            ${d.aiOn ? '<button type="button" class="ai-btn" onclick="askAiWeek(this)">📅 최근 7일 리포트 지금 받기</button>' : ''}</div>`;
+    }
+    function askAiWeek(btn) { const b = document.getElementById('ai-week'); if (b) b.innerHTML = '<span class="ai-wait">📅 AI 가 최근 7일 기록을 읽는 중… (30초~1분)</span>'; if (btn) btn.remove(); socket.emit('aiWeek'); }
+    socket.on('aiNotice', d => { if (d && d.msg) showCenterMessage(d.msg); });
     socket.on('aiResult', r => {
         if (!r) return;
+        if (r.kind === 'week') { const b = document.getElementById('ai-week'); if (b && r.report) b.innerHTML = aiWeekBody(r.report); return; }
         if (r.error) { showCenterMessage('🤖 ' + r.error); document.querySelectorAll('.ai-wait').forEach(w => w.remove()); return; }
         if (r.kind === 'coach') {
             const b = document.getElementById('ai-coach'); if (b) b.innerHTML = '<b>🧑‍🏫 AI 코치</b>' + aiFmt(r.text);

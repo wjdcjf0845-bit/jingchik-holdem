@@ -903,7 +903,11 @@ const MockDB = {
         u.fnResults = (Array.isArray(u.fnResults) ? u.fnResults : []).concat([r]).slice(-60);
         const rv = (u.fnReviews || []).find(x => x.id === r.id);
         if (rv) { rv.place = r.place; rv.agreed = !!r.agreed; }
+        // 📅 주간 성장 리포트: 대회가 끝날 때마다 지금까지의 합계를 찍어 둔다(한 주 = 주 끝 − 주 시작 전)
+        u.fnSnaps = (Array.isArray(u.fnSnaps) ? u.fnSnaps : []).concat([AICoach.snapOf(F, r.t || Date.now(), Blunder.KIND_KEYS)]).slice(-150);
         this.save();
+        // 🧑‍🏫 끝난 대회의 코치 리포트를 미리 만들어 둔다(버튼을 누르고 1분 기다리지 않게)
+        if (rv && rv.hands.length && !(rv.ai && rv.ai.text)) aiEnqueue({ kind: 'coach', nick: nickname, id: r.id });
     },
     // 🎯 [홀인원 상금] 딥스택 연습 참가비를 모아 처음 우승한 사람에게 전부 준다(운영자가 직접 받고 주는 돈 — 앱은 장부만 적는다).
     //    회차: 지금까지 나온 우승 수 + 1. 그 회차에 처음 참가하면 5,000원, 같은 회차에 다시 참가하면 1,000원.
@@ -5439,6 +5443,7 @@ class GameRoom {
         const h = Highlights.detect({ winners: [...winners], contenders, potBB: pot / bb, allinEq: aq, riverFlip });
         if (!h) return;
         io.to(this.roomId).emit('highlight', { kind: h.kind, title: h.title, sub: h.sub });
+        if (this._mtt && this._mtt.fn) this._mtt.cast({ kind: 'hl', title: h.title, sub: h.sub, nick: null, players: contenders.map(c => ({ nick: c.nick, bb: 0 })) }, false);
     }
     buildReplay(showdownHands) {
         const revealed = {};
@@ -5613,6 +5618,76 @@ function gtoAvg(sum, w, cnt) { return w > 0 ? Math.round(sum / w) : (cnt > 0 ? M
 // 📉 EV 손실 기준 실력 점수 한 묶음 — 순위표·근거 화면·리포트가 같은 계산을 쓴다.
 //   score ± pm (95% 구간 lo~hi) · loss100(100판당 잃은 기대값 bb) · grades(결정 등급별 건수) · streets(스트리트별 손실)
 //   net100 = 실제 결과, adj100 = 올인 뒤의 운을 뺀 결과 (둘 다 100판당 bb, 30판 이상일 때만)
+// ═══ 🤖 AI 작업 줄 — 오래 걸리는 글(코치 리포트 · 주간 리포트)은 한 번에 하나씩 만든다(미니 PC 의 CPU 를 나눠 쓰지 않게) ═══
+//   실측(2026-10-16, exaone3.5 7.8B): 만드는 동안 게임 행동 응답 중앙값 15ms → 33ms — 느끼지 못하는 정도라 대회 중에도 돌린다.
+const AIQ = { q: [], busy: false };
+function aiEnqueue(job) {
+    if (!AI.enabled()) return;
+    if (AIQ.q.some(j => j.kind === job.kind && j.nick === job.nick && j.id === job.id)) return;
+    AIQ.q.push(job);
+    setTimeout(aiPump, 1500);
+}
+async function aiPump() {
+    if (AIQ.busy || !AIQ.q.length) return;
+    AIQ.busy = true;
+    const job = AIQ.q.shift();
+    try { await aiRunJob(job); } catch (e) { console.error('🤖 [AI 작업] 실패:', job.kind, String(e && e.message || e).slice(0, 120)); }
+    finally { AIQ.busy = false; if (AIQ.q.length) setTimeout(aiPump, 2000); }
+}
+const aiKindNames = () => { const k = {}; Blunder.KIND_KEYS.forEach(x => { k[x] = { name: Blunder.KINDS[x].name }; }); return k; };
+// 그 사람에게 알린다(접속해 있으면)
+function aiNotify(nick, msg) { io.sockets.sockets.forEach(sk => { if (sk.nickname === nick) sk.emit('aiNotice', { msg }); }); }
+// 대회 하나의 코치 리포트: 이미 있으면 그것을, 없으면 만들어 저장한다. 실수가 없으면 { none } · AI 가 못 하면 null
+async function aiCoachFor(rv) {
+    if (rv.ai && rv.ai.text) return rv.ai.text;
+    const pr = AICoach.coachPrompt(rv, { kinds: aiKindNames(), entrants: FN_MTT.entrants });
+    if (!pr.decisions) return '이 대회에서는 권장과 다른 결정이 없었습니다. 👍 지금처럼 치면 됩니다.';
+    const t = await AI.text({ system: pr.system, user: pr.user, maxTokens: 3000, effort: 'medium', timeoutMs: 120000, bucket: 'coach', temperature: 0.3 });
+    if (!t) return null;
+    rv.ai = { text: t, t: Date.now(), by: AI.model }; MockDB.save();
+    return t;
+}
+// 기간 [from, to) 의 주간 성장 리포트를 만들어 u.fnWeekReports 에 넣는다(같은 key 는 바꿔 끼운다). 기록이 없으면 null
+async function aiWeekFor(u, from, to, key) {
+    const cur = AICoach.periodStats(u.fnSnaps, u.fnResults, from, to, EvLoss.index);
+    if (!cur || cur.hands < 20) return null;
+    const prev = AICoach.periodStats(u.fnSnaps, u.fnResults, from - AICoach.WEEK, from, EvLoss.index);
+    const pr = AICoach.weekPrompt(cur, prev, { kinds: aiKindNames(), paid: FN_MTT.paid, entrants: FN_MTT.entrants });
+    const t = await AI.text({ system: pr.system, user: pr.user, maxTokens: 2000, effort: 'medium', timeoutMs: 120000, bucket: 'coach', temperature: 0.3 });
+    if (!t) return null;
+    const rep = { key, from, to, t: Date.now(), cur, prev, text: t, by: AI.model };
+    u.fnWeekReports = (Array.isArray(u.fnWeekReports) ? u.fnWeekReports : []).filter(r => r.key !== key).concat([rep]).slice(-8);
+    MockDB.save();
+    return rep;
+}
+async function aiRunJob(job) {
+    const u = MockDB.users.get(job.nick); if (!u) return;
+    if (job.kind === 'coach') {
+        const rv = (u.fnReviews || []).find(r => r.id === job.id); if (!rv || (rv.ai && rv.ai.text)) return;
+        const t = await aiCoachFor(rv);
+        if (t && job.notify !== false) aiNotify(job.nick, '🧑‍🏫 방금 끝난 딥스택 연습의 AI 코치 리포트가 준비됐습니다 — 대기실 🎞️ 대회 복기에서 보세요.');
+    } else if (job.kind === 'week') {
+        if ((u.fnWeekReports || []).some(r => r.key === job.key)) return;
+        const r = await aiWeekFor(u, job.from, job.to, job.key);
+        if (r) aiNotify(job.nick, '📅 지난주 딥스택 성장 리포트가 나왔습니다 — 대기실 연습 기록에서 보세요.');
+    }
+}
+// 🌙 밤 자동 작업(0~5시, 10분마다 확인): ① 못 만든 코치 리포트(최근 3일) ② 지난주(월~일) 성장 리포트 — 이미 있으면 건너뛴다
+function aiNightly() {
+    if (!AI.enabled()) return;
+    const now = Date.now();
+    // 처음: 주간 리포트용 합계를 아직 안 찍은 사람은 지금 것을 시작점으로 찍어 둔다(이전 기록은 주별로 나눌 수 없다)
+    MockDB.users.forEach(u => { if (u && u.fnStats && !Array.isArray(u.fnSnaps) && !String(u.nickname || '').startsWith('🤖')) u.fnSnaps = [AICoach.snapOf(u.fnStats, now, Blunder.KIND_KEYS)]; });
+    if (new Date(now).getHours() >= 6) return;
+    const thisWeek = AICoach.weekStart(now), lastWeek = thisWeek - AICoach.WEEK, key = 'w' + new Date(lastWeek).toISOString().slice(0, 10);
+    MockDB.users.forEach(u => {
+        if (!u || !u.nickname || u.nickname.startsWith('🤖')) return;
+        (u.fnReviews || []).forEach(rv => { if (rv.place && rv.hands.length && !(rv.ai && rv.ai.text) && now - rv.t < 3 * 24 * 3600 * 1000) aiEnqueue({ kind: 'coach', nick: u.nickname, id: rv.id, notify: false }); });
+        const played = (u.fnResults || []).some(r => r.t >= lastWeek && r.t < thisWeek);
+        if (played && !(u.fnWeekReports || []).some(r => r.key === key)) aiEnqueue({ kind: 'week', nick: u.nickname, key, from: lastWeek, to: thisWeek });
+    });
+}
+
 // 🏁 [딥스택 연습 순위] 사람(봇·관리자 제외)마다 이 모드 실력 점수와 대회 성적. 점수 높은 순 → 점수 없으면 뒤로(우승·입상 많은 순)
 function fnSummary(x) { return { games: x.fnGames || 0, itm: x.fnItm || 0, wins: x.fnWins || 0, avgPlace: x.fnGames > 0 ? Math.round(x.fnPlaceSum / x.fnGames * 10) / 10 : null }; }
 function fnBoard(me) {
@@ -5838,6 +5913,8 @@ class MTTManager {
         }
         this.totalEntrants = this.entrants.length;
         this.humanEntrants = this.entrants.filter(e => !e.isBot).length; // 🏆 토큰 지급 판정용
+        // 📅 주간 성장 리포트: 시작할 때의 합계(끝날 때도 찍는다 — 한 대회 = 끝 − 시작)
+        if (this.fn) this.entrants.forEach(e => { const u = !e.isBot && MockDB.users.get(e.nick); if (u) u.fnSnaps = (Array.isArray(u.fnSnaps) ? u.fnSnaps : []).concat([AICoach.snapOf(MockDB.statBox(u, 'fn'), Date.now(), Blunder.KIND_KEYS)]).slice(-150); });
 
         const shuffled = this.entrants.slice();
         for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
@@ -5923,11 +6000,34 @@ class MTTManager {
         room.hostNickname = group.find(s => !s.isBot)?.nick || null;
         room._cashStarted = false;
         if (isFinal) io.to(roomId).emit('gameMessage', '🏆 파이널 테이블! 마지막 승부입니다!');
+        if (isFinal && this.fn && group.length > 2 && !this._castFinal) {
+            this._castFinal = true;
+            const bb = this.curBB();
+            this.cast({ kind: 'final', alive: group.length, players: group.slice().sort((a, b) => b.chips - a.chips).map(p => ({ nick: p.nick, bb: Math.round(p.chips / bb) })) }, true);
+        }
         // 첫 핸드 시작
         if (group.length >= 2) room.scheduleNextHand(isFinal ? 2500 : 2000);
         return room;
     }
 
+    // 🎙️ [딥스택 중계] 큰 순간(버블 · 입상 확정 · 파이널 테이블 · 사람 탈락 · 결승 탈락 · 헤즈업 · 우승 · 명장면)을 캐스터처럼 알린다.
+    //    사실은 서버가 정한 기본 문장이고, AI 는 그 문장을 생동감 있게 바꿔 말하기만 한다(이름이 빠지거나 없는 숫자가 들어가면 기본 문장).
+    //    AI 가 다른 해설을 쓰는 중이거나 8초 안에 못 쓰면 기본 문장을 바로 보낸다. lobby: 대기실 채팅에도 띄운다.
+    curBB() { const st = this.structure || []; const L = st[Math.min(this.blindLevel, st.length - 1)]; return (L && L.bb) || 1; }
+    cast(e, lobby) {
+        if (!this.fn || process.env.CAST === '0') return;
+        const base = AICoach.castTemplate(e); if (!base) return;
+        const send = line => {
+            const m = { nick: '🎙️ 해설', msg: line, bot: true };
+            this.tables.forEach(rid => io.to(rid).emit('chatMessage', m));
+            if (lobby) io.to('lobby').emit('lobbyChat', { nick: '🎙️ 해설', msg: line });
+        };
+        if (!AI.enabled() || this._castBusy) { if (process.env.DEV_CASTLOG) console.log('[CAST]', e.kind, this._castBusy ? '앞 해설을 쓰는 중' : 'AI 꺼짐'); send(base); return; }
+        this._castBusy = true;
+        const pr = AICoach.castPrompt(e);
+        AI.text({ system: pr.system, user: pr.user, maxTokens: 120, effort: 'low', timeoutMs: 12000, bucket: 'chat' })
+            .then(t => { const ok = AICoach.castCheck(t, e); if (process.env.DEV_CASTLOG) console.log('[CAST]', e.kind, ok ? 'AI' : (t ? '검사 탈락: ' + String(t).slice(0, 120) : 'AI 없음')); send(ok || base); }).catch(() => send(base)).finally(() => { this._castBusy = false; });
+    }
     // ─────────── 탈락 통보 (즉시 피드백용; 순위 확정은 tick에서) ───────────
     onPlayerEliminated(roomId, nick) {
         if (this.finished) return;
@@ -5944,6 +6044,15 @@ class MTTManager {
             io.to(sid).emit('mttEliminated', { place, total: this.totalEntrants, mttId: this.mttId, canWatch: true });
         }
         io.to(roomId).emit('gameMessage', `💀 ${nick} 님 탈락 — ${place}위 / ${this.totalEntrants}명`);
+        // 🎙️ 중계: 버블 · 입상 확정 · 헤즈업 · 사람 탈락 · 결승 테이블 탈락
+        if (this.fn) {
+            const alive = place - 1, paid = this.paid || 0, isBot = String(nick).startsWith('🤖');
+            const stacks = () => { const bb = this.curBB(); return this.livePlayers().sort((a, b) => b.chips - a.chips).map(p => ({ nick: p.nick, bb: Math.round(p.chips / bb) })); };
+            if (paid && alive === paid + 1) { const st = stacks(); this.cast({ kind: 'bubble', alive, paid, leader: st[0] && st[0].nick, leaderBB: st[0] && st[0].bb }, true); }
+            else if (paid && alive === paid) this.cast({ kind: 'itm', alive, paid, nick, place }, true);
+            else if (alive === 2) this.cast({ kind: 'hu', players: stacks().slice(0, 2) }, true);
+            else if (!isBot || alive < this.tableSize) this.cast({ kind: 'out', nick, place, alive, paid }, !isBot);
+        }
         // 즉시 한 번 점검(빠른 반응) — 단 tick과 충돌 않도록 가드
         setTimeout(() => this.tick(), 600);
     }
@@ -6367,6 +6476,7 @@ class MTTManager {
         if (this._heartbeat) clearInterval(this._heartbeat);
         if (this._blindTimer) { clearInterval(this._blindTimer); this._blindTimer = null; }
         const champion = winner.nick;
+        this.cast({ kind: 'champ', nick: champion, total: this.totalEntrants }, true);
         // 연습 모드의 우승은 연습 기록에만 남긴다(명예의 전당·토큰과 무관)
         if (this.fn) { if (!winner.isBot) MockDB.recordFnResult(champion, { t: Date.now(), place: 1, total: this.totalEntrants, id: this.mttId, paid: this.paid, level: this.blindLevel + 1 }); }
         // 🎯 [홀인원 상금] 사람이 우승하면 이번 회차 상금을 전부 받는다(봇 우승이면 다음 대회로 넘어간다). 합의 종료는 우승으로 치지 않는다.
@@ -7718,12 +7828,25 @@ io.on('connection', (socket) => {
         if (!aiGate()) return;
         socket._aiBusy = true;
         try {
-            const pr = AICoach.coachPrompt(rv, { kinds: _aiKinds(), entrants: FN_MTT.entrants });
-            if (!pr.decisions) { socket.emit('aiResult', { kind: 'coach', id: rv.id, text: '이 대회에서는 권장과 다른 결정이 없었습니다. 👍 지금처럼 치면 됩니다.' }); return; }
-            const t = await AI.text({ system: pr.system, user: pr.user, maxTokens: 3000, effort: 'medium', timeoutMs: 90000, bucket: 'coach', temperature: 0.3 });
+            const t = await aiCoachFor(rv);
             if (!t) { socket.emit('aiResult', { error: 'AI 가 답하지 못했습니다. 잠시 뒤 다시 눌러 주세요.' }); return; }
-            rv.ai = { text: t, t: Date.now(), by: AI.model }; MockDB.save();
             socket.emit('aiResult', { kind: 'coach', id: rv.id, text: t });
+        } finally { socket._aiBusy = false; }
+    });
+    // 📅 [주간 성장 리포트] 지금 바로 — 최근 7일
+    socket.on('aiWeek', async () => {
+        if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
+        if (!aiGate()) return;
+        const u = MockDB.users.get(socket.nickname), now = Date.now();
+        socket._aiBusy = true;
+        try {
+            const r = await aiWeekFor(u, now - AICoach.WEEK, now + 1, 'n' + new Date(now).toISOString().slice(0, 10));
+            if (!r) {
+                const c = AICoach.periodStats(u.fnSnaps, u.fnResults, now - AICoach.WEEK, now + 1, EvLoss.index);
+                socket.emit('aiResult', { error: !c ? '최근 7일 동안 끝난 딥스택 연습이 없습니다(성장 리포트는 오늘부터 쌓이는 기록으로 만듭니다).' : c.hands < 20 ? `최근 7일 동안 친 판이 ${c.hands}판뿐이라 리포트를 만들기에 너무 적습니다(20판 이상).` : 'AI 가 답하지 못했습니다. 잠시 뒤 다시 눌러 주세요.' });
+                return;
+            }
+            socket.emit('aiResult', { kind: 'week', report: r });
         } finally { socket._aiBusy = false; }
     });
     socket.on('aiExplain', async (data) => {
@@ -7760,6 +7883,7 @@ io.on('connection', (socket) => {
             cfg: { entrants: FN_MTT.entrants, startChips: FN_MTT.startingChips, startBB: FN_MTT.startingChips / FN_MTT.structure[0].bb, levelSec: FN_MTT.blindUpInterval,
                 lv1: FN_MTT.structure[0].sb + '/' + FN_MTT.structure[0].bb, paid: FN_MTT.paid, tableSize: FN_MTT.tableSize, rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel, normalBots: FN_MTT.normalBots, field: '모두 고수 실력 — 정석 약 절반에 ' + Object.keys(Field.FIELD_MIX).map(k => Field.STYLES[k].name + ' ' + Math.round(Field.FIELD_MIX[k] * 100) + '%').join(' · ') + ' 버릇이 섞임', anteLevel: 3 },
             ev: evView(F), summary: sum(F), results: (u.fnResults || []).slice(-20).reverse(), jackpot: MockDB.jpView(socket.nickname),
+            week: (u.fnWeekReports || []).slice(-1)[0] || null, aiOn: AI.enabled(),
             depth: per(F, dk, 'evDn_', 'evDl_'), phases: per(F, pk, 'evTn_', 'evTl_'),
             icm: { n: F.evIn || 0, ok: F.evIk || 0, loss: Math.round((F.evIl || 0) * 10) / 10, payouts: FN_MTT.payouts.map(x => x / FN_MTT.payouts.reduce((a, b) => a + b, 0) * 100) },
             freqs: Freqs.summarize(F), leaks, blunders: Blunder.top(F.blunders, 0, 5).map(Blunder.describe),
@@ -8465,6 +8589,9 @@ MockDB.initRemote().catch(e => console.error('🌐 원격 초기화 오류:', e 
         if (process.send || process.env.WATCHDOG) OPS.startWatchdog(Number(process.env.WATCHDOG_MS) || 60000);
         if (MockDB._remote && !MockDB._remoteLoadOk) OPS.alert('turso', 'Turso(전적 DB)를 불러오지 못했습니다 — 전적이 이 PC 에만 저장됩니다.');
     } catch (e) { console.error('🛠️ 운영 도우미 시작 실패(게임에는 영향 없음):', e && e.message); }
+    // 🧑‍🏫📅 AI 밤 자동 작업 — 0~5시에 못 만든 코치 리포트 · 지난주 성장 리포트(10분마다 확인)
+    setTimeout(aiNightly, 120000).unref();
+    setInterval(aiNightly, 10 * 60 * 1000).unref();
     // 🌙 밤 봇 맞대결: 새벽 3시대에 하루 한 번, 접속자도 진행 중인 대회도 없으면 tools/minipc/nightab.js 를 따로 띄운다.
     //    (감시기 아래에서만 · server.env 의 NIGHT_AB=0 이면 끔 · 시험 서버 두 대는 운영보다 낮은 우선순위로 돈다)
     if (process.send && process.env.NIGHT_AB !== '0') {

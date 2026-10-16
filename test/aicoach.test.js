@@ -69,3 +69,57 @@ test('AI Ollama: 기본 모델은 exaone3.5:7.8b · 모델을 30분 올려 둔�
     assert.ok(!('temperature' in body.options), '안 주면 모델 기본값');
     srv.close();
 });
+
+test('주간 성장 리포트: 주 시작 전 마지막 합계와 주 끝 합계의 차이로 그 주만 센다', () => {
+    const EvLoss = require('../lib/evloss');
+    const D = 24 * 3600 * 1000, w0 = C.weekStart(new Date(2026, 9, 14, 15).getTime());   // 2026-10-14(수) → 그 주 월요일 10/12 0시
+    assert.strictEqual(new Date(w0).getDay(), 1);
+    assert.strictEqual(new Date(w0).getDate(), 12);
+    const F = (h, l, kn) => ({ evHands: h, evLoss: l, evLossSq: l * 2, evLossN: l, evLossNSq: l * 2, lkN_overfold: kn, lkB_overfold: kn * 1.5 });
+    const snaps = [C.snapOf(F(100, 10, 2), w0 - 3 * D, ['overfold']), C.snapOf(F(250, 22, 5), w0 + D, ['overfold']), C.snapOf(F(400, 30, 6), w0 + 4 * D, ['overfold'])];
+    const results = [{ t: w0 - 3 * D, place: 3, paid: 6 }, { t: w0 + D, place: 1, paid: 6 }, { t: w0 + 4 * D, place: 9, paid: 6 }];
+    const s = C.periodStats(snaps, results, w0, w0 + C.WEEK, EvLoss.index);
+    assert.strictEqual(s.partial, false);
+    assert.strictEqual(s.hands, 300, '400 − 100');
+    assert.deepStrictEqual(s.kinds.overfold, [4, 6]);
+    assert.strictEqual(s.games, 2); assert.strictEqual(s.wins, 1); assert.strictEqual(s.itm, 1); assert.strictEqual(s.best, 1);
+    assert.strictEqual(s.score, EvLoss.index({ evHands: 300, evLoss: 20, evLossSq: 40, evLossN: 20, evLossNSq: 40 }).score);
+    // 주 시작 전 기록이 없으면 그 주에 처음 찍은 것부터(partial)
+    const p = C.periodStats(snaps.slice(1), results, w0, w0 + C.WEEK, EvLoss.index);
+    assert.strictEqual(p.partial, true); assert.strictEqual(p.hands, 150);
+    assert.strictEqual(C.periodStats(snaps, results, w0 + C.WEEK, w0 + 2 * C.WEEK, EvLoss.index), null, '그 주에 끝난 대회가 없으면 없음');
+    const pr = C.weekPrompt(s, null, { kinds: { overfold: { name: '너무 많이 접음' } } });
+    assert.match(pr.user, /대회 2번 · 입상 1번 · 우승 1번/);
+    assert.match(pr.user, /너무 많이 접음 4번 6bb/);
+    assert.match(pr.user, /그 전 기간: 기록 없음/);
+});
+
+test('딥스택 중계: 기본 문장은 사실만 · AI 문장은 주인공 이름이 있고 없는 숫자가 없을 때만 쓴다', () => {
+    const e = { kind: 'out', nick: '철수', place: 5, alive: 4, paid: 6 };
+    assert.strictEqual(C.castTemplate(e), '💀 철수 님 5위로 탈락합니다. 남은 사람 4명 (입상).');
+    assert.strictEqual(C.castCheck('🔥 철수 님, 5위로 아쉽게 퇴장합니다!', e), '🔥 철수 님, 5위로 아쉽게 퇴장합니다!');
+    assert.strictEqual(C.castCheck('철수 님이 3위로 떨어집니다', e), null, '사실에 없는 숫자');
+    assert.strictEqual(C.castCheck('한 명이 탈락했습니다', e), null, '주인공 이름 없음');
+    assert.strictEqual(C.castCheck('철수 님 탈락'.repeat(20), e), null, '너무 김');
+    const b = { kind: 'bubble', alive: 7, paid: 6, leader: '🤖돌부처', leaderBB: 42 };
+    assert.match(C.castTemplate(b), /7명 남았고 6위까지 입상.*돌부처 님\(42bb\)/);
+    assert.strictEqual(C.castCheck('🫧 버블! 7명 중 한 명만 더 떨어지면 입상, 선두는 돌부처 님 42bb!', b), '🫧 버블! 7명 중 한 명만 더 떨어지면 입상, 선두는 돌부처 님 42bb!');
+    assert.strictEqual(C.castTemplate({ kind: '없는것' }), null);
+});
+
+test('AI Ollama: 긴 글(코치)을 쓰는 동안 들어온 짧은 대사는 기다리지 않고 바로 null', async () => {
+    const http = require('http');
+    let hits = 0;
+    const srv = http.createServer((req, res) => { hits++; req.resume(); req.on('end', () => setTimeout(() => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ message: { content: '답' } })); }, 300)); });
+    await new Promise(r => srv.listen(0, '127.0.0.1', r));
+    const ai = createAI({ OLLAMA_URL: 'http://127.0.0.1:' + srv.address().port });
+    const long = ai.text({ system: 's', user: 'u', bucket: 'coach' });
+    assert.strictEqual(ai.busy(), true);
+    assert.strictEqual(await ai.text({ system: 's', user: 'u', bucket: 'chat' }), null);
+    assert.strictEqual(await long, '답');
+    assert.strictEqual(ai.busy(), false);
+    assert.strictEqual(hits, 1, '짧은 대사는 보내지도 않았다');
+    assert.strictEqual(ai.usedToday().chat, 0, '한도도 쓰지 않았다');
+    assert.strictEqual(await ai.text({ system: 's', user: 'u', bucket: 'chat' }), '답', '끝난 뒤에는 된다');
+    srv.close();
+});
