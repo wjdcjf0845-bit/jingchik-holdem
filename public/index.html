@@ -4643,7 +4643,7 @@
         <!-- 🏁 파이널나인 딥스택 연습 (20인 MTT) — 기록은 이 모드 것만 따로 모은다 -->
         <div class="lb-sec">🏁 대회 연습</div>
         <div class="fn-row">
-            <button type="button" class="fn-btn go" onclick="socket.emit('createFnMtt')">파이널나인 딥스택 연습 <small id="fn-btn-sub">50인 대회 열기 · 친구는 열린 방 목록에서 참가</small></button>
+            <button type="button" class="fn-btn go" onclick="socket.emit('createFnMtt')">파이널나인 딥스택 연습 <small id="fn-btn-sub">36인 대회 열기 · 친구는 열린 방 목록에서 참가</small></button>
             <button type="button" class="fn-btn" onclick="socket.emit('getFnReport')">연습 기록 <small>점수 · 피드백</small></button>
             <button type="button" class="fn-btn" onclick="socket.emit('getFnReview', {})">🎞️ 대회 복기 <small>판마다 복기</small></button>
         </div>
@@ -7945,7 +7945,7 @@
                 <br>· <b>플랍과 턴의 일부 상황은 공개 솔버(TexasSolver)로 미리 푼 답을 씁니다.</b> 둘만 남은 판 가운데 오픈 → BB 콜(뒷자리 · CO · 앞자리 · 헤즈업 · 블라인드 대결, 각 100 · 40 · 25bb)과 3벳 팟 세 가지를 대표 보드별로 풀었습니다(오차 약 1%, 계속 추가 중). 턴은 플랍이 "둘 다 체크" 또는 "체크-벳-콜"로 지나간 판만 다룹니다. 실제 보드는 가장 비슷한 대표 보드로, 턴 카드는 다섯 종류로, 실제 패는 "탑페어 · 플러시 드로우" 같은 종류로 바꿔 찾기 때문에 솔버의 정확한 답이 아니라 근사입니다. 조언에 "🧮 솔버 계산"이라고 표시됩니다.
                 <br>· 솔버 자료를 봇에게 쓰게 하고 안 쓰는 봇과 맞붙인 결과(각 약 14만 판, 100판당 bb): 프리플랍 범위표 +11.9 ± 7.1 · 플랍 자료 +7.2 ± 13.1 · 턴 자료 −9.9 ± 7.7(22보드일 때) → +11.3 ± 9.3(전체 보드로 넓힌 뒤). <b>어느 것도 오차를 뚜렷이 넘지 못했습니다.</b> 같은 전략끼리 붙여도 ±17(7.7만 판)이 나올 만큼 이 측정은 흔들립니다. 그래서 "솔버 자료를 쓰면 이 봇들을 상대로 더 번다"는 확인되지 않았습니다 — 솔버 자료의 값은 더 맞는 기준이라는 데 있지, 봇을 더 잘 이기는 데 있지 않습니다. 고수 봇은 프리플랍·플랍·턴 자료를 모두 씁니다. 조언대로 치는 가상 플레이어로 본 턴 솔버 조언의 효과도 헤즈업 −0.6 ± 5.8 · 6인 −12.6 ± 14.1로 확인되지 않았습니다.
                 <br>· 프리플랍 범위표는 솔버에 딸려 온 6인 100bb 프리플랍 해(510개 상황)입니다. 레이크가 있는 캐시 게임 기준이라 BB의 콜만 조금 넓혔고(계속하는 폭의 18%), 헤즈업은 자료가 없어 직접 적은 표를 씁니다.
-                <br>· 숏스택의 올인(12bb 이하 푸시 · 25bb 이하 리쉬브)은 표가 아니라 그 자리의 스택·앤티·뒤 사람들의 칩으로 직접 푼 균형입니다. 올인 승부는 뒤에 벳이 없어서 패 대 패 승률만으로 정확히 계산됩니다(헤즈업 10bb에서 널리 알려진 값 — 푸시 58% · 콜 37% — 과 일치). 받는 사람이 여럿이면 먼저 받는 한 명만 보는 어림이 들어갑니다. 유효 스택 약 13~48bb의 오픈·림프·콜·3벳·올인은 대회용 프리플랍 솔버(HRC)로 직접 푼 해를 씁니다 — 2~6인 모두 15·20·25·30·40bb (헤즈업 포함, BB 앤티, 스택이 모두 같다고 가정). 7~9인 테이블은 따로 푼 해가 없어 6인 해를 씁니다 — LJ·HJ·CO·BTN·SB·BB 는 6인의 UTG·HJ·CO·BTN·SB·BB 와 같은 자리로 보고, 그보다 앞자리(UTG·UTG+1·UTG+2)는 6인 UTG 범위를 그 표 자신의 "한 자리 앞으로 갈 때 좁아지는 비율"로 한 칸마다 더 좁혀서 엽니다(9인용으로 직접 푼 해가 아닌 어림 — 25bb 에서 UTG 약 14%). 3명이 입상하는 대회의 결승 테이블(남은 3~6명이 한 테이블 · 리바인 끝 · 가장 큰 스택이 가장 작은 스택의 3배 이내)에서는 상금(50/30/20)을 반영해(ICM) 따로 푼 해가 있는 깊이면 그것을 씁니다(딥스택 연습은 6위까지 입상이라 이 표 대신 상금 기준 올인 계산만 씁니다). 그보다 깊으면 100bb 범위표로 돌아갑니다.</div>
+                <br>· 숏스택의 올인(12bb 이하 푸시 · 25bb 이하 리쉬브)은 표가 아니라 그 자리의 스택·앤티·뒤 사람들의 칩으로 직접 푼 균형입니다. 올인 승부는 뒤에 벳이 없어서 패 대 패 승률만으로 정확히 계산됩니다(헤즈업 10bb에서 널리 알려진 값 — 푸시 58% · 콜 37% — 과 일치). 받는 사람이 여럿이면 먼저 받는 한 명만 보는 어림이 들어갑니다. 유효 스택 약 13~48bb의 오픈·림프·콜·3벳·올인은 대회용 프리플랍 솔버(HRC)로 직접 푼 해를 씁니다 — 2~6인 모두 15·20·25·30·40bb (헤즈업 포함, BB 앤티, 스택이 모두 같다고 가정). 7~9인 테이블은 따로 푼 해가 없어 6인 해를 씁니다 — LJ·HJ·CO·BTN·SB·BB 는 6인의 UTG·HJ·CO·BTN·SB·BB 와 같은 자리로 보고, 그보다 앞자리(UTG·UTG+1·UTG+2)는 6인 UTG 범위를 그 표 자신의 "한 자리 앞으로 갈 때 좁아지는 비율"로 한 칸마다 더 좁혀서 엽니다(9인용으로 직접 푼 해가 아닌 어림 — 25bb 에서 UTG 약 14%). 3명이 입상하는 대회의 결승 테이블(남은 3~6명이 한 테이블 · 리바인 끝 · 가장 큰 스택이 가장 작은 스택의 3배 이내)에서는 상금(50/30/20)을 반영해(ICM) 따로 푼 해가 있는 깊이면 그것을 씁니다(딥스택 연습은 4위까지 입상(50/30/20 이 아님)이라 이 표 대신 상금 기준 올인 계산만 씁니다). 그보다 깊으면 100bb 범위표로 돌아갑니다.</div>
 
             <div class="sr-section-title" style="margin-top:14px;">③ 우리 방의 실제 기록 <small style="font-weight:400; color:var(--txt-dim);">(최근 30일 · 왼쪽 = 실제로 딴 칩, 오른쪽 = 점수)</small></div>
             <div class="skbs">${realRows}</div>
@@ -8142,7 +8142,7 @@
         const board = d.board.length ? d.board.map((u, i) => `<div class="skd${u.me ? ' me' : ''}"><b>${i + 1}. ${esc(u.nick)}${u.me ? ' (나)' : ''}</b><span>${u.score != null ? `점수 <b style="color:${skColor(u.score)};">${u.score}</b> ±${u.pm} · 100판당 손실 ${u.loss100}bb` : '점수 집계 전'}</span><span>대회 ${u.games}번 · 입상 ${u.itm}번 · 우승 ${u.wins}번${u.avgPlace != null ? ` · 평균 ${u.avgPlace}위` : ''}</span><small>${u.hands.toLocaleString()}판</small></div>`).join('') : '<div class="bl-none">아직 기록이 없습니다.</div>';
         list.innerHTML = `
             <div class="skx-head"><b>🏁 파이널나인 딥스택 연습</b>${ev ? `<span style="color:${skColor(ev.score)};">${ev.score}<small>점 ±${ev.pm}</small></span>` : ''}</div>
-            <div class="gd-text" style="font-size:12px; margin-bottom:8px;">${c.entrants}명 대회 · 시작 ${c.startChips.toLocaleString()}칩(1레벨 ${c.lv1} · ${c.startBB}bb) · 블라인드는 파이널나인 챔피언스컵 구조표 그대로 · 레벨 ${Math.round(c.levelSec / 60)}분(실제 매장은 20분 — 앱은 판이 빨리 돌아 짧게 잡은 값, 휴식·칩 정리는 없음) · ${c.anteLevel}레벨부터 BB 앤티 · ${c.rebuys ? `리바인 ${c.rebuys}회(레벨 ${c.rebuyUntilLevel}까지)` : '리바인 없음'} · 테이블 ${c.tableSize}인 · 상대는 ${c.field || ('중수 ' + c.normalBots + '명에 나머지 고수')} · 상위 ${c.paid}명 입상(기록만 — 홀인원 상금은 1위만). <b>이 모드에서 친 판만</b> 여기에 모이고, 실력 점수·랭킹에는 들어가지 않습니다. 실제 대회는 13위까지 상금이지만, 50명에 맞춰 6위까지를 입상으로 봅니다.</div>
+            <div class="gd-text" style="font-size:12px; margin-bottom:8px;">${c.entrants}명 대회 · 시작 ${c.startChips.toLocaleString()}칩(1레벨 ${c.lv1} · ${c.startBB}bb) · 블라인드는 파이널나인 챔피언스컵 구조표 그대로 · 레벨 ${Math.round(c.levelSec / 60)}분(실제 매장은 20분 — 앱은 판이 빨리 돌아 짧게 잡은 값, 휴식·칩 정리는 없음) · ${c.anteLevel}레벨부터 BB 앤티 · ${c.rebuys ? `리바인 ${c.rebuys}회(레벨 ${c.rebuyUntilLevel}까지)` : '리바인 없음'} · 테이블 ${c.tableSize}인 · 상대는 ${c.field || ('중수 ' + c.normalBots + '명에 나머지 고수')} · 상위 ${c.paid}명 입상(기록만 — 홀인원 상금은 1위만). <b>이 모드에서 친 판만</b> 여기에 모이고, 실력 점수·랭킹에는 들어가지 않습니다. 실제 대회는 13위까지 상금이지만, ${c.entrants}명에 맞춰 ${c.paid}위까지를 입상으로 봅니다.</div>
             <div class="sr-section-title">① 대회 성적</div>
             <div class="skx-steps">
                 <div><span>나간 대회</span><b>${sm.games}</b><small>입상 ${sm.itm}번${sm.games ? ` (${Math.round(sm.itm / sm.games * 100)}%)` : ''} · 우승 ${sm.wins}번${sm.avgPlace != null ? ` · 평균 순위 ${sm.avgPlace}위` : ''} — ${c.entrants}명 중 ${c.paid}명 입상이라 실력이 같다면 입상은 ${Math.round(c.paid / c.entrants * 100)}%쯤이 평균입니다</small></div>
@@ -8323,7 +8323,7 @@
     // 🎯 홀인원 상금 — 로비 버튼에 지금 상금을 보여 준다
     socket.on('jackpot', d => {
         const el = document.getElementById('fn-btn-sub');
-        if (el && d) el.innerText = `50인 대회 · 🎯 홀인원 상금 ${Number(d.pot || 0).toLocaleString()}원 (${d.cycle}회차)`;
+        if (el && d) el.innerText = `36인 대회 · 🎯 홀인원 상금 ${Number(d.pot || 0).toLocaleString()}원 (${d.cycle}회차)`;
     });
     socket.on('mttStatus', d => {
         const bar = document.getElementById('mtt-status-bar');
