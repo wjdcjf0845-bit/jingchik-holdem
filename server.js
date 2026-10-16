@@ -1738,7 +1738,7 @@ class GameRoom {
         try { decision = this.botDecide(expectedNick); } catch (e) { decision = null; }
         if (process.env.DEV_PFCHECK && decision) this._devPfCheck(expectedNick, decision);
         // 🔬 개발용(DEV_STYLELOG): 봇 결정마다 성격·스트리트·행동 — 스타일별 플레이 수치를 잰다
-        if (process.env.DEV_STYLELOG && decision) { const pp = this.players[expectedNick], pe = pp._persona || {}, tc = Math.max(0, this.currentHighestBet - (pp.currentBet || 0)); console.log('STYLE ' + JSON.stringify({ n: expectedNick, lab: pe.label, d: pe.difficulty, st: (this.communityCards || []).length, tc: tc > 0 ? 1 : 0, a: decision.type, ai: decision.type === 'allin' || (decision.type === 'raise' && decision.amount >= pp.chips + pp.currentBet) ? 1 : 0 })); }
+        if (process.env.DEV_STYLELOG && decision) { const pp = this.players[expectedNick], pe = pp._persona || {}, tc = Math.max(0, this.currentHighestBet - (pp.currentBet || 0)); console.log('STYLE ' + JSON.stringify({ n: expectedNick, lab: pe.field ? pe.label : '정석', f: pe.field || 'pro', d: pe.difficulty, st: (this.communityCards || []).length, tc: tc > 0 ? 1 : 0, a: decision.type, ai: decision.type === 'allin' || (decision.type === 'raise' && decision.amount >= pp.chips + pp.currentBet) ? 1 : 0 })); }
         const toCall =Math.max(0, this.currentHighestBet - (p.currentBet || 0));
         const potNow = this.pot + Object.values(this.players).reduce((s, x) => s + (x.currentBet || 0), 0);
         const thinkMs = this.botThinkTime(expectedNick, decision, toCall, potNow);
@@ -1868,7 +1868,12 @@ class GameRoom {
         //    초타이트도 벳에 13% 만 접었다(2026-10-16 측정) — 프리플랍만 타이트하고 플랍 이후는 콜링스테이션처럼 쳤다.
         if (persona.field === 'nit' && this.communityCards.length >= 3 && toCall > 0) {
             const po = toCall / (totalPot + toCall);
-            if (equity < Math.max(0.55, po + 0.15)) return { type: 'fold' };
+            if (equity < Math.max(0.5, po + 0.12)) return { type: 'fold' };
+        }
+        // 🎭 매장형 콜링스테이션 · 루즈-패시브: 고수 판단은 접을 자리에서도, 승률이 팟 오즈에 조금 못 미치는 정도면 따라간다(잘 안 접는 버릇)
+        if ((persona.field === 'station' || persona.field === 'lp') && this.communityCards.length >= 3 && toCall > 0 && toCall <= p.chips * 0.75) {
+            const po = toCall / (totalPot + toCall);
+            if (equity >= po - (persona.field === 'station' ? 0.08 : 0.04)) return { type: 'call' };
         }
 
         const callable = toCall <= p.chips;
@@ -3095,13 +3100,15 @@ class GameRoom {
     // 🤖 봇 성격 아키타입 — 닉네임 해시로 고정 배정 (봇마다 다른 스타일)
     assignPersona(nick, difficulty, style) {
         const h = this.hashNick(nick);
-        // 🎭 매장형 스타일(lib/fieldstyle.js): 중수 실력 + 그 스타일의 성격 값. 고수로 바꾸지 않는다(정석으로 바뀌면 스타일이 사라진다).
+        // 🎭 매장형 스타일(lib/fieldstyle.js): 고수 실력(플랍 이후 범위 읽기·솔버 자료 그대로) + 그 스타일의 버릇.
+        //    프리플랍은 botDecide 의 fieldPreflop 이 스타일대로, 플랍 이후는 고수 판단에 성격 값(잘 안 접음 · 블러프 많음 등)만 얹는다.
+        //    (처음엔 중수 실력이었는데 정석 고수가 +70bb/100 으로 이겨 상대가 너무 쉬워졌다 — 운영자 요청으로 고수로)
         if (style && Field.STYLES[style]) {
-            const base = this.assignPersona(nick, 'normal');
-            const T = { station: { equityBias: 1.08, valueBetFreq: 0.55, raiseFreq: 0.3, bluffFreq: 0.05, callSticky: true },
-                lp: { equityBias: 1.02, valueBetFreq: 0.5, raiseFreq: 0.28, bluffFreq: 0.04, callSticky: true },
-                nit: { equityBias: 0.86, valueThresh: 0.7, raiseThresh: 0.78, valueBetFreq: 0.68, bluffFreq: 0.03, callSticky: false },
-                maniac: { equityBias: 1.2, valueThresh: 0.45, raiseThresh: 0.5, valueBetFreq: 0.9, raiseFreq: 0.82, thinRaiseFreq: 0.3, bluffFreq: 0.36, sizeBase: 0.9, callSticky: false } }[style];
+            const base = this.assignPersona(nick, 'hard');
+            const T = { station: { valueBetFreq: 0.62, raiseFreq: 0.35, bluffFreq: 0.06, callSticky: true },
+                lp: { valueBetFreq: 0.6, raiseFreq: 0.35, bluffFreq: 0.05, callSticky: true },
+                nit: { valueThresh: 0.66, raiseThresh: 0.74, bluffFreq: 0.03, thinRaiseFreq: 0.05, callSticky: false },
+                maniac: { valueBetFreq: 0.92, raiseFreq: 0.8, thinRaiseFreq: 0.3, bluffFreq: 0.32, sizeBase: 0.85, callSticky: false } }[style];
             return Object.assign(base, T, { field: style, label: Field.STYLES[style].name });
         }
         const diff = ['easy', 'normal', 'hard'].includes(difficulty) ? difficulty : 'normal';
@@ -3228,7 +3235,7 @@ class GameRoom {
         // 🔬 개발용(DEV_FIELD_ROOM): 봇을 넣는 순서대로 정석 · 콜링스테이션 · 루즈-패시브 · 초타이트 · 광폭 — 스타일끼리 맞붙여 잰다
         const devStyle = process.env.DEV_FIELD_ROOM ? ['pro', 'station', 'lp', 'nit', 'maniac'][this.playerOrder.filter(n => this.players[n] && this.players[n].isBot).length % 5] : null;
         this.playerOrder.push(name);
-        const persona = devStyle && devStyle !== 'pro' ? this.assignPersona(name, 'normal', devStyle) : this.assignPersona(name, diff);
+        const persona = devStyle && devStyle !== 'pro' ? this.assignPersona(name, 'hard', devStyle) : this.assignPersona(name, diff);
         this.players[name]._persona = persona;
         const diffLabel = { easy: '🟢초보', normal: '🟡중수', hard: '🔴고수' }[diff];
         io.to(this.roomId).emit('gameMessage', `🤖 ${name} 님이 참가했습니다! (${diffLabel} · ${persona.label})`);
@@ -4551,7 +4558,7 @@ class GameRoom {
         if (!this.handStartStacks || this._netHand === this.handId) return;
         this._netHand = this.handId;
         const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
-        if (process.env.DEV_STYLELOG) this.playerOrder.forEach(n => { const pl = this.players[n], st = this.handStartStacks[n]; if (pl && pl.isBot && typeof st === 'number') console.log('SNET ' + JSON.stringify({ n, lab: (pl._persona || {}).label, d: (pl._persona || {}).difficulty, bb: Math.round((pl.chips - st) / bb * 100) / 100 })); });
+        if (process.env.DEV_STYLELOG) this.playerOrder.forEach(n => { const pl = this.players[n], st = this.handStartStacks[n]; if (pl && pl.isBot && typeof st === 'number') console.log('SNET ' + JSON.stringify({ n, lab: (pl._persona || {}).field ? (pl._persona || {}).label : '정석', d: (pl._persona || {}).difficulty, bb: Math.round((pl.chips - st) / bb * 100) / 100 })); });
         this.playerOrder.forEach(nick => {
             const pl = this.players[nick], start = this.handStartStacks[nick];
             if (!pl || pl.isBot || typeof start !== 'number' || !this.countsForSkill()) return;
@@ -7630,7 +7637,7 @@ io.on('connection', (socket) => {
         board.sort((a, b) => (b.score == null ? -1 : b.score) - (a.score == null ? -1 : a.score));
         socket.emit('fnReport', {
             cfg: { entrants: FN_MTT.entrants, startChips: FN_MTT.startingChips, startBB: FN_MTT.startingChips / FN_MTT.structure[0].bb, levelSec: FN_MTT.blindUpInterval,
-                lv1: FN_MTT.structure[0].sb + '/' + FN_MTT.structure[0].bb, paid: FN_MTT.paid, tableSize: FN_MTT.tableSize, rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel, normalBots: FN_MTT.normalBots, field: '정석 고수 약 절반에 ' + Object.keys(Field.FIELD_MIX).map(k => Field.STYLES[k].name + ' ' + Math.round(Field.FIELD_MIX[k] * 100) + '%').join(' · ') + ' 이 섞임', anteLevel: 3 },
+                lv1: FN_MTT.structure[0].sb + '/' + FN_MTT.structure[0].bb, paid: FN_MTT.paid, tableSize: FN_MTT.tableSize, rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel, normalBots: FN_MTT.normalBots, field: '모두 고수 실력 — 정석 약 절반에 ' + Object.keys(Field.FIELD_MIX).map(k => Field.STYLES[k].name + ' ' + Math.round(Field.FIELD_MIX[k] * 100) + '%').join(' · ') + ' 버릇이 섞임', anteLevel: 3 },
             ev: evView(F), summary: sum(F), results: (u.fnResults || []).slice(-20).reverse(), jackpot: MockDB.jpView(socket.nickname),
             depth: per(F, dk, 'evDn_', 'evDl_'), phases: per(F, pk, 'evTn_', 'evTl_'),
             icm: { n: F.evIn || 0, ok: F.evIk || 0, loss: Math.round((F.evIl || 0) * 10) / 10, payouts: FN_MTT.payouts.map(x => x / FN_MTT.payouts.reduce((a, b) => a + b, 0) * 100) },
@@ -7946,7 +7953,13 @@ io.on('connection', (socket) => {
             const bots = mtt.entrants.filter(e => e.isBot).map(e => e.nick);
             for (let i = bots.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bots[i], bots[j]] = [bots[j], bots[i]]; }
             const styles = Field.mix(bots.length);
-            bots.forEach((n, i) => { mtt.botLevel[n] = styles[i] === 'pro' ? 'hard' : 'normal'; mtt.botStyle[n] = styles[i] === 'pro' ? null : styles[i]; });
+            // 🏷️ 스타일마다 별명을 붙인다(lib/fieldstyle.js NAMES) — 이름만 봐도 어떤 버릇인지 짐작하게. 아직 자리에 앉기 전이라 이름을 바꿔도 된다.
+            const used = new Set(mtt.entrants.filter(e => !e.isBot).map(e => e.nick));
+            bots.forEach((n, i) => {
+                const st = styles[i], nn = Field.nameFor(st, used); used.add(nn);
+                const e = mtt.entrants.find(x => x.nick === n); if (e) e.nick = nn;
+                mtt.botLevel[nn] = 'hard'; mtt.botStyle[nn] = st === 'pro' ? null : st;
+            });
         }
         if (mtt.entrants.length < 2) { socket.emit('gameMessage', '🚫 최소 2명 필요합니다.'); return; }
         mtt.start();

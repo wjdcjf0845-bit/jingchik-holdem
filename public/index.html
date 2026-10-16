@@ -8111,7 +8111,7 @@
         myMtt = d.mttId;
         document.getElementById('mttwait-title').innerText = `🏆 ${d.name}`;
         document.getElementById('mttwait-info').innerText = d.fn
-            ? `파이널나인 딥스택 연습 · 정원 ${d.maxEntrants}명 (시작하면 빈자리는 봇이 채웁니다 — 실제 매장처럼 정석 고수에 콜링스테이션·루즈-패시브·초타이트·광폭을 섞어서) · 시작칩 ${d.startingChips.toLocaleString()} (${d.startBB}bb) · 레벨 ${Math.round(d.levelSec / 60)}분 · 3레벨부터 BB 앤티 · ${d.rebuys ? `리바인 ${d.rebuys}회(레벨 ${d.rebuyUntilLevel}까지, 자동)` : '리바인 없음'} · 상위 ${d.paid}명 입상(홀인원 상금은 1위만) · 지금 ${d.entrants.length}명 — 이 대회의 기록은 "연습 기록"에만 쌓입니다`
+            ? `파이널나인 딥스택 연습 · 정원 ${d.maxEntrants}명 (시작하면 빈자리는 봇이 채웁니다 — 모두 고수 실력이고, 절반은 정석 · 나머지는 콜링스테이션·루즈-패시브·초타이트·광폭 버릇이 있습니다. 별명을 보면 버릇을 짐작할 수 있습니다) · 시작칩 ${d.startingChips.toLocaleString()} (${d.startBB}bb) · 레벨 ${Math.round(d.levelSec / 60)}분 · 3레벨부터 BB 앤티 · ${d.rebuys ? `리바인 ${d.rebuys}회(레벨 ${d.rebuyUntilLevel}까지, 자동)` : '리바인 없음'} · 상위 ${d.paid}명 입상(홀인원 상금은 1위만) · 지금 ${d.entrants.length}명 — 이 대회의 기록은 "연습 기록"에만 쌓입니다`
             : `테이블 ${d.tableSize}인 · 시작칩 ${d.startingChips.toLocaleString()} · ${d.entrants.length}명 참가`;
         // 🎯 홀인원 상금(딥스택 연습): 지금 상금 · 내 참가비 안내 · 이번 회차 참가자
         const jpEl = document.getElementById('mttwait-jackpot');
