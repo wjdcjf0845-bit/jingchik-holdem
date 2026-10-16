@@ -19,3 +19,7 @@ public/*.bak-*
 # Claude Code 로컬 툴링 (배포와 무관)
 .claude/
 scratch/
+
+# 명장면 저장(lib/highlights.js) — 서버 데이터라 커밋하지 않는다
+highlights.json
+highlights.json.tmp

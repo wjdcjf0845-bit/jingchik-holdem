@@ -44,7 +44,10 @@ const START_TOKENS = Math.max(0, parseInt(process.env.DEV_START_TOKENS, 10) || 0
 // 🏆 토큰은 "사람" 이 이만큼 이상 참가한 토너먼트에서만 준다.
 //    봇만 앉혀 놓고 혼자 우승을 찍어내면 토큰이 우승의 증표가 못 된다.
 const TOKEN_MIN_HUMANS = 3;
-const THROW_ITEMS = ['🍅', '🌹', '🥚', '👏']; // 🍅 상대에게 던질 수 있는 것 (연출 전용)
+const THROW_ITEMS = ['🍅', '🌹', '🥚', '👏', '🍺', '💸', '🧊']; // 🍅 상대에게 던질 수 있는 것 (연출 전용)
+// 😂 감정표현(좌석 위 말풍선 + 효과음) · 💬 빠른 대화(버튼 하나로 보내는 말) — 클라이언트(public/index.html)의 목록과 같은 순서
+const EMOTES = ['😂', '😡', '😎', '🤔', '😭', '🙏', '🫡', '🤫', '😱', '🥳'];
+const QUICK_CHATS = ['나이스 핸드 👍', '블러프지? 🤨', 'GG 🤝', '한 판만 더! 🔁', '제발… 🙏', '운이 좋았네요 🍀', '잘 접었다 😮‍💨', '빨리 좀요 ⏰'];
 const PHOTO_MAX_BYTES = 24000;   // 📷 프로필 사진 원본 상한 (클라가 128px 로 줄여 보내면 5~10KB)
 const PHOTO_MAX_B64 = 40000;     // 📷 data URL 문자열 상한 — 파싱 전에 먼저 걸러낸다
 const photoRate = new Map();     // 📷 닉네임 → 마지막 업로드 시각 (도배 방지)
@@ -120,6 +123,7 @@ const EvLoss = require('./lib/evloss');         // 📉 결정마다 잃은 기�
 const Freqs = require('./lib/freqs');           // 📊 상황별 빈도(오픈·방어·3벳·c벳…)를 기준과 비교
 const VRange = require('./lib/vrange');         // 🔍 상대의 프리플랍 행동 → 들고 있을 만한 패의 무게
 const Field = require('./lib/fieldstyle');   // 🎭 매장형 상대 스타일(딥스택 섞기)
+const Highlights = require('./lib/highlights'); // 🎬 명장면(배드비트·쿨러·리버 역전·큰 팟·포카드 이상)
 const EqMC = require('./lib/equitymc');      // 🎲 플랍 이후 승률(몬테카를로)
 const EqPool = require('./lib/eqpool');      // 🧵 사람 결정의 정밀 승률을 따로 도는 스레드에서
 const FlopSolve = require('./lib/flopsolve');   // 🧮 솔버로 미리 풀어 둔 플랍 전략 조회
@@ -189,7 +193,13 @@ function hasPhoto(u) { return !!(u && u.photo && u.photo.b64); }
 // 🤖 봇도 밋밋하지 않게 — 이름에서 뽑은 고정 값으로 뒷면/아바타를 준다 (구매와 무관한 연출).
 const BOT_BACKS = ['back_classic', 'back_verm', 'back_jade', 'back_noir', 'back_peony'];
 const BOT_AVATARS = ['av_fox', 'av_cat', 'av_owl', 'av_wolf', 'av_shark'];
+// 🎭 딥스택의 스타일 봇: 스타일마다 정해진 아바타·카드 뒷면(별명과 함께 버릇을 짐작하게). 대회가 봇을 앉힐 때 적어 둔다.
+const BOT_STYLE = new Map();     // 봇 이름 → 'pro' | 'station' | 'lp' | 'nit' | 'maniac'
+const STYLE_COS = { pro: { avatar: 'av_shark', back: 'back_noir' }, station: { avatar: 'av_cat', back: 'back_verm' }, lp: { avatar: 'av_fox', back: 'back_peony' },
+    nit: { avatar: 'av_owl', back: 'back_jade' }, maniac: { avatar: 'av_wolf', back: 'back_royal' } };
 function botCosmetics(nick) {
+    const st = BOT_STYLE.get(nick);
+    if (st && STYLE_COS[st]) return Object.assign({ title: '', frame: 'fr_none', ph: 0 }, STYLE_COS[st]);
     let h = 0;
     for (let i = 0; i < nick.length; i++) h = (h * 31 + nick.charCodeAt(i)) >>> 0;
     return { back: BOT_BACKS[h % BOT_BACKS.length], avatar: BOT_AVATARS[(h >>> 5) % BOT_AVATARS.length], title: '', frame: 'fr_none', ph: 0 };
@@ -284,6 +294,7 @@ function hashPin(pin) {
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) { console.error('DATA_DIR 생성 실패:', e.message); }
 const DATA_FILE = path.join(DATA_DIR, 'poker_stats.json');
+const HL = Highlights.createStore(DATA_DIR);     // 🎬 명장면 저장소(DATA_DIR/highlights.json)
 
 // 📋 [접속 기록] 관리자 페이지에서 보는 로그. 전적 DB 와 파일을 분리한다 —
 //    로그는 자주 쌓이고 성격도 달라서(개인정보 포함) 같이 두면 서로 발목을 잡는다.
@@ -1119,6 +1130,17 @@ const BOT_LINES = {
         tank: ['어허... 이거 애매한데', '너 뭐 들었냐', '재밌네 진짜 ㅋㅋ', '가? 말어?'],
         call: ['안 믿는다 콜', '그래 까봐', '뻥이지? 콜'],
         taunt: ['{nick} 뭐 해 빨리 좀', '고민 길다 ㅋㅋ 티 난다', '타이머 다 간다', '그거 접을 패다 그냥 접어라']
+    },
+    '루즈-패시브': {
+        join: ['안녕하세요~ 살살 해 주세요', '구경 좀 하다 갈게요', '오늘은 천천히 가 볼게요'],
+        bigbet: ['어… 이번엔 좀 걸어 볼까요', '이건 좀 괜찮은 것 같아서요'],
+        bluff: ['음… 글쎄요?', '저도 잘 모르겠어요 ㅎㅎ'],
+        win: ['어? 제가 이겼네요 ㅎㅎ', '운이 좋았어요~', '감사합니다 🙏'],
+        lose: ['아이고 그럴 줄 알았어요', '역시 쉽지 않네요', '다음엔 붙어 볼게요'],
+        fold: ['이번엔 구경만 할게요', '비싸네요 접을게요'],
+        tank: ['음… 따라가 볼까…', '싸면 보는 건데…', '고민되네요'],
+        call: ['일단 따라가 볼게요', '싸니까 봐야죠', '궁금하네요 콜'],
+        taunt: ['천천히 하세요~', '저는 기다릴게요']
     },
     '루즈-어그레시브': {
         join: ['반갑다 잘 부탁해~', '오늘 운 좀 따라줘봐라', '재밌게 쳐보자'],
@@ -3173,7 +3195,7 @@ class GameRoom {
         const now = Date.now();
         if (event !== 'join' && now - (p._lastChat || 0) < 6000) return;
         // 성격별 발화 확률
-        const chatChance = { '광폭': 0.6, '루즈-어그레시브': 0.45, '타이트-어그레시브': 0.25, '콜링스테이션': 0.3, '초타이트': 0.15 }[arche] || 0.3;
+        const chatChance = { '광폭': 0.6, '루즈-어그레시브': 0.45, '타이트-어그레시브': 0.25, '콜링스테이션': 0.35, '루즈-패시브': 0.3, '초타이트': 0.12 }[arche] || 0.3;
         // 장고 혼잣말·도발은 심리전의 핵심이라 조금 더 자주 나오게
         const evChance = (event === 'tank' || event === 'taunt') ? Math.min(0.75, chatChance + 0.25) : chatChance;
         // 입장 멘트는 60%만 발화(여러 봇 추가 시 도배 방지), 승리/그 외는 확률 적용
@@ -4205,6 +4227,7 @@ class GameRoom {
             replay: this.buildReplay(potResults.flatMap(p => p.winners.map(w => ({ nick: w.nick, cards: w.cards, rank: w.rank }))))
         });
         this.revealShuffle(); // 🔐 셔플 검증 시드 공개
+        try { this.maybeHighlight(_contenders, allWinnerIds, totalPotAll); } catch (e) {}
 
         io.to(this.roomId).emit('gameResult', {
             message: (this.ritBoards ? '🎲 [런잇트와이스 결과]\n\n' : '🏆 [쇼다운 결과]\n\n') + messages.join('\n\n'),
@@ -4585,7 +4608,7 @@ class GameRoom {
         const dead = Math.max(0, total - inv(live[0]) - inv(live[1]));   // 접은 사람들이 두고 간 칩
         const adj = {};
         live.forEach(n => { const e = eq[n] / 100; adj[n] = e * (dead + m) - (1 - e) * m; });
-        this._allinEq = { handId: this.handId, adj };
+        this._allinEq = { handId: this.handId, adj, eq: { [live[0]]: eq[live[0]], [live[1]]: eq[live[1]] } };
     }
     // 다음 핸드를 시작하기 직전(또는 방이 끝날 때): 그 판에서 실제로 칩이 얼마나 오갔는지 적는다
     settleBlunders() {
@@ -5377,6 +5400,36 @@ class GameRoom {
     }
 
     // 🎬 [리플레이] 액션로그 + 시작스택 + 공개 홀카드를 묶어 리플레이 데이터 생성
+    // 🎬 명장면: 쇼다운이 볼 만한 판이면(lib/highlights.js detect) 리플레이째 남기고 테이블에 연출을 띄운다
+    maybeHighlight(contNicks, winners, pot) {
+        if (this.ritBoards || this._learnMode) return;
+        const board = this.communityCards;
+        if (board.length !== 5) return;
+        const cs = contNicks.map(n => ({ n, p: this.players[n] })).filter(x => x.p && x.p.hand && x.p.hand.length === 2);
+        if (cs.length < 2 || !cs.some(x => !x.p.isBot)) return;
+        const contenders = cs.map(x => ({ nick: x.n, rank: Hand.solve(x.p.hand.concat(board)).name, human: !x.p.isBot }));
+        const aq = this._allinEq && this._allinEq.handId === this.handId && this._allinEq.eq ? this._allinEq.eq : null;
+        // 리버 역전: 둘이 겨뤘을 때 턴 보드 기준 승률(남은 카드를 전부 깔아 본다)
+        let riverFlip = null;
+        if (cs.length === 2) {
+            const used = new Set(board.concat(cs[0].p.hand, cs[1].p.hand)), turn = board.slice(0, 4);
+            let a = 0, n = 0;
+            EqMC.FULL_DECK.forEach(c => {
+                if (used.has(c) && c !== board[4]) return;
+                const h0 = Hand.solve(cs[0].p.hand.concat(turn, [c])), h1 = Hand.solve(cs[1].p.hand.concat(turn, [c])), w = Hand.winners([h0, h1]);
+                a += w.length === 2 ? 0.5 : (w[0] === h0 ? 1 : 0); n++;
+            });
+            const e0 = n ? a / n * 100 : 50, loser = winners.has(cs[0].n) ? (winners.has(cs[1].n) ? null : cs[1].n) : cs[0].n;
+            if (loser) riverFlip = { loser, eq: loser === cs[0].n ? e0 : 100 - e0 };
+        }
+        const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+        const h = Highlights.detect({ winners: [...winners], contenders, potBB: pot / bb, allinEq: aq, riverFlip });
+        if (!h) return;
+        const replay = this.buildReplay(cs.map(x => ({ nick: x.n, cards: x.p.hand.slice(), rank: Highlights.KO[Hand.solve(x.p.hand.concat(board)).name] || '' })));
+        const mode = this._fnMode ? '딥스택 연습' : this._mtt ? 'MTT' : this.mode === 'cash' ? '캐시' : '토너먼트';
+        const id = HL.add({ kind: h.kind, title: h.title, sub: h.sub, players: contNicks.slice(), mode, potBB: Math.round(pot / bb), replay });
+        io.to(this.roomId).emit('highlight', { id, kind: h.kind, title: h.title, sub: h.sub });
+    }
     buildReplay(showdownHands) {
         const revealed = {};
         (showdownHands || []).forEach(w => { if (w.cards) revealed[w.nick] = w.cards; });
@@ -5832,6 +5885,7 @@ class MTTManager {
             pl.chips = s.chips;
             room.players[s.nick] = pl;
             if (s.isBot) room.players[s.nick]._persona = room.assignPersona(s.nick, this.fn ? ((this.botLevel || {})[s.nick] || 'hard') : 'hard', this.fn ? (this.botStyle || {})[s.nick] : null);
+            if (s.isBot && this.fn) BOT_STYLE.set(s.nick, (this.botStyle || {})[s.nick] || 'pro');
             room.playerOrder.push(s.nick);
             if (s.socketId) {
                 const sock = io.sockets.sockets.get(s.socketId);
@@ -7506,6 +7560,20 @@ io.on('connection', (socket) => {
         io.to(room.roomId).emit('itemThrown', { from: socket.nickname, to: target, item });
     });
 
+    // 💬 빠른 대화 — 정해 둔 말만(목록 번호로 받는다). 좌석 위 말풍선 + 채팅 기록. 4초에 한 번.
+    socket.on('quickChat', (i) => {
+        const room = rooms.get(socket.currentRoom);
+        if (!room || !socket.nickname) return;
+        const p = room.players[socket.nickname];
+        const text = QUICK_CHATS[Number(i)];
+        if (!p || !text) return;
+        const now = Date.now();
+        if (now - (p.lastQuickTime || 0) < 4000) return;
+        p.lastQuickTime = now;
+        io.to(room.roomId).emit('playerQuick', { nick: socket.nickname, text });
+        io.to(room.roomId).emit('chatMessage', { nick: socket.nickname, msg: text });
+    });
+
     socket.on('emote', (emoji) => {
         const room = rooms.get(socket.currentRoom);
         if (!room || !socket.nickname) return;
@@ -7514,10 +7582,9 @@ io.on('connection', (socket) => {
         if (!p) return;
 
         const now = Date.now();
-        if (now - (p.lastEmoteTime || 0) >= 10000) {
+        if (now - (p.lastEmoteTime || 0) >= 6000) {
             p.lastEmoteTime = now;
-            const allowed = ['😂', '😡', '😎'];
-            const safeEmoji = allowed.includes(emoji) ? emoji : '😂'; // 💡 허용 이모지 화이트리스트
+            const safeEmoji = EMOTES.includes(emoji) ? emoji : '😂'; // 💡 허용 이모지 화이트리스트
             io.to(socket.currentRoom).emit('playerEmote', { nick: socket.nickname, emoji: safeEmoji });
         }
     });
@@ -7965,6 +8032,14 @@ io.on('connection', (socket) => {
         }
     });
 
+    // 🎬 명장면 목록 · 하나 보기(리플레이 창으로)
+    socket.on('getHighlights', () => { socket.emit('highlights', HL.list(40)); });
+    socket.on('getHighlight', (id) => {
+        const h = HL.get(String(id || ''));
+        if (!h) { socket.emit('replayData', null); return; }
+        socket.emit('replayData', Object.assign({}, h.replay, { hl: { id: h.id, title: h.title, sub: h.sub, mode: h.mode, t: h.t } }));
+    });
+
     // 🏆 [MTT] 목록 요청
     socket.on('getMttList', () => {
         socket.emit('mttList', mttListArray());
@@ -8388,6 +8463,7 @@ function gracefulShutdown(signal) {
     _shuttingDown = true;
     console.log(`\n🛑 ${signal} 수신 — 전적 저장 후 종료합니다...`);
     try { if (OPS) OPS.cleanExit(); } catch (e) {}
+    try { HL.flush(); } catch (e) {}
     try { MockDB.flush(); } catch (e) { console.error('종료 저장 실패:', e.message); }
     // 🌐 원격(Turso) 저장까지 완료 대기(최대 3초) 후 종료 — Render 재배포 시 마지막 변경 보존
     try { flushAccessLog(); } catch (e) {}
