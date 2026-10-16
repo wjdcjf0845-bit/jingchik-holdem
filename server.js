@@ -1697,34 +1697,21 @@ class GameRoom {
         const p = this.players[nick];
         const persona = p._persona || (p._persona = this.assignPersona(nick, p.difficulty));
         const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
-        const facing = toCall > 0;
-
-        let ms = 700 + Math.random() * 700; // 기본 리듬 0.7~1.4초
-
-        // 1) 승률이 콜 문턱에 딱 붙어 있을수록 = 진짜 고민되는 스팟 (최대 +3.6초)
-        const edge = this._lastBotEdge;
-        if (facing && edge != null) {
-            const closeness = Math.max(0, 1 - Math.min(1, Math.abs(edge) / 0.12));
-            ms += closeness * (1400 + Math.random() * 2200);
-        }
-        // 2) 내 스택에서 차지하는 비중이 클수록 신중해진다 (최대 +2.4초)
-        const stack = p.chips + (p.currentBet || 0);
-        if (stack > 0) ms += Math.min(1, toCall / stack) * (800 + Math.random() * 1600);
-        // 3) 팟 대비 큰 벳을 맞았을 때
-        if (potNow > 0 && toCall > potNow * 0.5) ms += 300 + Math.random() * 700;
-        // 4) 명백한 스팟은 툭툭 — 체크, 프리플랍 쓰레기패 폴드
-        if (!facing && decision && decision.type === 'check') ms *= 0.55;
-        if (decision && decision.type === 'fold' && this.gameStage === 1 && toCall <= bb) ms *= 0.45;
-        // 5) 성격 — 광폭은 즉흥적, 초타이트는 돌다리도 두들긴다
-        ms *= ({ '광폭': 0.7, '루즈-어그레시브': 0.85, '콜링스테이션': 0.95, '타이트-어그레시브': 1.15, '초타이트': 1.3 }[persona.label] || 1);
-        // 6) 사람다운 변덕 — 쉬운 패에 괜히 뜸을 들이기도, 어려운 패를 툭 던지기도 한다
-        const r = Math.random();
-        if (r < 0.08) ms += 1500 + Math.random() * 2000;
-        else if (r > 0.93) ms = 400 + Math.random() * 300;
-
-        // 턴 제한시간에 걸려 자동 폴드당하지 않게 여유를 둔다
-        const cap = Math.max(900, this.turnTimeLimit * 1000 * 0.55);
-        return Math.round(Math.max(350, Math.min(cap, ms)));
+        const facing = toCall > 0, pre = (this.communityCards || []).length === 0, type = decision ? decision.type : 'fold';
+        // ⏱️ 봇의 고민 시간은 1~3초 안에서만(운영자 요청 — 2026-10-16). 뻔한 결정은 1초 가까이, 어렵고 큰 결정일수록 3초 가까이.
+        //    (실제 라이브 대회 리듬도 재 봤지만 판 하나가 25초 → 56초로 길어져서 이 범위로 정했다)
+        let hard = 0;                                                       // 0 = 뻔함 · 1 = 가장 어려움
+        if (pre && type === 'fold' && toCall <= bb) hard = 0;               // 쓰레기패 폴드
+        else if (!facing && type === 'check') hard = 0.1;                   // 공짜 체크
+        else hard = pre ? 0.3 : 0.4;
+        const edge = this._lastBotEdge;                                     // 승률이 콜 문턱에 붙어 있을수록 어렵다
+        if (facing && edge != null) hard += 0.35 * Math.max(0, 1 - Math.min(1, Math.abs(edge) / 0.12));
+        const stack = p.chips + (p.currentBet || 0);                        // 걸린 칩이 클수록 신중하게
+        if (stack > 0) hard += 0.3 * Math.min(1, Math.max(toCall, decision && decision.amount ? decision.amount - (p.currentBet || 0) : 0) / stack);
+        // 성격 — 광폭은 즉흥적, 초타이트는 신중
+        hard *= ({ '광폭': 0.7, '루즈-어그레시브': 0.85, '타이트-어그레시브': 1.1, '초타이트': 1.25 }[persona.label] || 1);
+        const ms = 1000 + 2000 * Math.min(1, hard) + (Math.random() - 0.5) * 700;   // 같은 상황도 조금씩 다르게
+        return Math.round(Math.max(1000, Math.min(3000, ms)));
     }
 
     maybeScheduleBot(nick) {
@@ -5827,7 +5814,7 @@ class MTTManager {
         const roomId = `${this.mttId}#${tag}`;
         const room = new GameRoom(roomId, {
             startingChips: this.startingChips, blindUpInterval: this.blindUpInterval,
-            mode: 'tournament', maxRebuys: 0
+            mode: 'tournament', maxRebuys: 0, turnTimeLimit: this.fn ? 30 : undefined      // 딥스택: 액션마다 30초(파이널나인 규칙)
         });
         room._mtt = this;
         room._mttFreeChips = true;
