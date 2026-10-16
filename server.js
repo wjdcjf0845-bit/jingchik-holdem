@@ -6241,6 +6241,20 @@ class MTTManager {
         return list;
     }
     countAlive() { return this.livePlayers().length; }
+    // 살아 있는 사람(봇 제외): 칩이 남았거나, 돌고 있는 판에서 올인해 칩이 0 인 사람
+    liveHumans() {
+        const out = [], seen = new Set();
+        this.tables.forEach(rid => {
+            const r = rooms.get(rid); if (!r) return;
+            const inHand = r.gameStage >= 1 && r.gameStage <= 4;
+            r.playerOrder.forEach(n => {
+                const p = r.players[n];
+                if (!p || p.isBot || seen.has(n)) return;
+                if (p.chips > 0 || (inHand && p.isAllIn && !p.isFolded)) { seen.add(n); out.push({ nick: n, roomId: rid, chips: p.chips, socketId: p.socketId }); }
+            });
+        });
+        return out;
+    }
 
     // ─────────── 하트비트: MTT의 유일한 권위. 모든 결정을 여기서 ───────────
     startHeartbeat() {
@@ -6295,7 +6309,9 @@ class MTTManager {
         // 🏁 [딥스택] 사람이 모두 탈락했으면 바로, 남은 사람이 모두 10분 넘게 접속해 있지 않으면 그때 — 칩 순서로 순위를 정하고 끝낸다.
         //    (봇끼리 끝까지 돌면 실제 시간으로 몇 시간이 걸리고, 그동안 아무도 새 딥스택을 열 수 없다. 상금은 사람이 우승하지 않았으니 넘어간다.)
         if (this.fn && !this._endAgreed && !process.env.DEV_FN_KEEPGOING) {     // (DEV_FN_KEEPGOING: 시험에서 봇끼리 끝까지 — 파이널 테이블·입상까지 보려고)
-            const humans = live.filter(p => !p.isBot);
+            // 🐛 올인한 사람은 그 판이 끝날 때까지 칩이 0 이라 live(칩 > 0)에 없다 — 예전엔 그 순간 '사람이 모두 탈락'으로 보고 대회를 끝냈다
+            //    (2026-10-16 밤 두 번: 레벨 11 · 13 에서 올인한 판을 이기고도 대회가 정리됨). 판이 도는 중 올인한 사람도 살아 있는 것으로 센다.
+            const humans = this.liveHumans();
             const anyOn = humans.some(p => p.socketId && io.sockets.sockets.get(p.socketId));
             if (!humans.length) this._autoEnd('사람 참가자가 모두 탈락해서');
             else if (!anyOn) { this._goneSince = this._goneSince || Date.now(); if (Date.now() - this._goneSince > (DEV_FAST ? 20000 : 600000)) this._autoEnd('남은 사람이 10분 넘게 접속해 있지 않아서'); }
