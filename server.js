@@ -125,6 +125,7 @@ const VRange = require('./lib/vrange');         // 🔍 상대의 프리플랍 �
 const Field = require('./lib/fieldstyle');   // 🎭 매장형 상대 스타일(딥스택 섞기)
 const AI = require('./lib/ai').createAI();     // 🤖 AI(코치 설명 · 봇 말투) — server.env 의 ANTHROPIC_API_KEY 또는 OLLAMA_URL 이 있을 때만
 const AICoach = require('./lib/aicoach');
+const Highlights = require('./lib/highlights'); // 🎬 명장면 연출(배드비트·쿨러·리버 역전·큰 팟·포카드 이상) — 저장·다시 보기는 없앴다(운영자 요청)
 const EqMC = require('./lib/equitymc');      // 🎲 플랍 이후 승률(몬테카를로)
 const EqPool = require('./lib/eqpool');      // 🧵 사람 결정의 정밀 승률을 따로 도는 스레드에서
 const FlopSolve = require('./lib/flopsolve');   // 🧮 솔버로 미리 풀어 둔 플랍 전략 조회
@@ -4239,6 +4240,7 @@ class GameRoom {
             replay: this.buildReplay(potResults.flatMap(p => p.winners.map(w => ({ nick: w.nick, cards: w.cards, rank: w.rank }))))
         });
         this.revealShuffle(); // 🔐 셔플 검증 시드 공개
+        try { this.maybeHighlight(_contenders, allWinnerIds, totalPotAll); } catch (e) {}
 
         io.to(this.roomId).emit('gameResult', {
             message: (this.ritBoards ? '🎲 [런잇트와이스 결과]\n\n' : '🏆 [쇼다운 결과]\n\n') + messages.join('\n\n'),
@@ -5411,6 +5413,33 @@ class GameRoom {
     }
 
     // 🎬 [리플레이] 액션로그 + 시작스택 + 공개 홀카드를 묶어 리플레이 데이터 생성
+    // 🎬 명장면: 쇼다운이 볼 만한 판이면(lib/highlights.js detect) 테이블에 연출을 띄운다
+    maybeHighlight(contNicks, winners, pot) {
+        if (this.ritBoards || this._learnMode) return;
+        const board = this.communityCards;
+        if (board.length !== 5) return;
+        const cs = contNicks.map(n => ({ n, p: this.players[n] })).filter(x => x.p && x.p.hand && x.p.hand.length === 2);
+        if (cs.length < 2 || !cs.some(x => !x.p.isBot)) return;
+        const contenders = cs.map(x => ({ nick: x.n, rank: Hand.solve(x.p.hand.concat(board)).name, human: !x.p.isBot }));
+        const aq = this._allinEq && this._allinEq.handId === this.handId && this._allinEq.eq ? this._allinEq.eq : null;
+        // 리버 역전: 둘이 겨뤘을 때 턴 보드 기준 승률(남은 카드를 전부 깔아 본다)
+        let riverFlip = null;
+        if (cs.length === 2) {
+            const used = new Set(board.concat(cs[0].p.hand, cs[1].p.hand)), turn = board.slice(0, 4);
+            let a = 0, n = 0;
+            EqMC.FULL_DECK.forEach(c => {
+                if (used.has(c) && c !== board[4]) return;
+                const h0 = Hand.solve(cs[0].p.hand.concat(turn, [c])), h1 = Hand.solve(cs[1].p.hand.concat(turn, [c])), w = Hand.winners([h0, h1]);
+                a += w.length === 2 ? 0.5 : (w[0] === h0 ? 1 : 0); n++;
+            });
+            const e0 = n ? a / n * 100 : 50, loser = winners.has(cs[0].n) ? (winners.has(cs[1].n) ? null : cs[1].n) : cs[0].n;
+            if (loser) riverFlip = { loser, eq: loser === cs[0].n ? e0 : 100 - e0 };
+        }
+        const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+        const h = Highlights.detect({ winners: [...winners], contenders, potBB: pot / bb, allinEq: aq, riverFlip });
+        if (!h) return;
+        io.to(this.roomId).emit('highlight', { kind: h.kind, title: h.title, sub: h.sub });
+    }
     buildReplay(showdownHands) {
         const revealed = {};
         (showdownHands || []).forEach(w => { if (w.cards) revealed[w.nick] = w.cards; });
