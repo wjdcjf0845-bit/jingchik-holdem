@@ -4331,6 +4331,28 @@
         /* 🏁 대기실 딥스택 실력 순위 */
         #fn-mini { margin: -4px 0 12px; padding: 9px 11px 7px; border-radius: 13px; cursor: pointer; background: rgba(40,24,6,0.45); border: 1px solid rgba(255,217,122,0.3); }
         #fn-mini:hover { border-color: rgba(255,217,122,0.7); }
+        /* 📊 딥스택 비교표(지표) */
+        .fnpop-box { width: 860px !important; }
+        .fp-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .fp-t { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 700px; }
+        .fp-t th { font-size: 10.5px; line-height: 1.2; color: var(--txt-dim); font-weight: 700; text-align: right; padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,0.14); white-space: nowrap; cursor: help; }
+        .fp-t th.l { text-align: left; } .fp-t th small { font-weight: 400; }
+        .fp-t td { padding: 7px 6px 2px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .fp-t td.r { text-align: center; color: #c3cbe0; width: 24px; }
+        .fp-t td.n { text-align: left; font-weight: 800; color: #fff; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+        .fp-t td.n em { font-style: normal; font-size: 9px; background: var(--gold); color: #2c1c00; border-radius: 999px; padding: 0 5px; margin-left: 4px; vertical-align: 1px; }
+        .fp-t td.sc { font-family: var(--font-num); font-size: 17px; font-weight: 700; } .fp-t td.sc small { font-size: 9.5px; color: var(--txt-dim); margin-left: 2px; }
+        .fp-t td.m { color: #e8edf8; } .fp-t td.m.hi, .fp-t td.m.lo { color: #ffb35a; font-weight: 800; } .fp-t td.m i { font-style: normal; font-size: 9px; margin-left: 1px; }
+        .fp-t td.na { color: rgba(255,255,255,0.3); }
+        .fp-t td.res { color: #dfe6f5; } .fp-t td.res small { color: var(--txt-dim); font-size: 10px; margin-left: 1px; }
+        .fp-t tr.fp-row { cursor: pointer; } .fp-t tr.fp-row:hover td, .fp-t tr.fp-row:hover + tr.fp-notes td { background: rgba(143,211,255,0.07); }
+        .fp-t tr.me td { background: rgba(255,217,122,0.07); } .fp-t tr.me td.n { color: var(--gold); }
+        .fp-t tr.fp-notes td { text-align: left; padding: 0 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.07); white-space: normal; }
+        .fp-n { display: inline-block; font-size: 11px; line-height: 1.35; padding: 1px 7px; border-radius: 999px; margin: 2px 4px 0 0; background: rgba(255,255,255,0.06); color: #cfd6e6; }
+        .fp-n.good { background: rgba(75,227,160,0.13); color: #7ff0bd; } .fp-n.warn { background: rgba(255,179,90,0.14); color: #ffc27a; }
+        .fp-n.leak { background: rgba(255,120,110,0.14); color: #ff9d94; } .fp-n.info { color: var(--txt-dim); }
+        @media screen and (max-width: 560px) { .fp-t { min-width: 600px; font-size: 12px; } .fp-t td.res, .fp-t th:last-child { display: none; } .fp-t tr.fp-row td.n { position: sticky; left: 0; background: #1b2236; z-index: 1; } .fp-nw { position: sticky; left: 0; max-width: calc(100vw - 92px); } .fp-n { white-space: normal; } }
+        .fp-legend { font-size: 10.5px; color: var(--txt-dim); line-height: 1.55; margin-top: 8px; word-break: keep-all; }
         /* 🏁 로그인 때 딥스택 비교표 */
         .fnpop-box { width: 560px; max-width: calc(100vw - 32px); text-align: left; }
         .fnpop-title { margin: 0 0 4px; font-family: var(--font-disp); font-weight: 400; letter-spacing: 1px; color: #ffd97a; text-align: center; }
@@ -4923,7 +4945,7 @@
 <div id="fnpop-modal" class="overlay" style="display:none; z-index: 4100;" onclick="if (event.target === this) closeFnPop()">
     <div class="login-box fnpop-box">
         <h2 class="fnpop-title">🏁 딥스택 실력 비교</h2>
-        <div class="fnpop-sub">파이널나인 딥스택 연습을 친 사람만 · 연습 점수 순 · 이름을 누르면 그 사람의 기록</div>
+        <div class="fnpop-sub">파이널나인 딥스택 연습을 친 사람만 · 표준 지표와 기준 범위 · 무엇이 다른지</div>
         <div id="fnpop-list"></div>
         <div class="fnpop-btns">
             <button type="button" class="btn-join fnpop-me" onclick="closeFnPop(); socket.emit('getFnReport')">📊 내 기록</button>
@@ -8163,14 +8185,28 @@
     }
     function openFnPop(rows, paid) {
         const medal = i => ['🥇', '🥈', '🥉'][i] || String(i + 1);
-        const tr = (u, i) => `<tr class="${u.me ? 'me' : ''}" data-nick="${esc(u.nick)}" onclick="closeFnPop(); socket.emit('getFnReport', ${u.me ? '{}' : '{ nick: this.dataset.nick }'})">
-            <td class="r">${medal(i)}</td><td class="n">${esc(u.nick)}${u.me ? ' (나)' : ''}</td>
-            ${u.score != null ? `<td class="s" style="color:${skColor(u.score)};">${u.score}</td>` : '<td class="z">집계 전</td>'}
-            <td class="${u.wins ? '' : 'z'}">${u.wins}회</td><td class="${u.itm ? '' : 'z'}">${u.itm}회</td>
-            <td class="opt">${u.games}번</td><td class="opt">${u.avgPlace != null ? u.avgPlace + '위' : '-'}</td><td class="opt z">${(u.hands || 0).toLocaleString()}판</td></tr>`;
-        document.getElementById('fnpop-list').innerHTML = `<table class="fnpop-t"><thead><tr><th></th><th>닉네임</th><th>실력 점수</th><th>🏆 우승</th><th>🎖️ 입상</th><th class="opt">대회</th><th class="opt">평균 순위</th><th class="opt">판 수</th></tr></thead>
-            <tbody>${rows.map(tr).join('')}</tbody></table>
-            <div class="fnpop-sub" style="margin:8px 0 0;">입상 = ${paid || 6}위 안 · 실력 점수는 판이 쌓여야 나옵니다(그 전엔 "집계 전")</div>`;
+        // 지표 칸: 기준 범위 안이면 흰색, 벗어나면 주황(높음 ▲ · 낮음 ▼), 표본 부족이면 —
+        const cell = (c, unit) => !c || c.v == null ? '<td class="m na">—</td>'
+            : `<td class="m ${c.s}" title="기준 ${c.range[0]}~${c.range[1]}${unit}">${c.v}${unit}${c.s === 'hi' ? '<i>▲</i>' : c.s === 'lo' ? '<i>▼</i>' : ''}</td>`;
+        const tr = (u, i) => {
+            const C = u.cells || {};
+            const notes = (u.notes || []).map(n => `<span class="fp-n ${n.t}">${esc(n.s)}</span>`).join('');
+            return `<tr class="fp-row${u.me ? ' me' : ''}" data-nick="${esc(u.nick)}" onclick="closeFnPop(); socket.emit('getFnReport', ${u.me ? '{}' : '{ nick: this.dataset.nick }'})">
+                <td class="r">${medal(i)}</td><td class="n">${esc(u.nick)}${u.me ? '<em>나</em>' : ''}</td>
+                ${u.score != null ? `<td class="sc" style="color:${skColor(u.score)};">${u.score}<small>±${u.pm}</small></td><td class="m">${u.loss100}</td>` : '<td class="sc na">—</td><td class="m na">—</td>'}
+                ${cell(C.vpip, '%')}${cell(C.pfr, '%')}${cell(C.tb, '%')}${cell(C.af, '')}${cell(C.ftb, '%')}${cell(C.wsd, '%')}
+                <td class="res">${u.games}<small>회</small> · ${u.itm}<small>입상</small> · ${u.wins}<small>우승</small></td></tr>
+                <tr class="fp-notes${u.me ? ' me' : ''}"><td></td><td colspan="10"><div class="fp-nw">${notes}</div></td></tr>`;
+        };
+        const R = (rows.find(u => u.cells && u.cells.vpip) || {}).cells || {};
+        const rng = (c, unit) => c && c.range ? `${c.range[0]}~${c.range[1]}${unit}` : '';
+        document.getElementById('fnpop-list').innerHTML = `<div class="fp-wrap"><table class="fp-t"><thead><tr>
+                <th></th><th class="l">플레이어</th><th title="연습 점수(100점 만점) · ± 는 95% 오차">점수</th><th title="100판당 잃은 기대값(bb) — 낮을수록 좋음">EV손실<br><small>bb/100</small></th>
+                <th title="자발적으로 팟에 들어간 비율">VPIP</th><th title="프리플랍 레이즈 비율">PFR</th><th title="3벳 기회 중 3벳한 비율">3벳</th><th title="공격성: 벳·레이즈 ÷ 콜">AF</th>
+                <th title="상대 벳에 접은 비율">벳에<br>폴드</th><th title="쇼다운에 가서 이긴 비율">쇼다운<br>승률</th><th>대회 · 입상 · 우승</th></tr></thead>
+            <tbody>${rows.map(tr).join('')}</tbody></table></div>
+            <div class="fp-legend">주황 ▲▼ = 기준 범위 밖 · 기준(평균 6인 이상 테이블): VPIP ${rng(R.vpip, '%')} · PFR ${rng(R.pfr, '%')} · 3벳 ${rng(R.tb, '%')} · AF ${rng(R.af, '')} · 벳에 폴드 ${rng(R.ftb, '%')} · 쇼다운 승률 ${rng(R.wsd, '%')}
+                <br>점수 · EV손실은 앱의 솔버 · 기대값 판정 · 입상 = ${paid || 6}위 안 · 줄을 누르면 그 사람의 자세한 기록</div>`;
         const c = document.getElementById('fnpop-skip'); if (c) c.checked = false;
         document.getElementById('fnpop-modal').style.display = 'flex';
     }

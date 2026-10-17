@@ -125,6 +125,7 @@ const VRange = require('./lib/vrange');         // 🔍 상대의 프리플랍 �
 const Field = require('./lib/fieldstyle');   // 🎭 매장형 상대 스타일(딥스택 섞기)
 const AI = require('./lib/ai').createAI();     // 🤖 AI(코치 설명 · 봇 말투) — server.env 의 ANTHROPIC_API_KEY 또는 OLLAMA_URL 이 있을 때만
 const AICoach = require('./lib/aicoach');
+const FnCompare = require('./lib/fncompare');   // 🏁 딥스택 실력 비교 — 표준 지표 · 기준 범위 · 차이 설명
 const Highlights = require('./lib/highlights'); // 🎬 명장면 연출(배드비트·쿨러·리버 역전·큰 팟·포카드 이상) — 저장·다시 보기는 없앴다(운영자 요청)
 const EqMC = require('./lib/equitymc');      // 🎲 플랍 이후 승률(몬테카를로)
 const EqPool = require('./lib/eqpool');      // 🧵 사람 결정의 정밀 승률을 따로 도는 스레드에서
@@ -5763,9 +5764,11 @@ function fnBoard(me) {
         if (!x || !x.nickname || x.nickname.startsWith('🤖') || x.nickname === ADMIN_NICK || !x.fnStats) return;
         const ev = evView(x.fnStats), sm = fnSummary(x.fnStats);
         if (!ev && !sm.games) return;
-        board.push(Object.assign({ nick: x.nickname, me: x.nickname === me, score: ev ? ev.score : null, pm: ev ? ev.pm : null, hands: ev ? ev.hands : 0, loss100: ev ? ev.raw100 : null }, sm));
+        board.push(Object.assign({ nick: x.nickname, me: x.nickname === me, score: ev ? ev.score : null, pm: ev ? ev.pm : null, hands: ev ? ev.hands : 0, loss100: ev ? ev.raw100 : null,
+            st: FnCompare.metrics(x.fnStats), leak: FnCompare.topLeak(x.fnStats, aiKindNames()) }, sm));
     });
-    return board.sort((a, b) => (b.score == null ? -1 : b.score) - (a.score == null ? -1 : a.score) || b.wins - a.wins || b.itm - a.itm || b.games - a.games);
+    // 📊 지표마다 기준 범위 판정 · 무엇이 다른지 짧은 설명(lib/fncompare.js)
+    return FnCompare.analyze(board).sort((a, b) => (b.score == null ? -1 : b.score) - (a.score == null ? -1 : a.score) || b.wins - a.wins || b.itm - a.itm || b.games - a.games);
 }
 function evView(a) {
     const ix = a ? EvLoss.index(a) : null;
