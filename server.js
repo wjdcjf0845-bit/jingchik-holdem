@@ -7951,9 +7951,9 @@ io.on('connection', (socket) => {
     });
     // 🏁 [파이널나인 연습 기록] 이 모드에서 친 것만 모은 점수·피드백·대회 결과 + 친구들 비교
     // 🏁 대기실 딥스택 순위(실력 점수 · 우승 · 입상) — 연습 기록의 '친구들' 표와 같은 자료
-    socket.on('getFnBoard', () => {
+    socket.on('getFnBoard', (data) => {
         if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
-        socket.emit('fnBoard', { rows: fnBoard(socket.nickname), paid: FN_MTT.paid });
+        socket.emit('fnBoard', { rows: fnBoard(socket.nickname), paid: FN_MTT.paid, popup: !!(data && data.popup) });
     });
     socket.on('getFnReport', (data) => {
         if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;

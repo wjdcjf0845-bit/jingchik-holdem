@@ -4331,6 +4331,29 @@
         /* 🏁 대기실 딥스택 실력 순위 */
         #fn-mini { margin: -4px 0 12px; padding: 9px 11px 7px; border-radius: 13px; cursor: pointer; background: rgba(40,24,6,0.45); border: 1px solid rgba(255,217,122,0.3); }
         #fn-mini:hover { border-color: rgba(255,217,122,0.7); }
+        /* 🏁 로그인 때 딥스택 비교표 */
+        .fnpop-box { width: 560px; max-width: calc(100vw - 32px); text-align: left; }
+        .fnpop-title { margin: 0 0 4px; font-family: var(--font-disp); font-weight: 400; letter-spacing: 1px; color: #ffd97a; text-align: center; }
+        .fnpop-sub { font-size: 12px; color: var(--txt-dim); text-align: center; margin-bottom: 10px; word-break: keep-all; }
+        #fnpop-list { max-height: 58vh; overflow-y: auto; }
+        .fnpop-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .fnpop-t th { font-size: 10.5px; color: var(--txt-dim); font-weight: 700; text-align: right; padding: 4px 5px; border-bottom: 1px solid rgba(255,255,255,0.12); white-space: nowrap; }
+        .fnpop-t th:nth-child(1), .fnpop-t th:nth-child(2) { text-align: left; }
+        .fnpop-t td { padding: 7px 5px; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.06); white-space: nowrap; }
+        .fnpop-t td.r { text-align: center; font-family: var(--font-num); color: #c3cbe0; width: 26px; }
+        .fnpop-t td.n { text-align: left; font-weight: 800; color: #fff; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+        .fnpop-t tr.me td.n { color: var(--gold); }
+        .fnpop-t tr.me { background: rgba(255,217,122,0.07); }
+        .fnpop-t tbody tr { cursor: pointer; } .fnpop-t tbody tr:hover { background: rgba(143,211,255,0.08); }
+        .fnpop-t td.s { font-family: var(--font-num); font-size: 16px; font-weight: 700; }
+        .fnpop-t td.z { color: rgba(255,255,255,0.35); }
+        .fnpop-t .opt { display: table-cell; }
+        @media screen and (max-width: 520px) { .fnpop-t .opt { display: none; } .fnpop-t { font-size: 12px; } }
+        .fnpop-btns { display: flex; gap: 8px; margin-top: 12px; }
+        .fnpop-btns button { flex: 1; margin: 0 !important; font-size: 15px !important; padding: 11px 8px !important; height: auto !important; min-height: 0 !important; white-space: nowrap; }
+        .fnpop-me { background: linear-gradient(180deg, #7a4a12, #4a2a08) !important; color: #fff; }
+        .fnpop-close { background: linear-gradient(180deg, #3a455f, #232c44 60%, #161c2c) !important; color: #fff; }
+        .fnpop-skip { display: block; margin-top: 8px; font-size: 12px; color: var(--txt-dim); text-align: center; cursor: pointer; }
         .fnm-row:not(.hd):hover .fnm-name { text-decoration: underline; }
         .skd.viewing { border-color: rgba(143,211,255,0.8) !important; box-shadow: 0 0 0 1px rgba(143,211,255,0.5); }
         #fn-mini .skm-head b { color: #ffd97a; }
@@ -4896,6 +4919,19 @@
     </div>
 </div>
 
+<!-- 🏁 로그인 때 뜨는 딥스택 실력 비교표 -->
+<div id="fnpop-modal" class="overlay" style="display:none; z-index: 4100;" onclick="if (event.target === this) closeFnPop()">
+    <div class="login-box fnpop-box">
+        <h2 class="fnpop-title">🏁 딥스택 실력 비교</h2>
+        <div class="fnpop-sub">파이널나인 딥스택 연습을 친 사람만 · 연습 점수 순 · 이름을 누르면 그 사람의 기록</div>
+        <div id="fnpop-list"></div>
+        <div class="fnpop-btns">
+            <button type="button" class="btn-join fnpop-me" onclick="closeFnPop(); socket.emit('getFnReport')">📊 내 기록</button>
+            <button type="button" class="btn-join fnpop-close" onclick="closeFnPop()">닫기</button>
+        </div>
+        <label class="fnpop-skip"><input type="checkbox" id="fnpop-skip"> 오늘은 그만 보기</label>
+    </div>
+</div>
 <div id="skill-modal" class="overlay" style="display:none; z-index: 4000;">
     <div class="login-box" style="width: 520px;">
         <h2 style="margin-top:0; font-family: var(--font-disp); font-weight:400; letter-spacing:1px; background: linear-gradient(180deg,#8fd3ff,#2f86dd); -webkit-background-clip:text; background-clip:text; color:transparent;">📈 실력 비교</h2>
@@ -8119,7 +8155,38 @@
 
     // ═══════ 🏁 파이널나인 딥스택 연습 기록 — 이 모드에서 친 것만 모은 점수·피드백·대회 결과 ═══════
     // 🏁 대기실 딥스택 실력 순위 — 위 5명(+ 내가 밖이면 내 줄) · 실력 점수 · 우승 · 입상
+    function fnPopDay() { const x = new Date(); return x.getFullYear() + '-' + (x.getMonth() + 1) + '-' + x.getDate(); }
+    function closeFnPop() {
+        const m = document.getElementById('fnpop-modal'); if (m) m.style.display = 'none';
+        const c = document.getElementById('fnpop-skip');
+        try { if (c && c.checked) localStorage.setItem('fnpopSkip', fnPopDay()); } catch (e) {}
+    }
+    function openFnPop(rows, paid) {
+        const medal = i => ['🥇', '🥈', '🥉'][i] || String(i + 1);
+        const tr = (u, i) => `<tr class="${u.me ? 'me' : ''}" data-nick="${esc(u.nick)}" onclick="closeFnPop(); socket.emit('getFnReport', ${u.me ? '{}' : '{ nick: this.dataset.nick }'})">
+            <td class="r">${medal(i)}</td><td class="n">${esc(u.nick)}${u.me ? ' (나)' : ''}</td>
+            ${u.score != null ? `<td class="s" style="color:${skColor(u.score)};">${u.score}</td>` : '<td class="z">집계 전</td>'}
+            <td class="${u.wins ? '' : 'z'}">${u.wins}회</td><td class="${u.itm ? '' : 'z'}">${u.itm}회</td>
+            <td class="opt">${u.games}번</td><td class="opt">${u.avgPlace != null ? u.avgPlace + '위' : '-'}</td><td class="opt z">${(u.hands || 0).toLocaleString()}판</td></tr>`;
+        document.getElementById('fnpop-list').innerHTML = `<table class="fnpop-t"><thead><tr><th></th><th>닉네임</th><th>실력 점수</th><th>🏆 우승</th><th>🎖️ 입상</th><th class="opt">대회</th><th class="opt">평균 순위</th><th class="opt">판 수</th></tr></thead>
+            <tbody>${rows.map(tr).join('')}</tbody></table>
+            <div class="fnpop-sub" style="margin:8px 0 0;">입상 = ${paid || 6}위 안 · 실력 점수는 판이 쌓여야 나옵니다(그 전엔 "집계 전")</div>`;
+        const c = document.getElementById('fnpop-skip'); if (c) c.checked = false;
+        document.getElementById('fnpop-modal').style.display = 'flex';
+    }
+    // 페이지를 열고 처음 로그인했을 때 한 번(재접속 · 게임 중 복귀 · "오늘은 그만 보기" 면 안 띄운다)
+    let _fnPopAsked = false;
+    socket.on('loginSuccess', () => {
+        if (_fnPopAsked) return; _fnPopAsked = true;
+        try { if (localStorage.getItem('fnpopSkip') === fnPopDay()) return; } catch (e) {}
+        setTimeout(() => {
+            const lo = document.getElementById('lobby-overlay');
+            if (!lo || getComputedStyle(lo).display === 'none' || currentRoomId) return;
+            socket.emit('getFnBoard', { popup: true });
+        }, 900);
+    });
     socket.on('fnBoard', d => {
+        if (d && d.popup && (d.rows || []).length) openFnPop(d.rows, d.paid);
         const el = document.getElementById('fn-mini'); if (!el) return;
         const rows = (d && d.rows) || [];
         if (!rows.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
