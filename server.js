@@ -934,10 +934,11 @@ const MockDB = {
         this.save();
         return fee;
     },
-    // 회차별 입금 확인된 합 · 확인 대기 합
+    // 회차별 참가비 합 — 대회를 시작하면 바로 상금에 들어간다(2026-10-17 운영자 결정: 입금 확인을 기다리지 않는다).
+    //    ok 에 합을 담는다(예전 이름 그대로 — 우승 기록의 상금이 이 값). wait 는 이제 늘 0.
     jpSums() {
         const S = {};
-        this.jpHumans().forEach(u => (u.jpEntries || []).forEach(e => { const s = S[e.c] || (S[e.c] = { ok: 0, wait: 0 }); if (e.ok) s.ok += e.fee; else s.wait += e.fee; }));
+        this.jpHumans().forEach(u => (u.jpEntries || []).forEach(e => { const s = S[e.c] || (S[e.c] = { ok: 0, wait: 0 }); s.ok += e.fee; }));
         return S;
     },
     jpView(nick) {
@@ -951,7 +952,7 @@ const MockDB = {
         return { cycle: c, pot, pending, entries, players: new Set(entries.map(e => e.nick)).size, myFee: nick ? this.jpFeeFor(nick, c) : this.JP_FIRST,
             first: this.JP_FIRST, next: this.JP_NEXT, payee: process.env.FN_PAYEE || '정철', account: process.env.FN_ACCOUNT || '', history: history.slice(0, 30) };
     },
-    // 사람이 우승하면 그 회차 상금을 전부 준다(기록). 반환: { amount 입금 확인된 상금, pending 확인 대기 } — 그 회차에 참가 기록이 없으면 null
+    // 사람이 우승하면 그 회차 상금(참가비 전부)을 준다(기록). 반환: { amount, pending: 0 } — 그 회차에 참가 기록이 없으면 null
     jpAward(nick, mttId, entrants) {
         const u = this.users.get(nick);
         if (!u || nick.startsWith('🤖')) return null;
@@ -969,7 +970,12 @@ const MockDB = {
             (u.jpWins || []).forEach(w => wins.push({ nick: u.nickname, c: w.c, amount: (S[w.c] || { ok: w.amount }).ok, wait: (S[w.c] || {}).wait || 0, t: w.t, out: !!w.out, entrants: w.entrants || 0 }));
         });
         entries.sort((a, b) => b.t - a.t); wins.sort((a, b) => b.t - a.t);
-        return { cycle: this.jpCycle(), sums: S, entries: entries.slice(0, 500), wins };
+        // 사람마다: 낸 참가비 합(받을 돈) · 받을 상금 합(보낼 돈) · 차액(+ 면 운영자가 그 사람에게 보낼 돈, − 면 받을 돈)
+        const P = {};
+        entries.forEach(e => { const p = P[e.nick] || (P[e.nick] = { nick: e.nick, fees: 0, n: 0, prize: 0 }); p.fees += e.fee; p.n++; });
+        wins.forEach(w => { const p = P[w.nick] || (P[w.nick] = { nick: w.nick, fees: 0, n: 0, prize: 0 }); p.prize += w.amount; });
+        const people = Object.values(P).map(p => Object.assign(p, { net: p.prize - p.fees })).sort((a, b) => b.net - a.net || a.nick.localeCompare(b.nick));
+        return { cycle: this.jpCycle(), sums: S, entries: entries.slice(0, 500), wins, people };
     },
     // 🛡️ [관리자] 장부 고치기 — act: ok(입금 확인) · unok(확인 취소) · del(참가 기록 지움) · out(상금 보냄) · unout. 대상은 닉네임 + 기록 시각(t).
     jpAdmin(act, nick, t) {
@@ -7949,9 +7955,12 @@ io.on('connection', (socket) => {
         if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
         socket.emit('fnBoard', { rows: fnBoard(socket.nickname), paid: FN_MTT.paid });
     });
-    socket.on('getFnReport', () => {
+    socket.on('getFnReport', (data) => {
         if (!socket.nickname || !MockDB.users.has(socket.nickname)) return;
-        const u = MockDB.users.get(socket.nickname), F = u.fnStats || {};
+        // 👥 친구 것 보기: { nick } — 딥스택 기록이 있는 사람만(봇 · 관리자 제외). 상금 · AI 는 내 것에만 붙인다.
+        const want = data && typeof data.nick === 'string' ? data.nick : '', wu = want && MockDB.users.get(want);
+        const target = wu && wu.fnStats && !want.startsWith('🤖') && want !== ADMIN_NICK ? want : socket.nickname, other = target !== socket.nickname;
+        const u = MockDB.users.get(target), F = u.fnStats || {};
         const dk = { d12: '12bb 이하', d25: '13~25bb', d40: '26~40bb', deep: '41bb 이상' }, pk = { early: '초반', mid: '중반', ft: '파이널 테이블', bubble: '버블(입상 직전)', itm: '입상권', hu: '마지막 1대1' };
         const per = (o, keys, n, l) => Object.keys(keys).map(k => ({ id: k, name: keys[k], n: o[n + k] || 0, per: o[n + k] > 0 ? Math.round((o[l + k] || 0) / o[n + k] * 100) / 100 : null })).filter(x => x.n > 0);
         const leaks = Blunder.KIND_KEYS.map(k => ({ name: Blunder.KINDS[k].name, tip: Blunder.KINDS[k].tip, n: F['lkN_' + k] || 0, bb: Math.round((F['lkB_' + k] || 0) * 10) / 10 })).filter(l => l.n > 0).sort((a, b) => b.bb - a.bb);
@@ -7959,8 +7968,8 @@ io.on('connection', (socket) => {
         socket.emit('fnReport', {
             cfg: { entrants: FN_MTT.entrants, startChips: FN_MTT.startingChips, startBB: FN_MTT.startingChips / FN_MTT.structure[0].bb, levelSec: FN_MTT.blindUpInterval,
                 lv1: FN_MTT.structure[0].sb + '/' + FN_MTT.structure[0].bb, paid: FN_MTT.paid, tableSize: FN_MTT.tableSize, rebuys: FN_MTT.rebuys, rebuyUntilLevel: FN_MTT.rebuyUntilLevel, normalBots: FN_MTT.normalBots, field: '모두 고수 실력 — 정석 약 절반에 ' + Object.keys(Field.FIELD_MIX).map(k => Field.STYLES[k].name + ' ' + Math.round(Field.FIELD_MIX[k] * 100) + '%').join(' · ') + ' 버릇이 섞임', anteLevel: 3 },
-            ev: evView(F), summary: sum(F), results: (u.fnResults || []).slice(-20).reverse(), jackpot: MockDB.jpView(socket.nickname),
-            week: (u.fnWeekReports || []).slice(-1)[0] || null, aiOn: AI.enabled(),
+            ev: evView(F), summary: sum(F), results: (u.fnResults || []).slice(-20).reverse(), jackpot: other ? null : MockDB.jpView(socket.nickname),
+            week: (u.fnWeekReports || []).slice(-1)[0] || null, aiOn: !other && AI.enabled(), who: other ? target : null,
             depth: per(F, dk, 'evDn_', 'evDl_'), phases: per(F, pk, 'evTn_', 'evTl_'),
             icm: { n: F.evIn || 0, ok: F.evIk || 0, loss: Math.round((F.evIl || 0) * 10) / 10, payouts: FN_MTT.payouts.map(x => x / FN_MTT.payouts.reduce((a, b) => a + b, 0) * 100) },
             freqs: Freqs.summarize(F), leaks, blunders: Blunder.top(F.blunders, 0, 5).map(Blunder.describe),
