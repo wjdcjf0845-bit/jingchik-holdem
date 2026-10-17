@@ -147,7 +147,10 @@ const BOT_JAM_DEFAULT = true;
 const BOT_MTT_DEFAULT = true;
 // 🧮 고수 봇이 프리플랍 "모든 자리"(3벳·4벳 받기, 림프 뒤, 올인 받기[헤즈업])를 대회용 솔버 표로 칠지 — 맞대결 스위치 BOT_AB12
 //   측정(2026-10-15, 30bb 시작 · 1분 레벨 · 24테이블 178,669핸드): 새 − 옛 = +8.9 ± 4.6 bb/100 (t = 1.94) — 강해진 쪽으로 나왔다(경계선).
-const BOT_SOLVERPRE_DEFAULT = true;   // 운영자 결정(2026-10-11): 맞대결 측정 없이 켠다
+const BOT_SOLVERPRE_DEFAULT = true;
+// 🎭 매장형 스타일의 블러프 버릇(styleBluff) — keep: 약한 패 공격을 남기는 비율 · add/addRaise: 약한 패로 새로 벳/레이즈하는 비율.
+//    값은 측정(scratch/bluff_run.sh → bluff_sum.js)으로 맞춘다: 공격 중 블러프 비율 목표 초타이트·스테이션 약 6~7%, 루즈-패시브 약 8%, 광폭 약 45%(정석 약 20~25%).
+const STYLE_BLUFF = { nit: { keep: 0.22, add: 0 }, station: { keep: 0.55, add: 0 }, lp: { keep: 0.35, add: 0 }, maniac: { keep: 1, add: 0.45, addRiver: 0.8, addRaise: 0.1 } };   // 운영자 결정(2026-10-11): 맞대결 측정 없이 켠다
 const OPEN_PRIOR = {};                          // 자리별 오픈 범위(패마다 여는 확률) — jamInfo 가 채워 쓴다
 const BOT_RIVER_DEFAULT = false;                // 고수 봇이 리버 계산을 쓸지 — 맞대결 측정 전(botV9)
 const GtoAdvice = require('./lib/gtoadvice');   // 🎓 학습모드 조언 — 상대 수·포지션·스택 깊이별
@@ -1741,6 +1744,32 @@ class GameRoom {
         return Math.round(Math.max(1000, Math.min(3000, ms)));
     }
 
+    // 🎭 [매장형 스타일의 블러프 버릇] 플랍 이후 "약한 패(내 승률 추정 35% 미만)로 하는 벳·레이즈"를 스타일마다 줄이거나 늘린다.
+    //    정석 고수는 손대지 않는다(솔버 자료 · 균형). 고수 판단 그대로 두면 초타이트도 리버 벳의 22%가 블러프였다(정석 20% — 2026-10-17 측정).
+    //    목표(정석 대비): 초타이트 · 콜링스테이션 약 0.3배, 루즈-패시브 약 0.4배 — 실제 매장 사람처럼 "큰 벳 = 강한 패". 광폭은 약 2배 이상.
+    //    keep: 약한 패 공격을 남기는 비율(아니면 체크, 벳을 받는 중이면 초타이트는 폴드 · 나머지는 콜). add: 약한 패로 체크할 자리에서 벳(광폭).
+    styleBluff(nick, d) {
+        const p = this.players[nick], pe = p && p._persona;
+        if (!d || !pe || !pe.field || (this.communityCards || []).length < 3) return d;
+        const B = STYLE_BLUFF[pe.field]; if (!B) return d;
+        const eq = this._lastBotEquity || 0, weak = eq < 0.35;
+        if (!weak) return d;
+        const toCall = Math.max(0, this.currentHighestBet - (p.currentBet || 0)), allIn = p.chips + (p.currentBet || 0);
+        const agg = (d.type === 'raise' || d.type === 'allin') && (d.type === 'allin' ? allIn : d.amount) > this.currentHighestBet;
+        if (agg && B.keep < 1 && Math.random() >= B.keep) {
+            if (toCall <= 0) return { type: 'check' };
+            return (pe.field === 'nit' || toCall > p.chips * 0.5) ? { type: 'fold' } : { type: 'call' };
+        }
+        if (!agg && B.add > 0 && Math.random() < (toCall > 0 ? B.addRaise : (this.communityCards.length === 5 && B.addRiver) || B.add)) {
+            const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+            const pot = this.pot + Object.values(this.players).reduce((a, x) => a + (x.currentBet || 0), 0);
+            let to = toCall > 0 ? this.currentHighestBet * 2.8 : this.currentHighestBet + pot * 0.75;
+            to = Math.min(allIn, Math.max(Math.round(to), this.currentHighestBet + (this.lastFullRaiseAmount || bb)));
+            if (to > this.currentHighestBet) return to >= allIn ? { type: 'allin' } : { type: 'raise', amount: to };
+        }
+        return d;
+    }
+
     maybeScheduleBot(nick) {
         const p = this.players[nick];
         if (!p || !p.isBot || p.isFolded || p.isAllIn) return;
@@ -1750,11 +1779,17 @@ class GameRoom {
         // 봇 차례엔 다른 누구도 액션할 수 없으므로, 미리 계산해도 그 사이 상태가 바뀌지 않는다.
         let decision = null;
         try { decision = this.botDecide(expectedNick); } catch (e) { decision = null; }
+        try { decision = this.styleBluff(expectedNick, decision); } catch (e) {}
         if (process.env.DEV_PFCHECK && decision) this._devPfCheck(expectedNick, decision);
         // 🔬 개발용(DEV_STYLELOG): 봇 결정마다 성격·스트리트·행동 — 스타일별 플레이 수치를 잰다
         if (process.env.DEV_STYLELOG && decision) { const pp = this.players[expectedNick], pe = pp._persona || {}, tc = Math.max(0, this.currentHighestBet - (pp.currentBet || 0)); console.log('STYLE ' + JSON.stringify({ n: expectedNick, lab: pe.field ? pe.label : '정석', f: pe.field || 'pro', d: pe.difficulty, st: (this.communityCards || []).length, tc: tc > 0 ? 1 : 0, a: decision.type, ai: decision.type === 'allin' || (decision.type === 'raise' && decision.amount >= pp.chips + pp.currentBet) ? 1 : 0 })); }
         const toCall =Math.max(0, this.currentHighestBet - (p.currentBet || 0));
         const potNow = this.pot + Object.values(this.players).reduce((s, x) => s + (x.currentBet || 0), 0);
+        // 🔬 개발용(DEV_BLUFFLOG): 플랍 이후 봇 결정마다 스타일 · 스트리트 · 내 승률 추정 · 공격(벳/레이즈) 여부 · 크기(팟 대비) — 스타일별 블러프 비율을 잰다
+        if (process.env.DEV_BLUFFLOG && decision && (this.communityCards || []).length >= 3) {
+            const pe = p._persona || {}, agg = (decision.type === 'raise' || decision.type === 'allin') && (decision.type === 'allin' ? p.chips + p.currentBet : decision.amount) > this.currentHighestBet;
+            console.log('BLUFF ' + JSON.stringify({ f: pe.field || 'pro', st: this.communityCards.length, tc: toCall > 0 ? 1 : 0, a: decision.type, agg: agg ? 1 : 0, eq: Math.round((this._lastBotEquity || 0) * 100), sz: agg && potNow > 0 ? Math.round(((decision.type === 'allin' ? p.chips + p.currentBet : decision.amount) - this.currentHighestBet + toCall) / potNow * 100) : 0 }));
+        }
         const thinkMs = this.botThinkTime(expectedNick, decision, toCall, potNow);
 
         if (p._botTimer) clearTimeout(p._botTimer);
