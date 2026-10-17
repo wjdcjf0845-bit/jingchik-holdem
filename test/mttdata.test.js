@@ -83,8 +83,10 @@ test('9인 자리 열쇠: 9인 표는 그대로 · 6인 표는 collapseKey', () 
 test("결승 상금 표 'f': b7 · f<인원> 을 먼저, 없으면 칩 기준", () => {
     const D = Ranges.mttData();
     const has = k => Object.keys(D).some(x => x.indexOf(k) === 0);
-    if (has('b7_')) assert.ok(/^b7_/.test(Ranges.mttDepth(20, 7, 'f')));
-    if (has('f5_')) assert.ok(/^f5_/.test(Ranges.mttDepth(20, 5, 'f')));
-    if (!has('f4_')) assert.ok(!/^f/.test(String(Ranges.mttDepth(20, 4, 'f'))));
+    if (has('b7_')) assert.ok(/^b7_/.test(Ranges.mttDepth(20, 7, 'f6')));
+    assert.ok(!/^b7_/.test(String(Ranges.mttDepth(20, 7, 'f4'))));             // 4위 입상이면 6위 입상으로 푼 버블 표는 맞지 않는다
+    if (has('f6_')) assert.ok(!/^f6_/.test(String(Ranges.mttDepth(20, 6, 'f4'))));
+    if (has('b5_')) assert.ok(/^b5_/.test(Ranges.mttDepth(20, 5, 'f4')));
+    if (!has('f4_')) assert.ok(!/^f/.test(String(Ranges.mttDepth(20, 4, 'f4'))));
     assert.ok(Ranges.isIcmDepth('b7_20') && Ranges.isIcmDepth('f5_20') && Ranges.isIcmDepth('i3_20') && !Ranges.isIcmDepth('n9_20'));
 });

@@ -2648,16 +2648,16 @@ class GameRoom {
 
     // 🏆 [ICM 표] 대회 결승 테이블(남은 사람이 모두 이 테이블 · 3~6명)이고 리바인이 끝났으면, 상금(50/30/20)을 반영해 HRC 로 푼 표(i<인원>_<깊이>)를 쓴다.
     //    그 표는 스택이 모두 같다고 놓고 푼 것이라, 스택 차이가 크면(가장 큰 스택 > 가장 작은 스택 × 3) 칩 기준 표 + 올인 ICM 계산에 맡긴다.
-    //    반환: 'f' = 딥스택(파이널나인 6위 입상 · 실제 상금으로 푼 b7_ · f3~f9_ 표, 3~9명) · 'i' = 3명 입상 50/30/20(i3~i6_ 표, 3~6명) · false = 끔
+    //    반환: 'f6' · 'f4' = 딥스택(파이널나인 실제 상금, 6위 · 4위까지 입상 — 그 상금으로 푼 b<인원>_ · f<인원>_ 표) · 'i' = 3명 입상 50/30/20(i3~i6_ 표, 3~6명) · false = 끔
     //    (상금이 다르면 그 표가 맞지 않는다 — 그때는 칩 기준 표 + 아래 ICM 올인 계산)
     icmTableOn() {
         const m = this._mtt;
         if (!m || !(m.paid > 0) || (m.tables || []).length !== 1) return false;
-        const kind = m.paid === 3 ? 'i' : (m.fn && m.paid === 6) ? 'f' : null;
+        const kind = m.paid === 3 ? 'i' : (m.fn && (m.paid === 6 || m.paid === 4)) ? 'f' + m.paid : null;
         if (!kind) return false;
         if (m.rebuyMax > 0 && m.blindLevel < m.rebuyUntilLevel) return false;
         const st = this.playerOrder.map(n => this.players[n]).filter(q => q && !q._out).map(q => (q.chips || 0) + (q.currentBet || 0));
-        if (st.length < 3 || st.length > (kind === 'f' ? 9 : 6)) return false;
+        if (st.length < 3 || st.length > (kind === 'i' ? 6 : 9)) return false;
         return Math.max(...st) <= (Number(process.env.DEV_ICM_RATIO) || 3) * Math.min(...st) ? kind : false;       // (DEV_ICM_RATIO: 시험용으로 이 배수를 바꾼다)
     }
     // 🏆 [ICM] 내가 먼저 올인(푸시)하는 범위가 상금 기준으로 몇 배가 되나(1 = 그대로). 대상이 아니면 null.
