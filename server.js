@@ -150,6 +150,8 @@ const BOT_MTT_DEFAULT = true;
 const BOT_SOLVERPRE_DEFAULT = true;
 // 🎭 매장형 스타일의 블러프 버릇(styleBluff) — keep: 약한 패 공격을 남기는 비율 · add/addRaise: 약한 패로 새로 벳/레이즈하는 비율.
 //    값은 측정(scratch/bluff_run.sh → bluff_sum.js)으로 맞춘다: 공격 중 블러프 비율 목표 초타이트·스테이션 약 6~7%, 루즈-패시브 약 8%, 광폭 약 45%(정석 약 20~25%).
+// 🪤 매장형 스타일의 함정 체크 버릇(styleBluff 안) — 값은 측정(scratch/bluff_run.sh → bluff_sum.js 의 "강한 패 체크%"·"체크레이즈%")으로 맞춘다
+const STYLE_TRAP = { nit: { slow: 0.35 }, lp: { slow: 0.45, trapCall: 0.6 }, station: { noRaise: 0.7 }, maniac: { noTrap: 0.85 } };
 const STYLE_BLUFF = { nit: { keep: 0.22, add: 0 }, station: { keep: 0.55, add: 0 }, lp: { keep: 0.35, add: 0 }, maniac: { keep: 1, add: 0.45, addRiver: 0.8, addRaise: 0.1 } };   // 운영자 결정(2026-10-11): 맞대결 측정 없이 켠다
 const OPEN_PRIOR = {};                          // 자리별 오픈 범위(패마다 여는 확률) — jamInfo 가 채워 쓴다
 const BOT_RIVER_DEFAULT = false;                // 고수 봇이 리버 계산을 쓸지 — 맞대결 측정 전(botV9)
@@ -1753,9 +1755,28 @@ class GameRoom {
         if (!d || !pe || !pe.field || (this.communityCards || []).length < 3) return d;
         const B = STYLE_BLUFF[pe.field]; if (!B) return d;
         const eq = this._lastBotEquity || 0, weak = eq < 0.35;
-        if (!weak) return d;
         const toCall = Math.max(0, this.currentHighestBet - (p.currentBet || 0)), allIn = p.chips + (p.currentBet || 0);
         const agg = (d.type === 'raise' || d.type === 'allin') && (d.type === 'allin' ? allIn : d.amount) > this.currentHighestBet;
+        const st = this.communityCards.length;
+        // 🪤 [함정 체크 버릇] strong: 내 승률 추정 75% 이상
+        //    slow: 강한 패로 먼저 벳할 자리에서 체크(뒤에 벳하면 아래 트랩 발동 로직이 체크레이즈) — 초타이트 · 루즈-패시브
+        //    trapCall: 함정 체크 뒤 벳을 받으면 레이즈 대신 콜로 끌고 가기(루즈-패시브) · noRaise: 벳을 받으면 레이즈 대신 콜(콜링스테이션)
+        //    noTrap: 강한 패로 체크하려던 것을 벳으로(광폭 — 강하면 그냥 크게 벳한다)
+        if (!weak && eq >= 0.75 && !process.env.DEV_NOSTYLETRAP) {
+            const T = STYLE_TRAP[pe.field] || {};
+            const behind = this.playerOrder.some(n => n !== nick && this.players[n] && !this.players[n].isFolded && !this.players[n].isAllIn && !this.players[n].hasActed);
+            if (T.slow && agg && toCall <= 0 && behind && st < 5 && Math.random() < T.slow) { p._trapStreet = this.gameStage; return { type: 'check' }; }
+            if (T.trapCall && agg && toCall > 0 && p._checkedStreet === st && Math.random() < T.trapCall) return { type: 'call' };
+            if (T.noRaise && agg && toCall > 0 && Math.random() < T.noRaise) return { type: 'call' };
+            if (T.noTrap && d.type === 'check' && toCall <= 0 && Math.random() < T.noTrap) {
+                const bb = this.blindStructure[Math.min(this.blindLevel, this.blindStructure.length - 1)].bb;
+                const pot = this.pot + Object.values(this.players).reduce((a, x) => a + (x.currentBet || 0), 0);
+                const to = Math.min(allIn, Math.max(Math.round(this.currentHighestBet + pot * 0.8), this.currentHighestBet + (this.lastFullRaiseAmount || bb)));
+                p._trapStreet = -1;
+                if (to > this.currentHighestBet) return to >= allIn ? { type: 'allin' } : { type: 'raise', amount: to };
+            }
+        }
+        if (!weak) return d;
         if (agg && B.keep < 1 && Math.random() >= B.keep) {
             if (toCall <= 0) return { type: 'check' };
             return (pe.field === 'nit' || toCall > p.chips * 0.5) ? { type: 'fold' } : { type: 'call' };
@@ -1788,7 +1809,7 @@ class GameRoom {
         // 🔬 개발용(DEV_BLUFFLOG): 플랍 이후 봇 결정마다 스타일 · 스트리트 · 내 승률 추정 · 공격(벳/레이즈) 여부 · 크기(팟 대비) — 스타일별 블러프 비율을 잰다
         if (process.env.DEV_BLUFFLOG && decision && (this.communityCards || []).length >= 3) {
             const pe = p._persona || {}, agg = (decision.type === 'raise' || decision.type === 'allin') && (decision.type === 'allin' ? p.chips + p.currentBet : decision.amount) > this.currentHighestBet;
-            console.log('BLUFF ' + JSON.stringify({ f: pe.field || 'pro', st: this.communityCards.length, tc: toCall > 0 ? 1 : 0, a: decision.type, agg: agg ? 1 : 0, eq: Math.round((this._lastBotEquity || 0) * 100), sz: agg && potNow > 0 ? Math.round(((decision.type === 'allin' ? p.chips + p.currentBet : decision.amount) - this.currentHighestBet + toCall) / potNow * 100) : 0 }));
+            console.log('BLUFF ' + JSON.stringify({ f: pe.field || 'pro', st: this.communityCards.length, tc: toCall > 0 ? 1 : 0, a: decision.type, agg: agg ? 1 : 0, eq: Math.round((this._lastBotEquity || 0) * 100), cr: toCall > 0 && !(p.currentBet > 0) && p._checkedStreet === this.communityCards.length ? 1 : 0, sz: agg && potNow > 0 ? Math.round(((decision.type === 'allin' ? p.chips + p.currentBet : decision.amount) - this.currentHighestBet + toCall) / potNow * 100) : 0 }));
         }
         const thinkMs = this.botThinkTime(expectedNick, decision, toCall, potNow);
 
@@ -3454,6 +3475,7 @@ class GameRoom {
                 this.players[nick].hasActed = false;
                 this.players[nick].role = '';
                 this.players[nick]._trapStreet = -1; // 🪤 체크레이즈 트랩 플래그 초기화 (스트리트 번호 재사용 오발동 방지)
+                this.players[nick]._checkedStreet = -1;
                 this.players[nick]._plan = null;      // 🧠 [스트리트 플랜] 핸드 단위 의도(밸류/블러프/세미블러프) 초기화
 
                 if (this.players[nick].chips <= 0 && (this.tournamentStarted || this.mode === 'cash')) {
@@ -3948,6 +3970,7 @@ class GameRoom {
             if (p.currentBet !== this.currentHighestBet) return false;
             this.stopTurnTimer();
             p.hasActed = true;
+            p._checkedStreet = (this.communityCards || []).length;     // 🪤 이번 스트리트에 체크했다(뒤에 벳을 받으면 체크레이즈 자리)
         } else if (type === 'call') {
             this.stopTurnTimer();
             const callAmt = Math.min(this.currentHighestBet - p.currentBet, p.chips);
